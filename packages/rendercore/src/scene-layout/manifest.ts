@@ -801,7 +801,13 @@ function sceneLayoutStructure(manifest: SceneLayoutManifestV1): unknown {
     ),
     symbolPackage: manifest.symbolPackage,
     symbolPackages: manifest.symbolPackages,
-    popups: manifest.popups,
+    popups: manifest.popups
+      ? Object.fromEntries(
+          Object.entries(manifest.popups).map(
+            ([id, { placements: _placements, ...popup }]) => [id, popup],
+          ),
+        )
+      : undefined,
     runtimeResources: manifest.runtimeResources,
     gameModes: manifest.gameModes
       ? {

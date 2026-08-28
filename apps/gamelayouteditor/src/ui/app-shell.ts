@@ -254,6 +254,9 @@ export class GameLayoutEditorApp {
   #previewPrepareIdentity: string | null = null;
   #previewPrepareChain: Promise<void> = Promise.resolve();
   #previewModeFrame: number | null = null;
+  #previewResizeFrame: number | null = null;
+  #pendingPreviewSize: { width: number; height: number } | null = null;
+  #disposePreviewResizeDrag: (() => void) | null = null;
   #previewModeBusy = false;
   #destroyed = false;
   #symbolPackageMetadata: SymbolPackagePreviewSnapshot | null = null;
@@ -324,6 +327,7 @@ export class GameLayoutEditorApp {
     this.#previewPrepareRequest += 1;
     this.#previewPrepareIdentity = null;
     this.stopPreviewModeMonitor();
+    this.cancelPreviewResize();
     this.#previewModeBusy = false;
     this.#symbolImportBusy = false;
     if (this.#feedbackTimer) clearTimeout(this.#feedbackTimer);
@@ -3898,7 +3902,6 @@ export class GameLayoutEditorApp {
       this.requireSelect("[data-preview-resolution]").value = preset
         ? `${preset.width}x${preset.height}`
         : "custom";
-      void this.refreshPreview(this.#store.getSnapshot());
     } catch (error) {
       this.#store.setExternalError(error);
     }
@@ -3908,28 +3911,73 @@ export class GameLayoutEditorApp {
     const handle = this.requireElement("[data-resize-handle]");
     handle.addEventListener("pointerdown", (event) => {
       event.preventDefault();
+      this.cancelPreviewResize();
       const origin = this.#preview?.pageSize ?? { width: 1920, height: 1080 };
       const startX = event.clientX;
       const startY = event.clientY;
       const move = (moveEvent: PointerEvent) => {
-        this.setPreviewSize(
-          Math.max(
+        this.schedulePreviewSize({
+          width: Math.max(
             200,
             Math.round(origin.width + (moveEvent.clientX - startX) * 3),
           ),
-          Math.max(
+          height: Math.max(
             200,
             Math.round(origin.height + (moveEvent.clientY - startY) * 3),
           ),
-        );
+        });
       };
       const end = () => {
+        this.flushPreviewSize();
+        this.disposePreviewResizeDrag();
+      };
+      this.#disposePreviewResizeDrag = () => {
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", end);
+        window.removeEventListener("pointercancel", end);
       };
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", end);
+      window.addEventListener("pointercancel", end);
     });
+  }
+
+  private schedulePreviewSize(size: { width: number; height: number }): void {
+    this.#pendingPreviewSize = size;
+    if (this.#previewResizeFrame !== null) return;
+    this.#previewResizeFrame = window.requestAnimationFrame(() => {
+      this.#previewResizeFrame = null;
+      this.applyPendingPreviewSize();
+    });
+  }
+
+  private flushPreviewSize(): void {
+    if (this.#previewResizeFrame !== null) {
+      window.cancelAnimationFrame(this.#previewResizeFrame);
+      this.#previewResizeFrame = null;
+    }
+    this.applyPendingPreviewSize();
+  }
+
+  private applyPendingPreviewSize(): void {
+    const size = this.#pendingPreviewSize;
+    this.#pendingPreviewSize = null;
+    if (!size || this.#destroyed) return;
+    this.setPreviewSize(size.width, size.height);
+  }
+
+  private disposePreviewResizeDrag(): void {
+    this.#disposePreviewResizeDrag?.();
+    this.#disposePreviewResizeDrag = null;
+  }
+
+  private cancelPreviewResize(): void {
+    if (this.#previewResizeFrame !== null) {
+      window.cancelAnimationFrame(this.#previewResizeFrame);
+      this.#previewResizeFrame = null;
+    }
+    this.#pendingPreviewSize = null;
+    this.disposePreviewResizeDrag();
   }
 
   private syncZoomLabel(): void {

@@ -1934,6 +1934,46 @@ describe("scene layout package runtime", () => {
     }
   });
 
+  it("applies Popup placement geometry without replacing the cached player", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const fixture = popupLayoutFixture();
+      const resource = await createSceneLayoutPackageResource({
+        ...fixture,
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      const runtime = createSceneLayoutPackageRuntime({ resource });
+      await runtime.init();
+      runtime.applyViewport({ width: 200, height: 100 });
+      const popup = runtime.getAwardCelebrationPopup("celebration");
+      const content = popup.container.children.at(-1)!;
+
+      const moved = structuredClone(fixture.manifest);
+      moved.popups.celebration.placements.default = {
+        x: 17,
+        y: 8,
+        scale: 1.25,
+      };
+      runtime.applyGeometryManifest(moved);
+
+      expect(runtime.getAwardCelebrationPopup("celebration")).toBe(popup);
+      expect(content.position).toMatchObject({ x: 117, y: 58 });
+      expect(content.scale).toMatchObject({ x: 1.25, y: 1.25 });
+      expect(runtime.getGameModeSnapshot()).toMatchObject({
+        stableMode: "BaseGame",
+        displayedMode: "BaseGame",
+        phase: "stable",
+      });
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("keeps Popup catalogs available while deferring Popup image preparation", async () => {
     const load = vi
       .spyOn(Assets, "load")

@@ -11,6 +11,7 @@ import {
   updateVariantFocusFromReel,
 } from "../src/model/editor-project.js";
 import { EditorStore } from "../src/model/editor-store.js";
+import { setPopupPlacement } from "../src/model/game-mode-commands.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 
 describe("EditorStore", () => {
@@ -244,6 +245,35 @@ describe("EditorStore", () => {
           ...resource,
           path: "assets/replaced.png",
         });
+    });
+    expect(store.getSnapshot().changeKind).toBe("structural");
+  });
+
+  it("classifies Popup placement as geometry while keeping Popup order structural", () => {
+    const project = manifestToEditorProject(imageManifest, assetBytes);
+    project.popupDependencies.set("fixture-popup", {
+      id: "fixture-popup",
+      type: "award-celebration",
+      rootKey: "fixture-popup.manifest.json",
+      keys: ["fixture-popup.manifest.json"],
+      order: 2000,
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    });
+    project.programmaticPopupIds.add("fixture-popup");
+    const store = new EditorStore(project);
+    expect(store.getSnapshot().errors).toEqual([]);
+
+    store.transact((draft) =>
+      setPopupPlacement(draft, "fixture-popup", "default", {
+        x: 12,
+        y: -8,
+        scale: 1.25,
+      }),
+    );
+    expect(store.getSnapshot().changeKind).toBe("geometry");
+
+    store.transact((draft) => {
+      draft.popupDependencies.get("fixture-popup")!.order = 2001;
     });
     expect(store.getSnapshot().changeKind).toBe("structural");
   });

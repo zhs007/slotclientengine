@@ -142,6 +142,36 @@ describe("scene layout manifest", () => {
     ).toThrow(/immutable structure/);
   });
 
+  it("treats Popup root placements as geometry without widening Popup identity", () => {
+    const current = gameModeManifest();
+    const moved = structuredClone(current);
+    moved.popups["base-popup"].placements.default = {
+      x: 12,
+      y: -8,
+      scale: 1.25,
+    };
+    expect(() =>
+      assertSceneLayoutGeometryCompatible(current, moved),
+    ).not.toThrow();
+
+    const reordered = structuredClone(current);
+    reordered.popups["base-popup"].order = 2002;
+    expect(() =>
+      assertSceneLayoutGeometryCompatible(current, reordered),
+    ).toThrow(/immutable structure/);
+
+    const added = structuredClone(current);
+    (added.popups as Record<string, unknown>)["program-popup"] = {
+      type: "spine",
+      manifest: "dependencies/popups/program-popup/popup.manifest.json",
+      order: 2002,
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    };
+    expect(() => assertSceneLayoutGeometryCompatible(current, added)).toThrow(
+      /immutable structure/,
+    );
+  });
+
   it("strictly parses program-owned runtime resources into the asset closure", () => {
     const manifest = {
       ...game002LayoutFixture,

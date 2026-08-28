@@ -37,7 +37,8 @@
 - mode binding 显式拥有 package id、reelSet 和 renderMode。
 - symbols package `cellSize` 必须等于共享 main grid cell size，reel count 等于 columns，公开轮带只含 display symbols；失败不修改 grid 或 auto-fit。
 - preview 从绑定 package 的公开 reel set 按列选择合法 stop 并连续读取 rows。production 使用 Web Crypto，测试可注入随机源，禁止 `Math.random()`。
-- resize、variant、zoom、普通 relayout 和相同 binding 的 mode 切换不得重新抽样。
+- resize、variant、zoom、普通 relayout、Popup root placement 和相同 binding 的 mode 切换不得重建runtime或重新抽样；Editor拖拽
+  resize只能更新现有viewport并合并同一animation frame内的高频事件。
 - sampled/server scene、otherScene preview、服务器真实轮带和随机数不写入 layout ZIP。
 
 ## Directed transition
@@ -61,7 +62,10 @@
 - canonical layer ref只能由一个strict parser按stable、`node:` legacy、exact area suffix、canonical node顺序解析；unknown/ambiguous/unavailable显式失败，禁止alias或node/resource同名fallback。
 - scene node placement 的 `rotation` 使用角度，normalized `center` 默认 `0.5/0.5`；旧字段缺失分别按 `0` 与默认中心规范化。rendercore 统一应用 node position/scale/pivot/rotation matrix，Spine 的默认中心精确使用 authored origin `(0,0)`。editor/app 不复制 transform，不从 skeleton bounds、atlas texture 或当前动画帧猜另一套默认中心。Popup/transition 仍只用 `x/y/scale`，main reel 仍只用 `x/y`。
 - main reel per-variant placement 只允许 `x/y`，不提供整体 scale；横竖屏适配通过背景素材、art size 和 reel placement 完成，不改写转轮或 per-symbol scale。
-- 外部 geometry-only manifest 更新必须先校验 immutable structure，再原子提交并复用 texture、Spine player、当前 mode、reel 与 scene；资源、topology、binding 或 transition 结构变化必须走完整 prepare/commit。package-owned mode target 已在 manifest parse/transition prepare 边界验证，switch commit 只应用 prepared geometry/visibility/order，不重复 parse 或全结构比较。
+- 外部 geometry-only manifest 更新必须先校验 immutable structure，再原子提交并复用 texture、Spine player、当前 mode、reel 与 scene；
+  Popup root的per-variant `x/y/scale`属于geometry，package identity、manifest与order仍属于immutable structure。资源、topology、binding
+  或transition结构变化必须走完整prepare/commit。package-owned mode target已在manifest parse/transition prepare边界验证，switch commit
+  只应用prepared geometry/visibility/order，不重复parse或全结构比较。
 - transition overlay 使用固定顶层 `scene-transition-overlay`；video blackout 是 viewport-space runtime object，不是 CSS overlay。
 - runtime 在切换前准备完整 target scene；normal路径只在none direct commit、exact Spine event occurrence或video media-time`fadeStart`边界原子切换background、reel和displayed mode；显式immediate路径在target-only prepare完成后直接提交稳定mode且不创建transition player。
 - editor 的 authoring stable-mode selection 必须与 production `requestGameMode()` 隔离：它不要求 directed edge、不播放 overlay，并用同一 visibility commit 同步背景、scoped 普通节点与 displayed mode；相同 symbols binding 不重建或重新抽样，prepare 失败不得留下半切换状态。

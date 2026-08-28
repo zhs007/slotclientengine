@@ -2143,6 +2143,69 @@ describe("GameLayoutEditorApp workspace", () => {
     app.destroy();
   });
 
+  it("commits Popup placement through geometry refresh after input completes", async () => {
+    const imported = {
+      manifest: imageManifest,
+      assets: assetBytes,
+      destroy: vi.fn(),
+    };
+    ioSpies.importZip.mockResolvedValueOnce(imported);
+    ioSpies.importPopupPackageZip.mockReturnValue({
+      manifest: { id: "fixture-popup", type: "award-celebration" },
+      rootKey: "fixture-popup-popup.manifest.json",
+      files: new Map([
+        ["fixture-popup-popup.manifest.json", new Uint8Array([1])],
+      ]),
+    });
+    let fileClick = selectFilesOnce([new File(["zip"], "fixture-layout.zip")]);
+    const { app, root } = await createApp();
+    (root.querySelector("[data-import]") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(previewSpies.setLayout).toHaveBeenCalled());
+    fileClick.mockRestore();
+
+    const popupZip = zipSync({
+      "popup.manifest.json": strToU8("{}"),
+    });
+    (
+      root.querySelector('[data-workspace-tab="assets"]') as HTMLButtonElement
+    ).click();
+    fileClick = selectFilesOnce([
+      new File([popupZip as BlobPart], "popup.zip"),
+    ]);
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(ioSpies.importPopupPackageZip).toHaveBeenCalled(),
+    );
+    const binding = root.querySelector(
+      "[data-mode-popup]",
+    ) as HTMLSelectElement;
+    binding.value = "fixture-popup";
+    binding.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(previewSpies.setLayout.mock.calls.length).toBeGreaterThan(1),
+    );
+    previewSpies.setLayout.mockClear();
+    previewSpies.applyGeometryManifest.mockClear();
+
+    const scale = root.querySelector(
+      '[data-popup-placement="default"][data-popup-placement-field="scale"]',
+    ) as HTMLInputElement;
+    scale.value = "1.25";
+    scale.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    expect(previewSpies.applyGeometryManifest).not.toHaveBeenCalled();
+    expect(previewSpies.setLayout).not.toHaveBeenCalled();
+
+    scale.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(previewSpies.applyGeometryManifest).toHaveBeenCalledOnce(),
+    );
+    expect(previewSpies.setLayout).not.toHaveBeenCalled();
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
   it("keeps preview page, zoom and guide controls independent of project tabs", async () => {
     const { app, root } = await createApp();
     const width = root.querySelector(
@@ -2153,11 +2216,15 @@ describe("GameLayoutEditorApp workspace", () => {
     ) as HTMLInputElement;
     width.value = "800";
     height.value = "600";
+    previewSpies.setLayout.mockClear();
+    previewSpies.clear.mockClear();
     width.dispatchEvent(new Event("change"));
     expect(previewSpies.setPageSize).toHaveBeenCalledWith({
       width: 800,
       height: 600,
     });
+    expect(previewSpies.setLayout).not.toHaveBeenCalled();
+    expect(previewSpies.clear).not.toHaveBeenCalled();
     (root.querySelector("[data-zoom-in]") as HTMLButtonElement).click();
     const focus = root.querySelector("[data-guide-focus]") as HTMLInputElement;
     focus.checked = false;
@@ -2171,6 +2238,59 @@ describe("GameLayoutEditorApp workspace", () => {
     ).click();
     expect(root.querySelector("[data-preview-width]")).toBe(width);
     app.destroy();
+  });
+
+  it("coalesces preview resize pointer moves and flushes the final size", async () => {
+    const frames: FrameRequestCallback[] = [];
+    const requestFrame = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+    const cancelFrame = vi
+      .spyOn(window, "cancelAnimationFrame")
+      .mockImplementation(() => undefined);
+    const { app, root } = await createApp();
+    previewSpies.setPageSize.mockClear();
+    previewSpies.setLayout.mockClear();
+
+    const handle = root.querySelector(
+      "[data-resize-handle]",
+    ) as HTMLButtonElement;
+    handle.dispatchEvent(
+      new PointerEvent("pointerdown", { clientX: 10, clientY: 20 }),
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 20, clientY: 30 }),
+    );
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 30, clientY: 50 }),
+    );
+    expect(frames).toHaveLength(1);
+    expect(previewSpies.setPageSize).not.toHaveBeenCalled();
+
+    frames[0]!(0);
+    expect(previewSpies.setPageSize).toHaveBeenCalledOnce();
+    expect(previewSpies.setPageSize).toHaveBeenLastCalledWith({
+      width: 1980,
+      height: 1170,
+    });
+    window.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 40, clientY: 60 }),
+    );
+    window.dispatchEvent(new PointerEvent("pointerup"));
+    expect(cancelFrame).toHaveBeenCalled();
+    expect(previewSpies.setPageSize).toHaveBeenCalledTimes(2);
+    expect(previewSpies.setPageSize).toHaveBeenLastCalledWith({
+      width: 2010,
+      height: 1200,
+    });
+    expect(previewSpies.setLayout).not.toHaveBeenCalled();
+
+    app.destroy();
+    requestFrame.mockRestore();
+    cancelFrame.mockRestore();
   });
 
   it("imports, selects, randomizes and clears symbols from the preview drawer", async () => {

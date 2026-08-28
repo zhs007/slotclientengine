@@ -265,7 +265,11 @@ uniform zoom、deterministic shake、target upgrade 和 release。多个 session
 `cancel()`/abort/destroy 立即释放。camera root 只包 layout 主场景，Popup、mode transition 和 video blackout 保持 viewport-space
 稳定；viewport/variant 重排会重建中心 baseline，但保留各 active session 的相对贡献。
 
-外部`applyGeometryManifest()`仍在mutation前校验immutable structure；package-owned mode target已经过manifest parse与transition prepare，switch commit直接应用prepared geometry、visibility和背景层序，不在热路径重复解析或全结构比较。lazy runtime resource的exact key/kind来自canonical runtime manifest，initial layout view省略程序资源只影响prepare时机，不改变可创建对象目录。
+外部`applyGeometryManifest()`仍在mutation前校验immutable structure；node/reel/Spine transition placement与Popup root
+`placements`属于可原子替换geometry，Popup package identity、manifest和order仍属于immutable structure。package runtime应用Popup
+placement时复用既有award/Spine/single-state player、当前mode、reel和scene，不重新prepare资源。package-owned mode target已经过
+manifest parse与transition prepare，switch commit直接应用prepared geometry、visibility和背景层序，不在热路径重复解析或全结构比较。
+lazy runtime resource的exact key/kind来自canonical runtime manifest，initial layout view省略程序资源只影响prepare时机，不改变可创建对象目录。
 
 `inspectSceneLayoutPackageZipBytes()` /
 `loadSceneLayoutPackageFromZipBytes()` 是 canonical production ZIP 边界：使用 bounded
