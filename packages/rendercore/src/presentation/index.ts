@@ -3,6 +3,7 @@ export type { NamedRenderAnchorSource, RenderAnchor } from "./render-anchor.js";
 export {
   createCloneableRenderObject,
   createRenderObject,
+  getRenderObjectAdapter,
 } from "./render-object.js";
 export type {
   CloneableRenderObject,
