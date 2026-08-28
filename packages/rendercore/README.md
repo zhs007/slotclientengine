@@ -633,17 +633,17 @@ import {
 - `worldOffset`：把完整 art world container 移到 viewport 内的偏移，等于 `-visibleRect.x/y`。
 - `focusRectInViewport`：focus rect 在当前 viewport 内的位置，用于测试和诊断。
 
-该 helper 只做通用几何计算，不读取资源、不创建 Pixi 对象，也不包含任何 game002 路径、symbol 名或棋盘常量。`viewportSize` 大于 `artSize`、`focusRect` 超出 art、focus 加 margin 无法放入 viewport、`NaN`/`Infinity`/非正数都会显式抛错，避免运行时静默裁掉关键区域。
+该 helper 只做通用几何计算，不读取资源、不创建 Pixi 对象，也不包含任何 game002 路径、symbol 名或棋盘常量。`viewportSize` 与 `focusRect` 可以超出 `artSize`；focus 加 margin 无法放入 viewport、`NaN`/`Infinity`/非正数仍会显式抛错，避免运行时静默裁掉关键区域。
 
 `calculateMaximizedFocusedArtViewport()` 用于只有一套背景和一个重点区域的页面适配。算法先按 contain 语义计算 focus 在页面内完整显示时的最大 scale，再用页面宽高除以该 scale，反推出当前应展示的 art-space viewport；因此 focus 保持完整且最大化，focus 以外只要仍在背景范围内就继续显示，不会因为横竖屏分类主动裁掉。只有反推 viewport 超过完整 `artSize` 时才按对应轴封顶，此时页面极端宽高比造成的黑边才是不可避免的。随后仍复用 `calculateFocusedArtViewport()` 完成居中和 art 裁切。`createMaximizedFocusedArtViewportPolicy()` 把这一计算封装成 frame policy resolver，framework/UI 层只消费 resolver 结果，不复制几何算法。
 
-`calculateUnboundedMaximizedFocusedViewport()` 用于没有有限 art bounds 的 authored plane。它同样先 contain focus，再按 page aspect 反推 visible rect，并以 focus 几何中心向外扩展；不会把 `Infinity` 或超大 magic size 当 artSize，也不会执行边界钳制。Popup v3 presentation 使用该 helper，v2 继续使用有限 art helper。
+`calculateUnboundedMaximizedFocusedViewport()` 用于适配几何不受有限 art bounds 约束的 authored plane。它同样先 contain focus，再按 page aspect 反推 visible rect，并以 focus 几何中心向外扩展；不会把 `Infinity` 或超大 magic size 当 artSize，也不会执行边界钳制。Scene Layout 的单 focus frame/camera 与 Popup v3–v9 使用该 helper；Scene Layout 中 `artSize` 只保留为背景覆盖、authored 坐标和诊断元数据。Popup v2 继续使用有限 art helper。
 
 `mapReferenceRectToArt()` 用于把旧设计稿或旧 portrait crop 里的矩形映射到新的完整 art 坐标。典型用法是把旧 `1125 x 2000` 坐标中的棋盘矩形映射到 `2000 x 2000` art 中，再把映射后的矩形作为 focus rect。
 
-`mapArtRectToViewport()` 用于在已有 `visibleRect` 下，把完整 art 坐标系中的任意矩形映射到当前 viewport 坐标。典型用法是 focus rect 与棋盘、调试框或其它 art rect 不同的时候，先用 `calculateFocusedArtViewport()` 得到裁切结果，再用该 helper 映射其它矩形。`rect` 和 `visibleRect` 都必须在 `artSize` 内；`rect` 不要求完全落在 `visibleRect` 内，超出当前可见区域时仍返回确定坐标。app 不应自行复制 `rect.x - visibleRect.x` 这类通用映射算法。
+`mapArtRectToViewport()` 用于在已有 `visibleRect` 下，把完整 art 坐标系中的任意矩形映射到当前 viewport 坐标。典型用法是 focus rect 与棋盘、调试框或其它 art rect 不同的时候，先得到 camera 的 `visibleRect`，再用该 helper 映射其它矩形。`rect`、`visibleRect` 与 `artSize` 不要求互相包含；超出当前可见区域时仍返回确定坐标。app 不应自行复制 `rect.x - visibleRect.x` 这类通用映射算法。
 
-`mapAnchorRectToArt()` 用于把相对某个 art-space anchor 左上角的 child rect 映射回完整 art 坐标。`anchorRect` 必须位于 `artSize` 内，child rect 的 `x/y` 是相对 anchor 的偏移，可以是负数；child 可以视觉上越过 anchor 边界，但映射后的 rect 必须仍位于完整 art 内。该 helper 不知道具体游戏的部件语义，只做通用 anchor/focus rect 几何映射和 fail-fast 校验。
+`mapAnchorRectToArt()` 用于把相对某个 art-space anchor 左上角的 child rect 映射回 authored art 坐标。child rect 的 `x/y` 是相对 anchor 的偏移，可以是负数；anchor 与映射结果都可越出 `artSize`，该 helper 仍返回确定坐标。它不知道具体游戏的部件语义，只做通用 anchor/focus rect 几何映射和 fail-fast 校验。
 
 `calculateResponsiveArtViewport()` 用于横竖屏有不同 art 和 focus rect 的场景。调用方必须同时传入 `landscape` 和 `portrait` 两套 variant；当 `viewportSize.height > viewportSize.width` 时选择 `portrait`，否则选择 `landscape`，包括正方形 viewport。选中 variant 后仍复用 `calculateFocusedArtViewport()` 的校验和返回语义，因此 variant 缺失、focus rect 越界或 margin 放不进 viewport 都会显式失败。该 API 只处理通用横竖屏 art 选择和几何裁切，不包含具体游戏的资源名、部件摆放或转轮区常量。
 

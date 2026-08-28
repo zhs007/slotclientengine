@@ -1,11 +1,11 @@
 import {
-  calculateMaximizedFocusedArtViewport,
   calculateMaximizedResponsiveArtViewport,
-  calculateResponsiveArtViewport,
-  createMaximizedFocusedArtViewportPolicy,
+  calculateUnboundedMaximizedFocusedViewport,
   createMaximizedResponsiveArtViewportPolicy,
   mapArtRectToViewport,
   type ResponsiveArtViewportOptions,
+  type RenderViewportMargin,
+  type RenderViewportRect,
   type RenderViewportSize,
 } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
@@ -34,8 +34,7 @@ export function resolveSceneLayoutFrameViewport(options: {
   const pageSize = validatePageSize(options.pageSize);
   const frameDesignSize =
     manifest.adaptation.mode === "maximized-focus"
-      ? calculateMaximizedFocusedArtViewport({
-          artSize: manifest.adaptation.artSize,
+      ? calculateUnboundedMaximizedFocusedViewport({
           pageSize,
           focusRect: manifest.adaptation.focusRect,
         }).viewportSize
@@ -72,9 +71,15 @@ export function createSceneLayoutFramePolicy(
 ): SceneLayoutFramePolicy {
   const manifest = parseSceneLayoutManifest(manifestValue);
   if (manifest.adaptation.mode === "maximized-focus") {
-    return createMaximizedFocusedArtViewportPolicy({
-      artSize: manifest.adaptation.artSize,
-      focusRect: manifest.adaptation.focusRect,
+    const focusRect = Object.freeze({ ...manifest.adaptation.focusRect });
+    return Object.freeze({
+      mode: "maximized-focus" as const,
+      resolveViewportSize(pageSize: RenderViewportSize): RenderViewportSize {
+        return calculateUnboundedMaximizedFocusedViewport({
+          pageSize,
+          focusRect,
+        }).viewportSize;
+      },
     });
   }
   return createMaximizedResponsiveArtViewportPolicy({
@@ -91,22 +96,17 @@ export function resolveSceneLayoutViewport(options: {
   const viewport =
     manifest.adaptation.mode === "maximized-focus"
       ? {
-          ...calculateMaximizedFocusedArtViewport({
-            artSize: manifest.adaptation.artSize,
+          artSize: manifest.adaptation.artSize,
+          ...calculateUnboundedMaximizedFocusedViewport({
             pageSize: options.viewportSize,
             focusRect: manifest.adaptation.focusRect,
           }),
           variantId: "default" as const,
         }
-      : calculateResponsiveArtViewport({
+      : resolveOrientationSceneViewport({
+          variants: manifest.adaptation.variants,
           viewportSize: options.viewportSize,
-          variants: createOrientationViewportVariants(
-            manifest.adaptation.variants,
-          ),
-          ...(options.previousVariantId === "landscape" ||
-          options.previousVariantId === "portrait"
-            ? { squareVariant: options.previousVariantId }
-            : {}),
+          previousVariantId: options.previousVariantId,
         });
   const reels: Record<
     string,
@@ -285,4 +285,114 @@ function createOrientationViewportVariants(
     landscape: createVariant(variants.landscape),
     portrait: createVariant(variants.portrait),
   });
+}
+
+function resolveOrientationSceneViewport(options: {
+  readonly variants: Extract<
+    SceneLayoutManifestV1["adaptation"],
+    { readonly mode: "orientation-focus" }
+  >["variants"];
+  readonly viewportSize: RenderViewportSize;
+  readonly previousVariantId?: SceneLayoutVariantId;
+}) {
+  const viewportSize = validateViewportSize(options.viewportSize);
+  const variantId =
+    viewportSize.height > viewportSize.width
+      ? ("portrait" as const)
+      : viewportSize.width > viewportSize.height
+        ? ("landscape" as const)
+        : options.previousVariantId === "portrait"
+          ? ("portrait" as const)
+          : ("landscape" as const);
+  const variant = options.variants[variantId];
+  return resolveUnboundedSceneViewport({
+    artSize: variant.artSize,
+    viewportSize,
+    focusRect: variant.focusRect,
+    ...(variant.minFocusMargin ? { minMargin: variant.minFocusMargin } : {}),
+    variantId,
+  });
+}
+
+function resolveUnboundedSceneViewport<
+  VariantId extends SceneLayoutVariantId,
+>(options: {
+  readonly artSize: RenderViewportSize;
+  readonly viewportSize: RenderViewportSize;
+  readonly focusRect: RenderViewportRect;
+  readonly minMargin?: RenderViewportMargin;
+  readonly variantId: VariantId;
+}) {
+  const viewportSize = validateViewportSize(options.viewportSize);
+  const margin = Object.freeze({
+    left: options.minMargin?.left ?? 0,
+    right: options.minMargin?.right ?? 0,
+    top: options.minMargin?.top ?? 0,
+    bottom: options.minMargin?.bottom ?? 0,
+  });
+  const requiredFocusRect = Object.freeze({
+    x: options.focusRect.x - margin.left,
+    y: options.focusRect.y - margin.top,
+    width: options.focusRect.width + margin.left + margin.right,
+    height: options.focusRect.height + margin.top + margin.bottom,
+  });
+  const tolerance =
+    Math.max(
+      1,
+      viewportSize.width,
+      viewportSize.height,
+      requiredFocusRect.width,
+      requiredFocusRect.height,
+    ) *
+    Number.EPSILON *
+    32;
+  if (requiredFocusRect.width - viewportSize.width > tolerance) {
+    throw new SceneLayoutError(
+      `viewportSize.width (${viewportSize.width}) cannot contain focusRect and margin width (${requiredFocusRect.width}).`,
+    );
+  }
+  if (requiredFocusRect.height - viewportSize.height > tolerance) {
+    throw new SceneLayoutError(
+      `viewportSize.height (${viewportSize.height}) cannot contain focusRect and margin height (${requiredFocusRect.height}).`,
+    );
+  }
+  const visibleRect = Object.freeze({
+    x:
+      requiredFocusRect.x +
+      requiredFocusRect.width / 2 -
+      viewportSize.width / 2,
+    y:
+      requiredFocusRect.y +
+      requiredFocusRect.height / 2 -
+      viewportSize.height / 2,
+    width: viewportSize.width,
+    height: viewportSize.height,
+  });
+  return Object.freeze({
+    artSize: options.artSize,
+    viewportSize,
+    visibleRect,
+    worldOffset: Object.freeze({ x: -visibleRect.x, y: -visibleRect.y }),
+    focusRectInViewport: Object.freeze({
+      x: options.focusRect.x - visibleRect.x,
+      y: options.focusRect.y - visibleRect.y,
+      width: options.focusRect.width,
+      height: options.focusRect.height,
+    }),
+    variantId: options.variantId,
+  });
+}
+
+function validateViewportSize(size: RenderViewportSize): RenderViewportSize {
+  if (!Number.isFinite(size.width) || size.width <= 0) {
+    throw new SceneLayoutError(
+      "viewportSize.width must be a positive finite number.",
+    );
+  }
+  if (!Number.isFinite(size.height) || size.height <= 0) {
+    throw new SceneLayoutError(
+      "viewportSize.height must be a positive finite number.",
+    );
+  }
+  return Object.freeze({ width: size.width, height: size.height });
 }

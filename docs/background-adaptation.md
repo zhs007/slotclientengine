@@ -24,7 +24,7 @@
 
 - `pageSize`：浏览器页面可用区域，单位为 CSS pixel。
 - `frameDesignSize` / `viewportSize`：canvas 当前逻辑尺寸。Pixi renderer 使用这个尺寸，不是背景原图尺寸。
-- `artSize`：完整背景美术坐标系尺寸。静态图通常等于图片真实像素尺寸；Spine 背景必须由 manifest 显式声明，不能从 skeleton bounds 或 atlas page 尺寸推导。
+- `artSize`：背景美术在 authored 坐标系中的覆盖尺寸。静态图通常等于图片真实像素尺寸；Spine 背景必须由 manifest 显式声明，不能从 skeleton bounds 或 atlas page 尺寸推导。对 Scene Layout，它不参与 frame/camera 适配计算。
 - `focusRect`：完整 art 坐标系中的重点区域，包含 `x/y/width/height`。
 - `visibleRect`：当前 viewport 最终显示的 art 区域。
 - `worldOffset`：完整 art world 在当前 Pixi viewport 中的偏移，等于 `-visibleRect.x/y`。
@@ -58,7 +58,7 @@ focusRect.x/y        = focus 相对完整背景左上角的位置
 浏览器 pageSize
   -> gameframeworks/uiframeworks，或 rendercore 纯 frame helper，计算 frameDesignSize 和 CSS scale
   -> Pixi adapter 用 frameDesignSize resize renderer
-  -> rendercore 根据 artSize、focusRect、viewportSize 计算 visibleRect
+  -> rendercore Scene Layout 根据 focusRect、显式 margin 和 viewportSize 计算 visibleRect
   -> Pixi art world 应用 worldOffset
   -> board 和其它 art rect 通过 mapArtRectToViewport() 映射
 ```
@@ -67,9 +67,10 @@ focusRect.x/y        = focus 相对完整背景左上角的位置
 
 ### 2.4 背景表现与适配相互独立
 
-背景表现可以是静态 texture，也可以是 `@slotclientengine/rendercore/background` 提供的 manifest-driven Spine player。无论表现来源如何，适配只消费 `artSize`、`focusRect` 和 viewport policy：
+背景表现可以是静态 texture，也可以是 `@slotclientengine/rendercore/background` 提供的 manifest-driven Spine player。无论表现来源如何，Scene Layout 适配只消费 `focusRect`、显式 margin、页面比例和方向状态；`artSize` 仍由资源与 authored 坐标消费：
 
 - `artSize` 描述背景覆盖的 art 区域，`focusRect` 描述必须纳入适配计算的重点区域；二者不要求互相包含。
+- 相同 page、focus、margin 和方向状态下，仅改变 `artSize` 不得改变 `frameDesignSize`、`visibleRect`、`worldOffset` 或 `focusRectInViewport`。
 - focus、reel 或最终 visible rect 可以越出 art。超出部分会按真实结果表现为未覆盖、裁切或不可见，不由 parser/runtime 自动修正。
 - 静态 texture 的像素尺寸不能隐式覆盖已配置 art。
 - Spine skeleton bounds、atlas page 数量、当前 animation 和逻辑 state 都不能改变 art/focus/viewport。
@@ -136,38 +137,28 @@ requestedViewportWidth  = pageWidth  / focusScale
 requestedViewportHeight = pageHeight / focusScale
 ```
 
-第三步，仅当反推范围超过完整背景时才封顶：
+第三步，直接使用反推结果作为 Scene Layout 的逻辑 viewport，不以 `artSize` 封顶：
 
 ```text
-viewportWidth  = min(artWidth,  requestedViewportWidth)
-viewportHeight = min(artHeight, requestedViewportHeight)
+viewportWidth  = requestedViewportWidth
+viewportHeight = requestedViewportHeight
 ```
 
-第四步，把得到的 `viewportSize` 交给 `calculateFocusedArtViewport()`，围绕 focus 计算 `visibleRect`、边界钳制和 `worldOffset`。
+第四步，以 focus 几何中心向页面比例要求的剩余轴等量扩展，得到 `visibleRect` 和 `worldOffset`。超出背景覆盖的区域保持真实未覆盖状态，由布局作者根据美术与 UI 需求自行判断。
 
 该算法没有“页面略高就强制锁 focus 宽度”或“页面略宽就强制锁 focus 高度”的方向分支。真正决定缩放轴的是 focus contain 结果。
 
-### 3.4 为什么不会随意产生黑边
+### 3.4 为什么 frame 始终匹配页面比例
 
-当 `requestedViewportWidth/Height` 都没有超过 `artSize` 时，frame 的宽高比与页面一致，背景可以铺满页面：
+反推 viewport 的宽高比始终与页面一致，因此 framework 的 contain frame 不会因为背景尺寸产生额外偏移：
 
 ```text
-requested viewport 在 art 内
-  -> 不封顶
+viewport = requested viewport
   -> frame aspect = page aspect
-  -> offsetX = 0 且 offsetY = 0
+  -> offsetX = 0 且 offsetY = 0（浮点容差内）
 ```
 
-只有某一轴反推范围超过完整 art 时才封顶。此时如果仍要求 focus 完整、背景不拉伸、背景外不造假内容，黑边不可避免：
-
-```text
-requested viewport 超过 art
-  -> 对超出轴按 artSize 封顶
-  -> framework contain 缩放并居中
-  -> 可能出现黑边
-```
-
-不得为了消灭这种不可避免的黑边拉伸背景、裁掉 focus、显示 art 外内容或在 app CSS 中二次 cover。
+viewport 超出背景覆盖时，未覆盖区域是否可接受属于美术和布局配置问题，不允许 engine 为隐藏它而钳制 camera、移动 focus、拉伸背景或在 app CSS 中二次 cover。
 
 ### 3.5 近正方形示例
 
@@ -183,7 +174,7 @@ requestedViewport = {
 }
 ```
 
-`1172.13 x 1200` 没有超过 `2000 x 2000` art，因此不封顶，页面可以铺满，并继续展示 focus 两侧的背景。
+逻辑 viewport 固定为 `1172.13 x 1200`，页面可以铺满，并继续展示 focus 两侧的 authored plane；`2000 x 2000` art 只决定其中多少区域实际有背景覆盖。
 
 错误做法是仅因为 `1464 > 1430` 就把它当成竖屏，并把 viewport 锁成 `840 x 1200`。这会主动裁掉两侧仍可展示的背景，造成不必要的大黑边。
 
@@ -193,8 +184,8 @@ focus 是游戏表现调节参数，但必须始终包含真正的重点区域�
 
 - 扩大 focus：同样页面下重点内容整体显示得更小，周围背景相对更多。
 - 缩小 focus：重点内容整体显示得更大，但更容易触及 art 边界或遮挡 UI。
-- 移动 focus：改变裁切中心；接近 art 边缘时会被底层算法钳制。
-- focus 不能超出 art。
+- 移动 focus：直接改变 camera 的几何中心，不会因接近 art 边缘而被钳制。
+- focus 可以超出 art；未覆盖结果由编辑器和 runtime 如实呈现。
 - focus 不能为了迁就某一页面临时在 runtime 中变化；不同皮肤需要分别显式配置。
 
 如 board 是必须完整显示的核心区域，应在配置评审和测试中验证：
@@ -260,12 +251,12 @@ const viewport = calculateMaximizedResponsiveArtViewport({
 });
 ```
 
-选中 variant 后，rendercore 先按 contain 计算 actual focus 的最大 scale，再用 `pageSize / focusScale` 反推逻辑 viewport；没有显式 margin 时，focus 映射到 CSS 页面后至少一轴与页面相等。随后调用 `calculateFocusedArtViewport()` 完成：
+选中 variant 后，rendercore 先按 contain 计算 actual focus 的最大 scale，再用 `pageSize / focusScale` 反推逻辑 viewport；没有显式 margin 时，focus 映射到 CSS 页面后至少一轴与页面相等。随后在无界 authored plane 上完成：
 
 - focus 完整性校验；
 - focus 与 margin 是否能放入 viewport 的校验；
-- 围绕 focus 的 art 裁切；
-- art 边界钳制；
+- 围绕 focus（含 margin）的对称 camera 扩展；
+- 背景未覆盖区域的如实保留，不执行 art 边界钳制；
 - `visibleRect`、`worldOffset` 和 `focusRectInViewport` 计算。
 
 本方案不会在 rendercore 内加载图片。app 必须根据返回的 `variantId` 使用对应背景和对应场景部件配置。
@@ -445,18 +436,18 @@ resize 测试必须确认：
 | 典型竖屏  | `390 x 844`   | focus 完整最大化，显示可用上下背景                  |
 | 近正方形  | `1430 x 1464` | 不因方向误判锁成 focus aspect，不出现非必要左右黑边 |
 | 正方形    | `1200 x 1200` | focus 完整，剩余轴继续显示背景                      |
-| 横屏      | `1920 x 1080` | focus 完整，背景宽度不足时只产生可解释的最小黑边    |
-| 极端宽/高 | 项目自定      | 只有请求 viewport 超过 art 的轴允许封顶             |
+| 横屏      | `1920 x 1080` | focus 完整且 frame/camera 不受背景宽度钳制          |
+| 极端宽/高 | 项目自定      | viewport 保持页面比例，未覆盖区域按实际结果呈现     |
 
 测试应直接验证公式：
 
 ```text
 expectedFocusScale = min(pageWidth/focusWidth, pageHeight/focusHeight)
 requestedViewport = pageSize / expectedFocusScale
-expectedViewport = min(requestedViewport, artSize)
+expectedViewport = requestedViewport
 ```
 
-当 `requestedViewport` 两轴都没有超过 art 时，还应断言 framework viewport：
+所有页面比例都应在浮点容差内断言 framework viewport：
 
 ```text
 offsetX = 0

@@ -84,28 +84,32 @@ export function calculateMaximizedResponsiveArtViewport(
     squareVariant: options.squareVariant,
     variants: options.variants,
   });
-  const margin = normalizeResponsiveMargin(variant.minMargin);
+  const frozenVariant = freezeResponsiveArtVariant(variant);
+  const margin = normalizeResponsiveMargin(frozenVariant.minMargin);
   const requiredFocusRect = Object.freeze({
-    x: variant.focusRect.x - margin.left,
-    y: variant.focusRect.y - margin.top,
-    width: variant.focusRect.width + margin.left + margin.right,
-    height: variant.focusRect.height + margin.top + margin.bottom,
+    x: frozenVariant.focusRect.x - margin.left,
+    y: frozenVariant.focusRect.y - margin.top,
+    width: frozenVariant.focusRect.width + margin.left + margin.right,
+    height: frozenVariant.focusRect.height + margin.top + margin.bottom,
   });
   const projected = calculateUnboundedMaximizedFocusedViewport({
     pageSize: options.pageSize,
     focusRect: requiredFocusRect,
   });
-  const viewport = calculateFocusedArtViewport({
-    artSize: variant.artSize,
-    viewportSize: projected.viewportSize,
-    focusRect: variant.focusRect,
-    ...(variant.minMargin ? { minMargin: variant.minMargin } : {}),
-  });
 
   return Object.freeze({
-    ...viewport,
+    artSize: frozenVariant.artSize,
+    viewportSize: projected.viewportSize,
+    visibleRect: projected.visibleRect,
+    worldOffset: projected.worldOffset,
+    focusRectInViewport: Object.freeze({
+      x: frozenVariant.focusRect.x - projected.visibleRect.x,
+      y: frozenVariant.focusRect.y - projected.visibleRect.y,
+      width: frozenVariant.focusRect.width,
+      height: frozenVariant.focusRect.height,
+    }),
     variantId,
-    variant: freezeResponsiveArtVariant(variant),
+    variant: frozenVariant,
   });
 }
 

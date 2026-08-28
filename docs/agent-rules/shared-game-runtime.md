@@ -189,7 +189,7 @@
 - Scene Layout package camera effect 使用独立 owner session 贡献 main scene 的 uniform zoom 与 shake；多个 session
   确定性组合，结束、abort、destroy 和 viewport 重排必须释放或重基准化各自贡献。camera root 不得包含 popup、
   mode transition 或 video blackout；最后一个 session 结束后必须回到 1x、零位移的 neutral transform。
-- artSize 只描述背景 art，focusRect 只描述适配重点区域；两者及 reel authored rect 不要求互相包含。RenderCore 不以越出 art 为配置错误，viewport 可扩展到 art 外并把未覆盖、裁切或不可见的实际结果交给 editor/runtime 呈现。
+- artSize 只描述背景 art 的覆盖范围与 authored 坐标，focusRect 只描述适配重点区域；两者及 reel authored rect 不要求互相包含。Scene Layout 的 frame/camera 几何不得把 artSize 用作缩放输入、viewport 上限或 visibleRect 边界；相同 page、focus、margin 和 variant state 在 artSize 改变前后必须产生相同 frameDesignSize、visibleRect、worldOffset 与 focusRectInViewport。RenderCore 不以越出 art 为配置错误，viewport 可扩展到 art 外并把未覆盖、裁切或不可见的实际结果交给 editor/runtime 呈现。
 - Scene Layout mode切换可改变adaptation类型与active variants；target geometry/background/reel/presentation必须在同一commit边界生效，失败保持source snapshot和稳定render façade。正方形viewport保持现有方向，首次正方形为landscape。
 - 宿主已经统一承担 viewport/focus transform 时，scene-layout presentation surface 必须使用完整 authored art space（原点 `0,0`）；不得在背景内部再次执行 maximized-focus 偏移。
 - `packages/uiframeworks`/`gameframeworks` 拥有 DOM frame、canvas 逻辑尺寸上限、黑边居中和 viewport resize policy；app 不以私有 CSS/DOM resize 绕过。

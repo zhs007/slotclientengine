@@ -171,6 +171,33 @@ describe("responsive art viewport", () => {
     });
   });
 
+  it("keeps maximized camera geometry independent of variant artSize", () => {
+    const pageSize = { width: 1920, height: 1080 };
+    const baseline = calculateMaximizedResponsiveArtViewport({
+      pageSize,
+      variants: { landscape: LANDSCAPE, portrait: PORTRAIT },
+    });
+    const resizedArt = calculateMaximizedResponsiveArtViewport({
+      pageSize,
+      variants: {
+        landscape: { ...LANDSCAPE, artSize: { width: 300, height: 200 } },
+        portrait: { ...PORTRAIT, artSize: { width: 200, height: 300 } },
+      },
+    });
+
+    expect({
+      viewportSize: resizedArt.viewportSize,
+      visibleRect: resizedArt.visibleRect,
+      worldOffset: resizedArt.worldOffset,
+      focusRectInViewport: resizedArt.focusRectInViewport,
+    }).toEqual({
+      viewportSize: baseline.viewportSize,
+      visibleRect: baseline.visibleRect,
+      worldOffset: baseline.worldOffset,
+      focusRectInViewport: baseline.focusRectInViewport,
+    });
+  });
+
   it("fails fast when required variants are missing", () => {
     expect(() =>
       calculateResponsiveArtViewport({
