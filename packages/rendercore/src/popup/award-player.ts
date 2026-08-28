@@ -11,7 +11,10 @@ import {
 } from "./award-sequence.js";
 import { formatPopupAmount } from "./amount-format.js";
 import { createPopupStringNodeRegistry } from "./string-node-registry.js";
-import { createPopupStyledText } from "./styled-text.js";
+import {
+  createPopupStyledText,
+  setPopupTextWidthGuidesInTree,
+} from "./styled-text.js";
 import {
   requestPopupVniPlaybackEnd,
   startPopupVniPlayback,
@@ -805,6 +808,9 @@ class AwardCelebrationEditorPlayer implements AwardCelebrationPlayer {
   }
   getSnapshot() {
     return inspectAwardCelebrationRuntime(this.#runtime);
+  }
+  setTextWidthGuidesVisible(visible: boolean) {
+    setPopupTextWidthGuidesInTree(this.#runtime.container, visible);
   }
   getPhase() {
     return this.#runtime.getPhase();

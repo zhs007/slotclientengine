@@ -116,9 +116,9 @@ describe("gamelayout popup dependency", () => {
       createDeterministicZip(await mappedPopupFiles(popup)),
       { decodeImage: async () => ({ width: 1, height: 1 }) },
     );
-    expect(imported.manifest.version).toBe(8);
+    expect(imported.manifest.version).toBe(9);
     if (
-      imported.manifest.version !== 8 ||
+      imported.manifest.version !== 9 ||
       imported.manifest.type !== "award-celebration"
     )
       throw new Error("Expected latest award popup.");
@@ -244,9 +244,9 @@ describe("gamelayout popup dependency", () => {
       createDeterministicZip(await mappedPopupFiles(popup)),
       { decodeImage: async () => ({ width: 1, height: 1 }) },
     );
-    expect(imported.manifest.version).toBe(8);
+    expect(imported.manifest.version).toBe(9);
     expect(imported.manifest).not.toHaveProperty("designViewport");
-    if (imported.manifest.version !== 8)
+    if (imported.manifest.version !== 9)
       throw new Error("Expected latest Popup package.");
     expect(imported.manifest.adaptation.focus).toEqual({
       left: 1000,
@@ -257,7 +257,7 @@ describe("gamelayout popup dependency", () => {
     const rewritten = JSON.parse(
       new TextDecoder().decode(imported.files.get(imported.rootKey)),
     );
-    expect(rewritten.version).toBe(8);
+    expect(rewritten.version).toBe(9);
     expect(rewritten).not.toHaveProperty("designViewport");
 
     manifest.version = 4;
@@ -277,9 +277,9 @@ describe("gamelayout popup dependency", () => {
       createDeterministicZip(await mappedPopupFiles(popup)),
       { decodeImage: async () => ({ width: 1, height: 1 }) },
     );
-    expect(importedV4.manifest.version).toBe(8);
+    expect(importedV4.manifest.version).toBe(9);
     if (
-      importedV4.manifest.version !== 8 ||
+      importedV4.manifest.version !== 9 ||
       importedV4.manifest.type !== "award-celebration"
     )
       throw new Error("Expected latest Popup package.");

@@ -15,6 +15,7 @@ import type {
 import type { SpinePopupPlayer } from "./editor-types.js";
 import { createPopupPromptText } from "./prompt-text.js";
 import { createPopupStringNodeRegistry } from "./string-node-registry.js";
+import { setPopupTextWidthGuidesInTree } from "./styled-text.js";
 import {
   createSpinePopupOverlayRuntime,
   type SpinePopupOverlayRuntime,
@@ -384,6 +385,9 @@ class SpinePopupEditorPlayer implements SpinePopupPlayer {
   }
   getSnapshot() {
     return inspectSpinePopupRuntime(this.#runtime);
+  }
+  setTextWidthGuidesVisible(visible: boolean) {
+    setPopupTextWidthGuidesInTree(this.#runtime.container, visible);
   }
   getPhase() {
     return this.#runtime.getPhase();

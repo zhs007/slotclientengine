@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectPopupDirectPaths,
   formatPopupAmount,
+  loadPopupManifest,
   parsePopupManifest,
   requiredPopupAmountCharacters,
   validatePopupId,
@@ -38,6 +39,70 @@ describe("popup manifest", () => {
         },
       }),
     ).toThrow(/main-spine/);
+  });
+
+  it("requires strict v9 width ranges and upgrades v8 text to disabled fitting", () => {
+    const legacy = singleStatePopupFixture();
+    const loaded = loadPopupManifest(legacy);
+    expect(loaded.sourceVersion).toBe(8);
+    expect(loaded.manifest.version).toBe(9);
+    if (loaded.manifest.type !== "single-state")
+      throw new Error("Expected single-state popup.");
+    const upgraded = loaded.manifest.singleState.layers[0];
+    expect(upgraded?.kind).toBe("text");
+    if (upgraded?.kind !== "text") throw new Error("Expected text layer.");
+    expect(upgraded.style.widthRange).toEqual({ minWidth: 0, maxWidth: 0 });
+
+    const current = structuredClone(legacy) as any;
+    current.version = 9;
+    current.singleState.layers[0].style.widthRange = {
+      minWidth: 240,
+      maxWidth: 640,
+    };
+    expect(parsePopupManifest(current)).toMatchObject({ version: 9 });
+
+    delete current.singleState.layers[0].style.widthRange;
+    expect(() => parsePopupManifest(current)).toThrow(/widthRange/);
+    current.singleState.layers[0].style.widthRange = {
+      minWidth: 0,
+      maxWidth: 640,
+    };
+    expect(() => parsePopupManifest(current)).toThrow(/0\/0/);
+    current.singleState.layers[0].style.widthRange = {
+      minWidth: 640,
+      maxWidth: 240,
+    };
+    expect(() => parsePopupManifest(current)).toThrow(/must not exceed/);
+
+    const award = structuredClone(
+      loadPopupManifest(popupFixture()).manifest,
+    ) as any;
+    award.resources["title.woff2"] = {
+      kind: "font",
+      path: "title.woff2",
+    };
+    award.awardCelebration.base.layers.push({
+      id: "heading",
+      kind: "text",
+      name: "heading",
+      defaultText: "CONGRATS",
+      order: 20,
+      alpha: 1,
+      resource: "title.woff2",
+      attachment: { kind: "popup-root" },
+      transform: { x: 0, y: -100, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+      style: {
+        fontSize: 72,
+        letterSpacing: 0,
+        fill: { kind: "solid", color: "#ffffff" },
+        arcDegrees: 20,
+        widthRange: { minWidth: 240, maxWidth: 640 },
+      },
+    });
+    expect(parsePopupManifest(award)).toMatchObject({ version: 9 });
+    delete award.awardCelebration.base.layers.at(-1).style.widthRange;
+    expect(() => parsePopupManifest(award)).toThrow(/widthRange/);
   });
   it("exposes the exact popup id contract for authoring validation", () => {
     expect(validatePopupId("free-game", "project id")).toBe("free-game");
@@ -315,7 +380,7 @@ describe("popup manifest", () => {
   });
 
   it.each([
-    ["unsupported version", (v: any) => (v.version = 7)],
+    ["unsupported version", (v: any) => (v.version = 10)],
     [
       "resource root mismatch",
       (v: any) => (v.resources["bad.png"] = v.resources.effect),

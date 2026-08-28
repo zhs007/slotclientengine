@@ -81,6 +81,10 @@ export type PopupTextFill =
       readonly angleDegrees: number;
       readonly stops: readonly PopupGradientStop[];
     };
+export interface PopupTextWidthRange {
+  readonly minWidth: number;
+  readonly maxWidth: number;
+}
 export interface PopupTextStyle {
   readonly fontSize: number;
   readonly letterSpacing: number;
@@ -94,7 +98,12 @@ export interface PopupTextStyle {
     readonly angleDegrees: number;
   };
   readonly arcDegrees: number;
+  /** Popup v9 only. Legacy source versions omit this field. */
+  readonly widthRange?: PopupTextWidthRange;
 }
+export type PopupTextStyleV9 = Omit<PopupTextStyle, "widthRange"> & {
+  readonly widthRange: PopupTextWidthRange;
+};
 export type PopupImageStringParent =
   | { readonly kind: "popup-root" }
   | {
@@ -637,6 +646,59 @@ export type PopupManifestV8 =
   | SpinePopupManifestV8
   | SingleStatePopupManifestV8;
 
+type WithPopupTextStyleV9<Layer> = Layer extends {
+  readonly kind: "text";
+  readonly style: PopupTextStyle;
+}
+  ? Omit<Layer, "style"> & { readonly style: PopupTextStyleV9 }
+  : Layer;
+
+export type AwardPopupLayerV9 = WithPopupTextStyleV9<AwardPopupLayerV6>;
+export type SpinePopupOverlayLayerV9 =
+  WithPopupTextStyleV9<SpinePopupOverlayLayerV6>;
+export type SingleStatePopupLayerV9 =
+  WithPopupTextStyleV9<SingleStatePopupLayerV8>;
+export interface AwardTierPresentationV9 {
+  readonly countDurationSeconds: number;
+  readonly layers: readonly AwardPopupLayerV9[];
+}
+export interface AwardCelebrationTierV9 extends AwardTierPresentationV9 {
+  readonly id: "bigwin" | "superwin" | "megawin";
+  readonly thresholdMultiplier: number;
+}
+export interface AwardCelebrationSpecV9 {
+  readonly base: AwardTierPresentationV9;
+  readonly standard: AwardTierPresentationV9;
+  readonly celebrationTiers: readonly AwardCelebrationTierV9[];
+}
+interface PopupManifestBaseV9<State extends PopupVisibilityState> extends Omit<
+  PopupManifestBaseV8<State>,
+  "version"
+> {
+  readonly version: 9;
+}
+export interface AwardCelebrationPopupManifestV9 extends PopupManifestBaseV9<AwardTierId> {
+  readonly type: "award-celebration";
+  readonly amountFormat: PopupAmountFormat;
+  readonly awardCelebration: AwardCelebrationSpecV9;
+}
+export interface SpinePopupManifestV9 extends PopupManifestBaseV9<PopupSegment> {
+  readonly type: "spine";
+  readonly spine: Omit<SpinePopupManifestV8["spine"], "overlays"> & {
+    readonly overlays?: readonly SpinePopupOverlayLayerV9[];
+  };
+}
+export interface SingleStatePopupManifestV9 extends PopupManifestBaseV9<"active"> {
+  readonly type: "single-state";
+  readonly singleState: {
+    readonly layers: readonly SingleStatePopupLayerV9[];
+  };
+}
+export type PopupManifestV9 =
+  | AwardCelebrationPopupManifestV9
+  | SpinePopupManifestV9
+  | SingleStatePopupManifestV9;
+
 export type PopupManifest =
   | PopupManifestV1
   | PopupManifestV2
@@ -645,4 +707,5 @@ export type PopupManifest =
   | PopupManifestV5
   | PopupManifestV6
   | PopupManifestV7
-  | PopupManifestV8;
+  | PopupManifestV8
+  | PopupManifestV9;

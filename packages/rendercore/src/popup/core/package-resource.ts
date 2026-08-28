@@ -19,11 +19,11 @@ import { resolvePopupLayerAttachment } from "../data/attachment.js";
 import { collectPopupPackagePaths } from "../data/package-closure.js";
 import { collectPopupDirectPaths } from "../data/manifest.js";
 import { loadPopupManifest } from "../data/normalize.js";
+import type { LatestPopupManifest } from "../data/normalize.js";
 import type {
   PopupLayer,
-  PopupManifestV8,
   PopupOverlayLayer,
-  SingleStatePopupLayerV8,
+  SingleStatePopupLayerV9,
 } from "../data/types.js";
 import {
   acquirePopupFont,
@@ -42,7 +42,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
   readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
   readonly loadFont?: PopupFontLoader;
   readonly resolveAssetUrl?: (path: string) => string | undefined;
-}): Promise<PopupPackageResource<PopupManifestV8>> {
+}): Promise<PopupPackageResource<LatestPopupManifest>> {
   const manifest = loadPopupManifest(
     options.manifest ?? parseJson(requireBytes(options.files, ROOT), ROOT),
   ).manifest;
@@ -228,7 +228,7 @@ async function releasePrepared(
 }
 
 function validateAnimationBindings(
-  manifest: PopupManifestV8,
+  manifest: LatestPopupManifest,
   resources: Readonly<Record<string, PopupPreparedResource>>,
 ): void {
   if (manifest.type === "spine") {
@@ -412,7 +412,7 @@ function validateAnimationBindings(
 }
 
 function requiredPopupSpineSlots(
-  layers: readonly (PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV8)[],
+  layers: readonly (PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV9)[],
   target: string,
 ): readonly string[] {
   const slots = new Set<string>();
@@ -429,7 +429,10 @@ function requiredPopupSpineSlots(
 }
 
 function awardAmountResourceIds(
-  manifest: Extract<PopupManifestV8, { readonly type: "award-celebration" }>,
+  manifest: Extract<
+    LatestPopupManifest,
+    { readonly type: "award-celebration" }
+  >,
 ): ReadonlySet<string> {
   const result = new Set<string>();
   for (const tier of [

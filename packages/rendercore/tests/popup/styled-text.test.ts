@@ -118,6 +118,54 @@ describe("popup styled text", () => {
     emptyArc.destroy();
   });
 
+  it("fits straight and curved text by font size and exposes editor guides", () => {
+    const measureText = (
+      measuredText: string,
+      measuredStyle: { fontSize: number },
+    ) => measuredText.length * Number(measuredStyle.fontSize);
+    const straight = createPopupStyledText({
+      family: "sans-serif",
+      text: "LONG",
+      style: {
+        ...style,
+        fontSize: 100,
+        letterSpacing: 0,
+        arcDegrees: 0,
+        widthRange: { minWidth: 120, maxWidth: 200 },
+      },
+      anchor: { x: 0.5, y: 0.5 },
+      measureText,
+    });
+    expect(straight.layout.authoredFontSize).toBe(100);
+    expect(straight.layout.effectiveFontSize).toBeCloseTo(50);
+    expect(straight.layout.width).toBeCloseTo(200);
+    straight.setWidthGuideVisible(true);
+    expect(straight.container.children).toHaveLength(2);
+    straight.setWidthGuideVisible(false);
+    expect(straight.container.children).toHaveLength(1);
+    straight.destroy();
+
+    const curved = createPopupStyledText({
+      family: "sans-serif",
+      text: "AB",
+      style: {
+        ...style,
+        fontSize: 20,
+        letterSpacing: 0,
+        widthRange: { minWidth: 100, maxWidth: 160 },
+      },
+      anchor: { x: 0.5, y: 0.5 },
+      measureText,
+    });
+    expect(curved.layout.effectiveFontSize).toBeGreaterThan(20);
+    expect(curved.layout.width).toBeGreaterThanOrEqual(100);
+    expect(curved.layout.width).toBeLessThanOrEqual(160);
+    curved.setText("");
+    expect(curved.layout.effectiveFontSize).toBe(20);
+    expect(curved.layout.width).toBe(0);
+    curved.destroy();
+  });
+
   it("keeps one continuous local gradient across curved graphemes", () => {
     const createCanvas = vi
       .spyOn(DOMAdapter.get(), "createCanvas")

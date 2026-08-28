@@ -436,7 +436,7 @@ describe("typed asset reference rewriting", () => {
       resource: "bonus.hash.json",
     });
     const latest = rewritePopupManifest(popup, new Map());
-    expect(latest.version).toBe(8);
+    expect(latest.version).toBe(9);
     expect(latest.backdrop.visibleStates).toEqual([
       "base",
       "standard",
@@ -525,7 +525,7 @@ describe("typed asset reference rewriting", () => {
     );
     expect(popup.type).toBe("spine");
     if (popup.type !== "spine") throw new Error("Expected Spine popup.");
-    expect(popup.version).toBe(8);
+    expect(popup.version).toBe(9);
     expect(popup.spine).toMatchObject({
       resource: "effect.hash.json",
       overlays: [
@@ -575,7 +575,7 @@ describe("typed asset reference rewriting", () => {
       ]),
     );
     expect(popup).toMatchObject({
-      version: 8,
+      version: 9,
       adaptation: {
         focus: { left: 1000, right: 2000, top: 3000, bottom: 4000 },
       },
@@ -644,7 +644,7 @@ describe("typed asset reference rewriting", () => {
       ]),
     );
     expect(popup).toMatchObject({
-      version: 8,
+      version: 9,
       spine: {
         resource: "effect.hash.json",
         overlays: [
@@ -720,7 +720,7 @@ describe("typed asset reference rewriting", () => {
       },
       mapping,
     );
-    expect(legacyAudio.version).toBe(8);
+    expect(legacyAudio.version).toBe(9);
     expect(legacyAudio.audio.effects[0]?.asset.sources).toEqual([
       { path: "coin.m4a", mediaType: "audio/mp4" },
     ]);

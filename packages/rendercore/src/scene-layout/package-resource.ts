@@ -46,7 +46,7 @@ import {
 import {
   collectPopupDirectPaths,
   loadPopupManifest,
-  type PopupManifestV8,
+  type LatestPopupManifest,
 } from "../popup/data/index.js";
 import type { PopupPackageResource } from "../popup/core/types.js";
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
@@ -323,12 +323,12 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   let symbolPackage: SymbolPackageResource | null = null;
   const symbolPackages: Record<string, SymbolPackageResource> = {};
   const popupPackages: Record<string, PopupPackageResource> = {};
-  const popupManifests: Record<string, PopupManifestV8> = {};
+  const popupManifests: Record<string, LatestPopupManifest> = {};
   const popupDefinitions: Record<
     string,
     {
       readonly bindingManifest: string;
-      readonly manifest: PopupManifestV8;
+      readonly manifest: LatestPopupManifest;
     }
   > = {};
   const vniResources: Record<
@@ -433,7 +433,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
 
     const createPopupResource = async (definition: {
       readonly bindingManifest: string;
-      readonly manifest: PopupManifestV8;
+      readonly manifest: LatestPopupManifest;
     }): Promise<PopupPackageResource> => {
       const nestedFiles = extractPrefixedFiles(
         files,
