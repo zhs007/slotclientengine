@@ -173,6 +173,10 @@ export interface SymbolPlayerImageStringController {
 
 export type SymbolValueTextFormatter = (value: number) => string;
 
+export type SymbolValueTextFormatterMap = Readonly<
+  Record<string, SymbolValueTextFormatter>
+>;
+
 export type SymbolValueTextBindings = Readonly<
   Record<string, SymbolValueTextFormatter>
 >;

@@ -12,7 +12,6 @@ import {
   createSymbolImageStringResourcePool,
   type SymbolImageStringResourcePool,
 } from "../symbol-image-string/index.js";
-import { validateImageStringText } from "../image-string/data/index.js";
 import {
   createSymbolValuePresentationImagePath,
   parseSymbolStateTextureManifest,
@@ -31,10 +30,15 @@ import type {
   SymbolValuePresenter,
   SymbolValueDisplayHandle,
 } from "./types.js";
+import { createSymbolValueDisplay } from "./value-display.js";
+import type {
+  SymbolValueTextFormatter,
+  SymbolValueTextFormatterMap,
+} from "../symbol/types.js";
 import {
-  assertSymbolValueDisplayResource,
-  createSymbolValueDisplay,
-} from "./value-display.js";
+  formatSymbolValueDisplayText,
+  normalizeSymbolValueTextFormatters,
+} from "./value-text-formatter.js";
 
 export interface CreateSymbolValuePresentationResourcesOptions extends ParseSymbolStateTextureManifestOptions {
   readonly manifest: unknown;
@@ -63,6 +67,7 @@ export type SymbolValuePresentationPlayerFactory = (options: {
 export interface CreateSymbolValuePresenterOptions {
   readonly target: SymbolValueGeometryTarget;
   readonly resources: SymbolValuePresentationResourceMap;
+  readonly valueTextFormatters?: SymbolValueTextFormatterMap;
   readonly playerFactory?: SymbolValuePresentationPlayerFactory;
 }
 
@@ -250,17 +255,6 @@ export function createSymbolValuePresentationResourcesFromManifest(
             `Symbol "${symbol}" value ${value} has no image-string tier binding.`,
           );
         }
-        try {
-          const valueText = String(value);
-          validateImageStringText(valueText);
-          if (!binding.specialValueImages[valueText]) {
-            validateImageStringText(valueText, binding.resource.manifest);
-          }
-        } catch (error) {
-          throw new SymbolAssetError(
-            `Symbol "${symbol}" default value ${value} is invalid for image-string tier ${tierIndex}: ${formatError(error)}.`,
-          );
-        }
       }
       return [
         [
@@ -376,6 +370,9 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
   readonly container = new Container();
   readonly #target: SymbolValueGeometryTarget;
   readonly #resources: SymbolValuePresentationResourceMap;
+  readonly #valueTextFormatters: Readonly<
+    Partial<Record<string, SymbolValueTextFormatter>>
+  >;
   readonly #playerFactory: SymbolValuePresentationPlayerFactory;
   readonly #prepared = new WeakMap<
     PreparedSymbolValuePresentation,
@@ -390,6 +387,11 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
   constructor(options: CreateSymbolValuePresenterOptions) {
     this.#target = options.target;
     this.#resources = options.resources;
+    this.#valueTextFormatters = normalizeSymbolValueTextFormatters({
+      resources: options.resources,
+      displaySymbols: Object.keys(options.resources),
+      value: options.valueTextFormatters,
+    });
     this.#playerFactory = options.playerFactory ?? createDefaultPlayer;
   }
 
@@ -420,10 +422,13 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
         if (!resource || tierIndex < 0) {
           throw new Error(`No valuePresentation tier covers ${item.value}.`);
         }
-        assertSymbolValueDisplayResource({
+        const text = formatSymbolValueDisplayText({
           value: item.value,
           tierIndex,
           resource: presentation,
+          ...(this.#valueTextFormatters[item.symbol]
+            ? { formatter: this.#valueTextFormatters[item.symbol] }
+            : {}),
         });
         const player = this.#playerFactory({ resource });
         let display: SymbolValueDisplayHandle | null = null;
@@ -433,6 +438,7 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
             value: item.value,
             tierIndex,
             resource: presentation,
+            text,
           });
         } catch (error) {
           display?.destroy();
@@ -537,7 +543,7 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
             ...entry.item,
             tierIndex: entry.tierIndex,
             skeleton: entry.resource.spec.skeleton,
-            text: String(entry.item.value),
+            text: display.text,
             displayType: display.type,
             displayResource: display.resourcePath ?? null,
             displaySlot:

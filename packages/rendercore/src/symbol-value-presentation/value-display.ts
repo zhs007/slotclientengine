@@ -11,8 +11,9 @@ export async function createSymbolValueDisplay(options: {
   readonly value: number;
   readonly tierIndex: number;
   readonly resource: SymbolValuePresentationResource;
+  readonly text?: string;
 }): Promise<SymbolValueDisplayHandle> {
-  const text = String(options.value);
+  const text = options.text ?? String(options.value);
   const spec = options.resource.text;
   if (spec.type === "image-string") {
     let binding = requireImageStringBinding(options);
@@ -94,13 +95,13 @@ export async function createSymbolValueDisplay(options: {
           });
           currentProfile = profile;
         },
-        setTier(tierIndex: number, value: number): void {
+        setTier(tierIndex: number, value: number, textValue?: string): void {
           const nextBinding = requireImageStringBinding({
             resource: options.resource,
             tierIndex,
             value,
           });
-          const nextText = String(value);
+          const nextText = textValue ?? String(value);
           const nextProfile =
             currentProfile === "spinBlur" && nextBinding.spinBlurProfile
               ? "spinBlur"
@@ -227,6 +228,7 @@ export function assertSymbolValueDisplayResource(options: {
   readonly value: number;
   readonly tierIndex?: number;
   readonly resource: SymbolValuePresentationResource;
+  readonly text?: string;
 }): string | null {
   if (options.resource.text.type === "image-string") {
     const tierIndex =
@@ -238,7 +240,7 @@ export function assertSymbolValueDisplayResource(options: {
       );
     }
     try {
-      const valueText = String(options.value);
+      const valueText = options.text ?? String(options.value);
       validateImageStringText(valueText);
       if (!binding.specialValueImages?.[valueText]) {
         validateImageStringText(valueText, binding.resource.manifest);

@@ -17,6 +17,7 @@ import { Assets, Cache, type Texture } from "pixi.js";
 import { createSymbolPlayerValueController } from "../symbol-value-presentation/symbol-player-value-controller.js";
 import { createSymbolValuePresentationResourcesFromManifest } from "../symbol-value-presentation/create-symbol-value-presenter.js";
 import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
+import { normalizeSymbolValueTextFormatters } from "../symbol-value-presentation/value-text-formatter.js";
 import type {
   ReelSymbolRenderPriorityMap,
   ReelSymbolRegistry,
@@ -50,6 +51,8 @@ import type {
   SymbolPlayerValueController,
   SymbolValueTextBindingMap,
   SymbolValueTextBindings,
+  SymbolValueTextFormatter,
+  SymbolValueTextFormatterMap,
   SymbolAnimationResolver,
   SymbolAssetMap,
   SymbolNormalTextureSource,
@@ -288,7 +291,7 @@ export function collectSymbolManifestResourcePaths(options: {
     for (const source of effect.asset.sources) add(source.path);
   const addImageStringDependency = (options: {
     readonly resource: string;
-    readonly text: string;
+    readonly text?: string;
     readonly label: string;
     readonly specialValueImages?: readonly {
       readonly value: number;
@@ -312,19 +315,21 @@ export function collectSymbolManifestResourcePaths(options: {
         "image-string manifest",
       ),
     );
-    try {
-      validateImageStringText(options.text);
-      if (
-        !(options.specialValueImages ?? []).some(
-          (mapping) => String(mapping.value) === options.text,
-        )
-      ) {
-        validateImageStringText(options.text, nested);
+    if (options.text !== undefined) {
+      try {
+        validateImageStringText(options.text);
+        if (
+          !(options.specialValueImages ?? []).some(
+            (mapping) => String(mapping.value) === options.text,
+          )
+        ) {
+          validateImageStringText(options.text, nested);
+        }
+      } catch (error) {
+        throw new SymbolAssetError(
+          `${options.label} is invalid: ${formatError(error)}.`,
+        );
       }
-    } catch (error) {
-      throw new SymbolAssetError(
-        `${options.label} is invalid: ${formatError(error)}.`,
-      );
     }
     for (const glyphPath of collectImageStringAssetPaths(nested)) {
       paths.add(resolvePackagePath(manifestResourcePath, glyphPath));
@@ -405,14 +410,12 @@ export function collectSymbolManifestResourcePaths(options: {
           }
           const normalManifest = addImageStringDependency({
             resource: binding.resource,
-            text: String(value),
             label: `Value ${value} image-string tier ${tierIndex}`,
             specialValueImages: binding.specialValueImages,
           });
           if (binding.spinBlurProfile) {
             const spinBlurManifest = addImageStringDependency({
               resource: binding.spinBlurProfile.resource,
-              text: String(value),
               label: `Value ${value} image-string tier ${tierIndex} spinBlur`,
               specialValueImages: binding.spinBlurProfile.specialValueImages,
             });
@@ -747,17 +750,23 @@ function unloadCachedPackageTextures(textureUrls: readonly string[]): void {
 export function createSymbolPackageValueControllerFactory(
   resource: SymbolPackageResource,
   symbol: string,
+  valueTextFormatter?: SymbolValueTextFormatter,
 ): ((root: SymbolPlayer) => SymbolPlayerValueController) | undefined {
   const presentation = resource.valuePresentationResources[symbol];
   if (!presentation) return undefined;
   return (root) =>
-    createSymbolPlayerValueController({ root, resource: presentation });
+    createSymbolPlayerValueController({
+      root,
+      resource: presentation,
+      ...(valueTextFormatter ? { valueTextFormatter } : {}),
+    });
 }
 
 export async function createSymbolPackageReelRegistry(
   resource: SymbolPackageResource,
   options: {
     readonly valueTextBindings?: SymbolValueTextBindingMap;
+    readonly valueTextFormatters?: SymbolValueTextFormatterMap;
   } = {},
 ): Promise<ReelSymbolRegistry> {
   const catalog = await resource.createCatalog();
@@ -769,12 +778,18 @@ export function createSymbolPackageReelRegistryFromCatalog(
   catalog: SymbolCatalogModel,
   options: {
     readonly valueTextBindings?: SymbolValueTextBindingMap;
+    readonly valueTextFormatters?: SymbolValueTextFormatterMap;
   } = {},
 ): ReelSymbolRegistry {
   const valueTextBindings = normalizeSymbolValueTextBindings(
     resource,
     options.valueTextBindings,
   );
+  const valueTextFormatters = normalizeSymbolValueTextFormatters({
+    resources: resource.valuePresentationResources,
+    displaySymbols: resource.displaySymbols,
+    value: options.valueTextFormatters,
+  });
   const entries = resource.displaySymbols.map((symbol) => {
     const code = resource.gameConfig.getSymbolCode(symbol);
     if (code === undefined) {
@@ -843,7 +858,13 @@ export function createSymbolPackageReelRegistryFromCatalog(
       const entry = requireEntry(byCode.get(code), `code ${code}`);
       const presentation = resource.valuePresentationResources[entry.symbol];
       return presentation
-        ? createRollingValueVisual({ resource: presentation, value })
+        ? createRollingValueVisual({
+            resource: presentation,
+            value,
+            ...(valueTextFormatters[entry.symbol]
+              ? { valueTextFormatter: valueTextFormatters[entry.symbol] }
+              : {}),
+          })
         : null;
     },
     createSymbolPlayerByCode(code: number): SymbolPlayer {
@@ -852,6 +873,7 @@ export function createSymbolPackageReelRegistryFromCatalog(
         valueControllerFactory: createSymbolPackageValueControllerFactory(
           resource,
           entry.symbol,
+          valueTextFormatters[entry.symbol],
         ),
         valueTextBindings: valueTextBindings[entry.symbol],
       });

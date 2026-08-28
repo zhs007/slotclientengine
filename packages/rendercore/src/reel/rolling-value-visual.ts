@@ -1,6 +1,8 @@
 import { Container } from "pixi.js";
 import { createRenderMappedImageString } from "../symbol-image-string/mapped-display.js";
 import type { SymbolValuePresentationResource } from "../symbol-value-presentation/types.js";
+import { formatSymbolValueDisplayText } from "../symbol-value-presentation/value-text-formatter.js";
+import type { SymbolValueTextFormatter } from "../symbol/types.js";
 import { ReelError } from "./errors.js";
 import type { ReelRollingValueVisual } from "./types.js";
 
@@ -23,6 +25,7 @@ export function resolveRollingValueTier(
 export function createRollingValueVisual(options: {
   readonly resource: SymbolValuePresentationResource;
   readonly value: number;
+  readonly valueTextFormatter?: SymbolValueTextFormatter;
 }): ReelRollingValueVisual | null {
   const { resource, value } = options;
   const tierIndex = resolveRollingValueTier(resource, value);
@@ -34,9 +37,17 @@ export function createRollingValueVisual(options: {
     );
   }
   const profile = binding.spinBlurProfile ?? binding;
+  const text = formatSymbolValueDisplayText({
+    value,
+    tierIndex,
+    resource,
+    ...(options.valueTextFormatter
+      ? { formatter: options.valueTextFormatter }
+      : {}),
+  });
   const renderer = createRenderMappedImageString({
     resource: profile.resource,
-    text: String(value),
+    text,
     anchor: binding.anchor,
     specialValueImages: profile.specialValueImages,
   });
@@ -58,7 +69,15 @@ export function createRollingValueVisual(options: {
         );
       }
       if (nextValue === currentValue) return;
-      renderer.setText(String(nextValue));
+      const nextText = formatSymbolValueDisplayText({
+        value: nextValue,
+        tierIndex: nextTier,
+        resource,
+        ...(options.valueTextFormatter
+          ? { formatter: options.valueTextFormatter }
+          : {}),
+      });
+      renderer.setText(nextText);
       currentValue = nextValue;
     },
     destroy(): void {

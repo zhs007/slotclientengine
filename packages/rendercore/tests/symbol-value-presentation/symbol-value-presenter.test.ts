@@ -1,4 +1,4 @@
-import { Container } from "pixi.js";
+import { Container, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
   createSymbolValuePresenter,
@@ -56,6 +56,29 @@ describe("generic symbol value presenter", () => {
     presenter.destroy();
     presenter.destroy();
     expect(presenter.getSnapshot().phase).toBe("destroyed");
+  });
+
+  it("formats intrinsic ImgNumber text after resolving tiers from raw values", async () => {
+    const presenter = createSymbolValuePresenter({
+      resources: createImageStringResources(),
+      valueTextFormatters: { GOLD: (value) => String(value / 5) },
+      target: createTarget(),
+      playerFactory: () => new FakePlayer(),
+    });
+
+    const prepared = await presenter.prepare([
+      { x: 0, y: 0, symbol: "GOLD", symbolCode: 7, value: 5 },
+      { x: 1, y: 0, symbol: "GOLD", symbolCode: 7, value: 25 },
+    ]);
+    presenter.show(prepared);
+
+    expect(presenter.getSnapshot()).toMatchObject({
+      items: [
+        { tierIndex: 0, text: "1", skeleton: "./bronze.json" },
+        { tierIndex: 1, text: "5", skeleton: "./ruby.json" },
+      ],
+    });
+    presenter.destroy();
   });
 
   it("fails for invalid inputs, foreign prepared data and geometry drift", async () => {
@@ -224,6 +247,91 @@ function createResources(): SymbolValuePresentationResourceMap {
         stroke: "#000",
         strokeWidth: 4,
       }),
+    }),
+  });
+}
+
+function createImageStringResources(): SymbolValuePresentationResourceMap {
+  const base = createResources().GOLD!;
+  const imageStringResource = Object.freeze({
+    manifest: Object.freeze({
+      version: 1 as const,
+      kind: "image-string" as const,
+      id: "digits",
+      metrics: Object.freeze({ lineHeight: 1, letterSpacing: 0 }),
+      glyphs: Object.freeze({
+        "1": Object.freeze({
+          path: "1.png",
+          size: Object.freeze({ width: 1, height: 1 }),
+          offset: Object.freeze({ x: 0, y: 0 }),
+        }),
+        "2": Object.freeze({
+          path: "2.png",
+          size: Object.freeze({ width: 1, height: 1 }),
+          offset: Object.freeze({ x: 0, y: 0 }),
+        }),
+        "5": Object.freeze({
+          path: "5.png",
+          size: Object.freeze({ width: 1, height: 1 }),
+          offset: Object.freeze({ x: 0, y: 0 }),
+        }),
+      }),
+      fixedAdvanceGroups: Object.freeze([]),
+    }),
+    textures: Object.freeze({
+      "1.png": Texture.WHITE,
+      "2.png": Texture.WHITE,
+      "5.png": Texture.WHITE,
+    }),
+    destroyed: false,
+    assertUsable: () => undefined,
+    destroy: async () => undefined,
+  });
+  const createBinding = () =>
+    Object.freeze({
+      resourcePath: "digits.json",
+      resource: imageStringResource,
+      slot: "ValueSlot",
+      anchor: Object.freeze({ x: 0.5, y: 0.5 }),
+      transform: Object.freeze({ x: 0, y: 0, scale: 1 }),
+      followSlotColor: true,
+      specialValueImages: Object.freeze({}),
+    });
+  return Object.freeze({
+    GOLD: Object.freeze({
+      ...base,
+      defaultValues: Object.freeze([5, 25]),
+      text: Object.freeze({
+        type: "image-string" as const,
+        tiers: Object.freeze([
+          Object.freeze({
+            resource: "digits.json",
+            slot: "ValueSlot",
+            anchor: Object.freeze({ x: 0.5, y: 0.5 }),
+            transform: Object.freeze({ x: 0, y: 0, scale: 1 }),
+            followSlotColor: true,
+          }),
+          Object.freeze({
+            resource: "digits.json",
+            slot: "ValueSlot",
+            anchor: Object.freeze({ x: 0.5, y: 0.5 }),
+            transform: Object.freeze({ x: 0, y: 0, scale: 1 }),
+            followSlotColor: true,
+          }),
+          Object.freeze({
+            resource: "digits.json",
+            slot: "ValueSlot",
+            anchor: Object.freeze({ x: 0.5, y: 0.5 }),
+            transform: Object.freeze({ x: 0, y: 0, scale: 1 }),
+            followSlotColor: true,
+          }),
+        ]),
+      }),
+      imageStringTierBindings: Object.freeze([
+        createBinding(),
+        createBinding(),
+        createBinding(),
+      ]),
     }),
   });
 }

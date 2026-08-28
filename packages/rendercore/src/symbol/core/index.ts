@@ -16,6 +16,7 @@ export type {
   SymbolPlayerValueController,
   SymbolPlayerImageStringController,
   SymbolValueTextFormatter,
+  SymbolValueTextFormatterMap,
   SymbolValueTextBindings,
   SymbolValueTextBindingMap,
   SymbolLayerTextureSource,

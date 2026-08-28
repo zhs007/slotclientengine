@@ -13,10 +13,8 @@ import type {
   SymbolValueDisplayHandle,
   SymbolValuePresentationResource,
 } from "./types.js";
-import {
-  assertSymbolValueDisplayResource,
-  createSymbolValueDisplay,
-} from "./value-display.js";
+import { createSymbolValueDisplay } from "./value-display.js";
+import { formatSymbolValueDisplayText } from "./value-text-formatter.js";
 import {
   notifySymbolImageStringSpineActive,
   notifySymbolImageStringSpineInactive,
@@ -26,6 +24,7 @@ import {
   createCloneableRenderObject,
   type CloneableRenderObject,
 } from "../presentation/render-object.js";
+import type { SymbolValueTextFormatter } from "../symbol/types.js";
 
 const ACTIVE_UPDATE_RESULTS = Object.freeze({
   running: Object.freeze({ completed: false, loopCompleted: false }),
@@ -37,6 +36,7 @@ const ACTIVE_UPDATE_RESULTS = Object.freeze({
 export function createSymbolPlayerValueController(options: {
   readonly root: SymbolPlayer;
   readonly resource: SymbolValuePresentationResource;
+  readonly valueTextFormatter?: SymbolValueTextFormatter;
   readonly playerFactory?: SymbolPlayerValuePlayerFactory;
 }): SymbolPlayerValueController {
   return new SymbolPlayerValueControllerModel(options);
@@ -52,6 +52,12 @@ interface CachedValuePlayer {
   readonly initPromise: Promise<void>;
 }
 
+interface PreparedValue {
+  readonly value: number;
+  readonly tierIndex: number;
+  readonly text: string;
+}
+
 function createValuePlayerKey(
   tier: SymbolValuePresentationResource["tiers"][number],
 ): string {
@@ -65,6 +71,7 @@ function createValuePlayerKey(
 class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
   readonly #root: SymbolPlayer;
   readonly #resource: SymbolValuePresentationResource;
+  readonly #valueTextFormatter: SymbolValueTextFormatter | undefined;
   readonly #playerFactory: SymbolPlayerValuePlayerFactory;
   readonly #displayRoot = new Container();
   readonly #players = new Map<string, CachedValuePlayer>();
@@ -80,16 +87,19 @@ class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
   #initialized = false;
   #activeAnimation: ActiveSpineValueAni | null = null;
   #activePlayback: SymbolManifestAnimationPlaybackSpec | null = null;
+  #preparedValue: PreparedValue | null = null;
   #continuityGeneration = 0;
   #destroyed = false;
 
   constructor(options: {
     readonly root: SymbolPlayer;
     readonly resource: SymbolValuePresentationResource;
+    readonly valueTextFormatter?: SymbolValueTextFormatter;
     readonly playerFactory?: SymbolPlayerValuePlayerFactory;
   }) {
     this.#root = options.root;
     this.#resource = options.resource;
+    this.#valueTextFormatter = options.valueTextFormatter;
     this.#playerFactory =
       options.playerFactory ??
       (({ tier }) =>
@@ -114,33 +124,36 @@ class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
       );
     }
     if (value === null) return;
-    const tierIndex = this.resolveTierIndex(value);
-    assertSymbolValueDisplayResource({
-      value,
-      tierIndex,
-      resource: this.#resource,
-    });
+    this.prepareValue(value);
   }
 
   setValue(value: number | null): void {
-    this.validateValue(value);
+    this.assertNotDestroyed();
+    if (value !== null && (!Number.isSafeInteger(value) || value <= 0)) {
+      throw new Error(
+        "Render symbol presentation value must be a positive safe integer or null.",
+      );
+    }
     if (value === this.#value) return;
     if (value === null) {
       this.#continuityGeneration += 1;
       this.clearActive();
       this.#value = null;
+      this.#preparedValue = null;
       return;
     }
 
-    const tierIndex = this.resolveTierIndex(value);
+    const prepared = this.prepareValue(value);
+    const { tierIndex, text } = prepared;
     const tier = this.#resource.tiers[tierIndex];
     if (!tier) throw new Error(`No valuePresentation tier covers ${value}.`);
     if (
       tierIndex === this.#tierIndex &&
       this.#display?.type === "image-string"
     ) {
-      this.#display.setText(String(value));
+      this.#display.setText(text);
       this.#value = value;
+      this.#preparedValue = null;
       return;
     }
     const cached = this.getOrCreatePlayer(tier);
@@ -153,7 +166,7 @@ class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
     this.#tier = tier;
     this.#tierIndex = tierIndex;
     if (this.#display?.type === "image-string") {
-      this.#display.setTier?.(tierIndex, value);
+      this.#display.setTier?.(tierIndex, value, text);
       this.prepareImageStringDisplayRoot(this.#display);
     } else {
       this.#display?.destroy();
@@ -162,7 +175,24 @@ class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
     const transform = tier.spec.transform;
     cached.player.view.position.set(transform?.x ?? 0, transform?.y ?? 0);
     cached.player.view.scale.set(transform?.scale ?? 1);
-    void this.initializePlayer({ cached, requestId, value, tierIndex });
+    this.#preparedValue = null;
+    void this.initializePlayer({ cached, requestId, value, tierIndex, text });
+  }
+
+  private prepareValue(value: number): PreparedValue {
+    if (this.#preparedValue?.value === value) return this.#preparedValue;
+    const tierIndex = this.resolveTierIndex(value);
+    const text = formatSymbolValueDisplayText({
+      value,
+      tierIndex,
+      resource: this.#resource,
+      ...(this.#valueTextFormatter
+        ? { formatter: this.#valueTextFormatter }
+        : {}),
+    });
+    const prepared = Object.freeze({ value, tierIndex, text });
+    this.#preparedValue = prepared;
+    return prepared;
   }
 
   private resolveTierIndex(value: number): number {
@@ -180,8 +210,9 @@ class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
     readonly requestId: number;
     readonly value: number;
     readonly tierIndex: number;
+    readonly text: string;
   }): Promise<void> {
-    const { cached, requestId, value, tierIndex } = options;
+    const { cached, requestId, value, tierIndex, text } = options;
     const player = cached.player;
     let display: SymbolValueDisplayHandle | null = null;
     try {
@@ -193,6 +224,7 @@ class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
           value,
           tierIndex,
           resource: this.#resource,
+          text,
         });
       }
       if (
@@ -339,6 +371,7 @@ class SymbolPlayerValueControllerModel implements SymbolPlayerValueController {
     this.#presentationState = "normal";
     this.#display?.setProfile?.("normal");
     this.#value = null;
+    this.#preparedValue = null;
   }
 
   destroy(): void {

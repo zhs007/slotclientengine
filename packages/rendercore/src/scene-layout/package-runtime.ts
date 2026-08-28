@@ -327,6 +327,7 @@ export function createSceneLayoutPackageRuntime(options: {
   readonly reelPresentation?: SlotReelPresentationProfileV1;
   readonly areaSpinFunction?: import("../reel/index.js").AreaSpinFunction;
   readonly symbolValueTextBindings?: import("../symbol/index.js").SymbolValueTextBindingMap;
+  readonly symbolValueTextFormatters?: import("../symbol/index.js").SymbolValueTextFormatterMap;
   readonly gridCellPresentation?: {
     readonly createEffectController?: (options: {
       readonly observePlayback: GridCellEffectPlaybackObserver;
@@ -361,6 +362,7 @@ export function createSceneLayoutPackageRuntime(options: {
     options.reelPresentation,
     options.areaSpinFunction,
     options.symbolValueTextBindings,
+    options.symbolValueTextFormatters,
     options.gridCellPresentation,
     options.createGridCellReel,
     options.hostUpdatesMainReel === true,
@@ -417,6 +419,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     | undefined;
   readonly #symbolValueTextBindings:
     | import("../symbol/index.js").SymbolValueTextBindingMap
+    | undefined;
+  readonly #symbolValueTextFormatters:
+    | import("../symbol/index.js").SymbolValueTextFormatterMap
     | undefined;
   readonly #gridCellPresentation:
     | {
@@ -541,6 +546,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     symbolValueTextBindings:
       | import("../symbol/index.js").SymbolValueTextBindingMap
       | undefined,
+    symbolValueTextFormatters:
+      | import("../symbol/index.js").SymbolValueTextFormatterMap
+      | undefined,
     gridCellPresentation:
       | {
           readonly createEffectController?: (options: {
@@ -590,6 +598,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       resource.layout.manifest ?? (resource.manifest as SceneLayoutManifestV1);
     this.#areaSpinFunction = areaSpinFunction;
     this.#symbolValueTextBindings = symbolValueTextBindings;
+    this.#symbolValueTextFormatters = symbolValueTextFormatters;
     this.#reelPresentation = reelPresentation ?? null;
     this.#gridCellPresentation = gridCellPresentation;
     this.#createGridCellReel = createGridCellReel;
@@ -1447,7 +1456,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const registry = createSymbolPackageReelRegistryFromCatalog(
       entry.resource,
       entry.catalog,
-      { valueTextBindings: this.#symbolValueTextBindings },
+      {
+        valueTextBindings: this.#symbolValueTextBindings,
+        valueTextFormatters: this.#symbolValueTextFormatters,
+      },
     );
     let spin: RenderCellSpin | null = null;
     let detach: (() => void) | null = null;
@@ -1578,6 +1590,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         valueControllerFactory: createSymbolPackageValueControllerFactory(
           binding.resource,
           symbol,
+          this.#symbolValueTextFormatters?.[symbol],
         ),
         valueTextBindings: this.#symbolValueTextBindings?.[symbol],
       });
@@ -4596,7 +4609,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const registry = createSymbolPackageReelRegistryFromCatalog(
       resource,
       catalog,
-      { valueTextBindings: this.#symbolValueTextBindings },
+      {
+        valueTextBindings: this.#symbolValueTextBindings,
+        valueTextFormatters: this.#symbolValueTextFormatters,
+      },
     );
     const symbolStateObserver = this.createSymbolStateObserver(bindingId);
     if (binding.renderMode === "standard") {

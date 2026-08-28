@@ -498,6 +498,19 @@ describe("symbol package game config and resources", () => {
     expect(() =>
       collectSymbolManifestResourcePaths({ symbolManifest: manifest }),
     ).toThrow(/requires package files/);
+
+    const formatterOnly = structuredClone(manifest) as any;
+    formatterOnly.symbols.C.valuePresentation.defaultValues = [500];
+    delete formatterOnly.symbols.C.valuePresentation.text.tiers[0]
+      .specialValueImages;
+    delete formatterOnly.symbols.C.valuePresentation.text.tiers[0]
+      .spinBlurProfile.specialValueImages;
+    expect(() =>
+      collectSymbolManifestResourcePaths({
+        symbolManifest: formatterOnly,
+        files: packageFiles,
+      }),
+    ).not.toThrow();
   });
 
   it("forces Pixi's texture parser for extensionless package blob URLs", async () => {

@@ -13,6 +13,7 @@ import type {
   SymbolStatePreset,
   SymbolStateTransitionMode,
   SymbolTexturePolicy,
+  SymbolValueTextFormatterMap,
 } from "../symbol/index.js";
 import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
 import type {
@@ -56,6 +57,7 @@ export interface ReelSymbolRegistryOptions {
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;
   readonly valuePresentationResources?: SymbolValuePresentationResourceMap;
+  readonly valueTextFormatters?: SymbolValueTextFormatterMap;
 }
 
 export interface ReelSymbolRegistryEntry {

@@ -6,6 +6,7 @@ import type { Texture } from "pixi.js";
 import { SymbolPlayer } from "../symbol/symbol-player.js";
 import { createSymbolPlayerValueController } from "../symbol-value-presentation/symbol-player-value-controller.js";
 import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
+import { normalizeSymbolValueTextFormatters } from "../symbol-value-presentation/value-text-formatter.js";
 import {
   createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
@@ -53,6 +54,11 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
   readonly #animationResolver: SymbolAnimationResolver;
   readonly #requiredStateTextures: readonly SymbolStateId[];
   readonly #valuePresentationResources: SymbolValuePresentationResourceMap;
+  readonly #valueTextFormatters: Readonly<
+    Partial<
+      Record<string, import("../symbol/index.js").SymbolValueTextFormatter>
+    >
+  >;
   readonly #landingAppearSymbols: ReadonlySet<string>;
   readonly #symbolAnimationCapabilities: Readonly<
     Record<string, readonly SymbolStateId[]>
@@ -167,6 +173,11 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     this.#requiredStateTextures = requiredStateTextures;
     this.#valuePresentationResources =
       options.valuePresentationResources ?? Object.freeze({});
+    this.#valueTextFormatters = normalizeSymbolValueTextFormatters({
+      resources: this.#valuePresentationResources,
+      displaySymbols: texturedSymbols,
+      value: options.valueTextFormatters,
+    });
     this.#landingAppearSymbols = landingAppearSymbols;
     this.#symbolAnimationCapabilities = Object.freeze({
       ...(options.symbolAnimationCapabilities ?? {}),
@@ -266,7 +277,17 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
   ): ReelRollingValueVisual | null {
     const entry = this.getEntryByCode(code);
     const resource = this.#valuePresentationResources[entry.symbol];
-    return resource ? createRollingValueVisual({ resource, value }) : null;
+    return resource
+      ? createRollingValueVisual({
+          resource,
+          value,
+          ...(this.#valueTextFormatters[entry.symbol]
+            ? {
+                valueTextFormatter: this.#valueTextFormatters[entry.symbol],
+              }
+            : {}),
+        })
+      : null;
   }
 
   createSymbolPlayerByCode(code: number): SymbolPlayer | null {
@@ -301,6 +322,12 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
               createSymbolPlayerValueController({
                 root,
                 resource: valueResource,
+                ...(this.#valueTextFormatters[entry.symbol]
+                  ? {
+                      valueTextFormatter:
+                        this.#valueTextFormatters[entry.symbol],
+                    }
+                  : {}),
               }),
           }),
     });

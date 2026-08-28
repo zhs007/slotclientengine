@@ -536,6 +536,48 @@ describe("render symbol value controller", () => {
     expect(players.every((player) => player.destroyed)).toBe(true);
   });
 
+  it("formats intrinsic ImgNumber text without changing raw value tier selection", async () => {
+    const players: FakeSlotPlayer[] = [];
+    const formatter = vi.fn((value: number) => String(value / 5));
+    const symbol = createSymbol(
+      (tier) => {
+        const player = new FakeSlotPlayer();
+        player.tierSkeleton = tier.spec.skeleton;
+        players.push(player);
+        return player;
+      },
+      createImageStringResource(),
+      undefined,
+      undefined,
+      formatter,
+    );
+    symbol.init();
+
+    symbol.validatePresentationValue(5);
+    symbol.setPresentationValue(5);
+    expect(formatter).toHaveBeenCalledTimes(1);
+    expect(symbol.getPresentationValue()).toBe(5);
+    await flushPromises();
+    expect(players[0]?.tierSkeleton).toBe("./low.json");
+    expect(players[0]?.attached[0]?.object.children[0]?.children).toHaveLength(
+      1,
+    );
+
+    symbol.setPresentationValue(25);
+    expect(formatter).toHaveBeenLastCalledWith(25);
+    expect(symbol.getPresentationValue()).toBe(25);
+    await flushPromises();
+    expect(players[1]?.tierSkeleton).toBe("./high.json");
+    expect(players[1]?.attached[0]?.object.children[0]?.children).toHaveLength(
+      1,
+    );
+
+    expect(() => symbol.setPresentationValue(13)).toThrow(/cannot be rendered/);
+    expect(symbol.getPresentationValue()).toBe(25);
+    expect(players).toHaveLength(2);
+    symbol.destroy();
+  });
+
   it("keeps two ImgNumber occurrences independent while sharing resources", async () => {
     const resource = createImageStringResource();
     const players: FakeSlotPlayer[] = [];
@@ -654,6 +696,7 @@ function createSymbol(
     root: SymbolPlayer,
   ) => SymbolImageStringController,
   valueTextBindings?: Readonly<Record<string, (value: number) => string>>,
+  valueTextFormatter?: (value: number) => string,
 ): SymbolPlayer {
   let symbol!: SymbolPlayer;
   symbol = new SymbolPlayer({
@@ -710,6 +753,7 @@ function createSymbol(
       createSymbolPlayerValueController({
         root,
         resource,
+        ...(valueTextFormatter ? { valueTextFormatter } : {}),
         playerFactory: ({ tier }) => createPlayer(tier),
       }),
     imageStringControllerFactory,

@@ -134,9 +134,9 @@ describe("ReelSymbolRegistry", () => {
     });
     const valueResource = {
       symbol: "A",
-      defaultValues: [5],
+      defaultValues: [50],
       activeSpineAnimations: {},
-      tiers: [{ maxExclusive: 10 }, {}],
+      tiers: [{ maxExclusive: 100 }, {}],
       text: { type: "image-string" },
       textImageUrls: {},
       imageStringTierBindings: [
@@ -160,20 +160,58 @@ describe("ReelSymbolRegistry", () => {
         },
       ],
     } as unknown as SymbolValuePresentationResource;
-    const registry = createReelSymbolRegistry({
-      gameConfig: createGameConfig(basicGameConfig),
-      assets: createBasicAssets(),
-      emptySymbols: ["BN"],
-      valuePresentationResources: { A: valueResource },
-      texturePolicy: { requiredStateTextures: ["spinBlur"] },
-    });
+    const createRegistry = (
+      valueTextFormatters: NonNullable<
+        Parameters<typeof createReelSymbolRegistry>[0]["valueTextFormatters"]
+      >,
+      resource: SymbolValuePresentationResource = valueResource,
+    ) =>
+      createReelSymbolRegistry({
+        gameConfig: createGameConfig(basicGameConfig),
+        assets: createBasicAssets(),
+        emptySymbols: ["BN"],
+        valuePresentationResources: { A: resource },
+        valueTextFormatters,
+        texturePolicy: { requiredStateTextures: ["spinBlur"] },
+      });
+
+    expect(() => createRegistry({ UNKNOWN: (value) => String(value) })).toThrow(
+      /unknown display symbol "UNKNOWN"/,
+    );
+    expect(() => createRegistry({ B: (value) => String(value) })).toThrow(
+      /has no valuePresentation/,
+    );
+    expect(() =>
+      createRegistry({
+        A: 1 as unknown as (value: number) => string,
+      }),
+    ).toThrow(/must be a function/);
+    expect(() => createRegistry({ A: () => "" })).toThrow(/non-empty string/);
+    expect(() =>
+      createRegistry({
+        A: () => {
+          throw new Error("format failed");
+        },
+      }),
+    ).toThrow(/format failed/);
+    expect(() =>
+      createRegistry({ A: (value) => String(value) }, {
+        ...valueResource,
+        text: { type: "font" },
+      } as unknown as SymbolValuePresentationResource),
+    ).toThrow(/requires image-string/);
+
+    const registry = createRegistry({ A: (value) => String(value / 10) });
 
     expect(registry.requiresPresentationValueByCode(1)).toBe(true);
-    expect(registry.resolveRollingValueTierByCode(1, 5)).toBe(0);
-    const visual = registry.createRollingValueVisualByCode(1, 5);
+    expect(registry.resolveRollingValueTierByCode(1, 50)).toBe(0);
+    const visual = registry.createRollingValueVisualByCode(1, 50);
     expect(visual?.tierIndex).toBe(0);
     expect(visual?.container.children).toHaveLength(1);
-    visual?.setValue(5);
+    expect(visual?.container.children[0]?.children).toHaveLength(1);
+    visual?.setValue(50);
+    expect(() => visual?.setValue(55)).toThrow(/cannot be rendered/);
+    expect(visual?.container.children[0]?.children).toHaveLength(1);
     visual?.destroy();
   });
 

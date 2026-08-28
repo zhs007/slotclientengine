@@ -309,6 +309,24 @@ createSceneLayoutPackageRuntime({
 formatter 必须同步返回非空 string。unknown symbol/node、非函数、formatter 异常或缺 glyph 都在画面
 部分更新前显式失败；RenderCore 不默认选择 node，也不默认添加 `x` 或调用 `String(value)`。
 
+若数字是 symbol 自身 `valuePresentation.text.type: "image-string"`（而不是命名
+`imageStringNodes`），使用 `symbolValueTextFormatters`。formatter 接收原始 presentation value；RenderCore
+仍用该原始值选 tier、保存 occurrence value，只把返回的 string 交给 settled、landing 和 lightweight rolling
+ImgNumber。package/reel/presenter 低层入口对应字段为 `valueTextFormatters`。
+
+```ts
+createSceneLayoutPackageRuntime({
+  resource,
+  symbolValueTextFormatters: {
+    CN: (value) => String(value / 10),
+  },
+});
+```
+
+该配置只允许绑定已有 image-string value presentation。unknown symbol、无 value presentation、font/image
+text、非函数、formatter 异常、空字符串或结果缺 glyph 都会显式失败；formatter 属于 app runtime，不进入
+manifest。
+
 模板 reel presentation 是 strict `standard | grid-cell` union；round flow 通过
 `SlotReelPresentationCapabilities` 与 remove/dropdown/refill requirement 匹配，不通过
 reel kind 推断 cascade。`createConfiguredSceneLayoutRoundAdapter()` 只串接现有
@@ -967,13 +985,13 @@ symbol 可声明零到多个有唯一 name 的 `imageStringNodes`。新配置用
 
 命名 node 可为 non-Spine exact `spinBlur` target 声明 `spinBlurProfile: { resource, specialValueImages? }`。profile 的字符、metrics、glyph size/offset、fixed groups 和特殊值集合必须与 normal profile一致；package prepare一次加载共享资源。state切换调用同一 mapped renderer的`setResource()`并复用container、special Sprite和glyph Sprite pool，不在runtime生成或复制模糊纹理。缺profile的旧target-only node继续按既有normal-assets语义运行。
 
-命名 node 与 `valuePresentation.text.type: "image-string"` 的每个 tier binding 都支持可选 `specialValueImages: [{ value, image }]`。`value` 在所属 node/binding 内是唯一 safe integer，`image` 是 contained local 图片路径；完全匹配 `String(value)` 时整张 Sprite 替代该档 glyph renderer，其他字符串仍严格走该档 glyph closure。映射图片进入 package/Vite 精确闭包并与 glyph 纹理共享资源所有权，切换文本保持所属 binding 的 anchor、transform、target/slot 与 `followSlotColor`。parser 兼容旧的 `valuePresentation.text.specialValueImages`，将其规范化到每档；canonical typed 输出不保留共享字段，新旧位置同时声明会失败。
+命名 node 与 `valuePresentation.text.type: "image-string"` 的每个 tier binding 都支持可选 `specialValueImages: [{ value, image }]`。`value` 在所属 node/binding 内是唯一 safe integer，`image` 是 contained local 图片路径；完全匹配最终显示 string（默认 `String(rawValue)`，注册 formatter 时为其返回值）时整张 Sprite 替代该档 glyph renderer，其他字符串仍严格走该档 glyph closure。映射图片进入 package/Vite 精确闭包并与 glyph 纹理共享资源所有权，切换文本保持所属 binding 的 anchor、transform、target/slot 与 `followSlotColor`。parser 兼容旧的 `valuePresentation.text.specialValueImages`，将其规范化到每档；canonical typed 输出不保留共享字段，新旧位置同时声明会失败。
 
 `SymbolPlayer` 公开 `getImageStringNodeNames()`、`setImageStringText(name, text)`、`getImageStringText(name)`。string 原样保存，缺 glyph/控制字符/非 NFC 或 unknown name 时原子失败；节点随目标 state/player attach/detach，保留等价 Loop 时间轴，并受 reel texture 显式优先级约束。consumer 不接触 Spine track、slot 私有对象或 Pixi glyph children。旧 `setPresentationValue()` value-presentation 合同独立保留，不会自动变成命名节点。
 
 symbol manifest 可为任意 symbol 声明可选 `valuePresentation`。新 image-string wire 使用与 Spine tiers 等长的 `tierResources[]`，每档保存 normal ImgNumber JSON，并可用等长 `tierSpinBlurProfiles[]` 的 object/null 项显式绑定该档 non-Spine `spinBlur`；`slot`、anchor、transform、`followSlotColor` 与 special map 是一份共享 Normal 配置。旧完整 `text.tiers[]` 继续按原档位语义运行并可带同形 `spinBlurProfile`；shared 与 legacy 字段严格互斥。runtime 维持一个稳定外层 ImgNumber container：同档改值只 `setText()`，normal/spinBlur 在同一 renderer 切 profile并在 tier slot/顶层 overlay间移动，跨档替换内部 profile 而不改变外层 identity。
 
-`createSymbolValuePresentationResourceBundleFromManifest()` 为 value-tier binding 创建可销毁的共享 image-string resource pool，并逐档校验 skeleton animation 与该档 exact slot；相同 canonical dependency 只加载一次，每个 occurrence 只创建独立轻量 renderer。`createSymbolValuePresenter()` 与 reel controller 共用 display factory 和 official Spine slot API，提供 `prepare/show/update/clear/destroy`。font Text、完整数值 Sprite 或 mapped `RenderImageString` 都通过 slot-follow wrapper 挂在当前 tier player 内：wrapper 接收 Spine bone matrix，内部 display 保留自己的 offset、scale、anchor/pivot，再继承 slot 的可见性与颜色。image 模式仍要求完整值图片；image-string 先检查 exact 特殊值映射，未匹配时渲染 `String(rawValue)` 并要求每个字符存在。缺图片、glyph、slot、resource 或晚到初始化失败都在可见提交前回滚，不提供跨模式 fallback。
+`createSymbolValuePresentationResourceBundleFromManifest()` 为 value-tier binding 创建可销毁的共享 image-string resource pool，并逐档校验 skeleton animation 与该档 exact slot；相同 canonical dependency 只加载一次，每个 occurrence 只创建独立轻量 renderer。`createSymbolValuePresenter()` 与 reel controller 共用 display factory 和 official Spine slot API，提供 `prepare/show/update/clear/destroy`。font Text、完整数值 Sprite 或 mapped `RenderImageString` 都通过 slot-follow wrapper 挂在当前 tier player 内：wrapper 接收 Spine bone matrix，内部 display 保留自己的 offset、scale、anchor/pivot，再继承 slot 的可见性与颜色。image 模式仍要求完整值图片；image-string 先检查 exact 特殊值映射，未匹配时渲染最终显示 string并要求每个字符存在。缺图片、glyph、slot、resource 或晚到初始化失败都在可见提交前回滚，不提供跨模式 fallback。
 
 reel 可为每个本地 symbol occurrence 携带可选 presentation value。`TemporaryReelStrip` 会把 current endpoint、公开本地轮带中间 occurrence 和 target endpoint 的值与 code 一起冻结；`SymbolPlayer` 的通用 value controller 据此直接在实际 reel slot 内播放命中 tier 的 Spine，并把文字只创建、attach 一次。normal/appear/win/remove/dropdown 都在同一 tier player 上切 animation，slot object 不重建；只有 value 真正改变、occurrence release 或 destroy 才 detach/destroy。
 

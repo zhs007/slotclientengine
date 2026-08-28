@@ -68,7 +68,7 @@ export interface SymbolValueDisplayHandle {
   readonly text: string;
   readonly resourcePath?: string;
   setProfile?(profile: "normal" | "spinBlur"): void;
-  setTier?(tierIndex: number, value: number): void;
+  setTier?(tierIndex: number, value: number, text?: string): void;
   setText(text: string): void;
   clone(): SymbolValueDisplayHandle;
   destroy(): void;
