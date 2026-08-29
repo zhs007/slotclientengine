@@ -794,6 +794,31 @@ importers:
         specifier: ^20.0.10
         version: 20.10.2
 
+  apps/underwater3ddemo:
+    dependencies:
+      three:
+        specifier: ^0.185.1
+        version: 0.185.1
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.34.0
+        version: 9.39.4
+      '@types/three':
+        specifier: ^0.185.1
+        version: 0.185.4
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^8.0.0
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2))(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+      '@typescript-eslint/parser':
+        specifier: ^8.0.0
+        version: 8.58.0(eslint@10.1.0(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.2)
+      eslint-config-prettier:
+        specifier: ^9.1.0
+        version: 9.1.2(eslint@10.1.0(supports-color@7.2.0))
+      globals:
+        specifier: ^15.15.0
+        version: 15.15.0
+
   apps/victoryani-demo:
     dependencies:
       gsap:
