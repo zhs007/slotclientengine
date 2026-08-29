@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#041c35" />
+    <title>GLB Animation Viewer</title>
+  </head>
+  <body>
+    <main class="viewer-shell">
+      <section
+        id="viewer-stage"
+        class="viewer-stage"
+        aria-label="3D 模型预览"
+      ></section>
+      <aside class="viewer-panel">
+        <p class="eyebrow">THREE.JS TOOL</p>
+        <h1>GLB Animation Viewer</h1>
+        <p id="model-name" class="model-name">正在载入河豚模型…</p>
+
+        <label class="control-label" for="animation-select">动画</label>
+        <select id="animation-select" class="control"></select>
+
+        <div class="button-row">
+          <button id="play-toggle" type="button">暂停</button>
+          <button id="replay" type="button">重播</button>
+        </div>
+
+        <label class="control-label" for="speed">
+          播放速度 <output id="speed-value">1.00×</output>
+        </label>
+        <input
+          id="speed"
+          class="speed-control"
+          type="range"
+          min="0.2"
+          max="2"
+          step="0.05"
+          value="1"
+        />
+
+        <label class="toggle-row">
+          <input id="show-skeleton" type="checkbox" />
+          <span>显示骨架</span>
+        </label>
+
+        <dl id="model-stats" class="model-stats"></dl>
+
+        <label class="file-button" for="model-file">打开其他 GLB</label>
+        <input id="model-file" type="file" accept=".glb,.gltf" />
+        <p id="status" class="status">
+          拖动旋转 · 滚轮缩放 · 可将 GLB 拖入画面
+        </p>
+        <a class="game-link" href="./">返回水下场景</a>
+      </aside>
+    </main>
+    <script type="module" src="/src/model-viewer.ts"></script>
+  </body>
+</html>

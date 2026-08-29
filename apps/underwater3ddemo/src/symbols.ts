@@ -1,217 +1,146 @@
 import {
-  Color,
-  ConeGeometry,
-  InstancedMesh,
-  MeshStandardMaterial,
-  MeshToonMaterial,
+  AnimationMixer,
+  Box3,
+  Group,
+  LoopRepeat,
+  Mesh,
   Object3D,
-  SphereGeometry,
+  Vector3,
 } from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { createSymbolPlacements, type SymbolPlacement } from "./layout.js";
 
-const symbolPalette = [
-  0xff8a22, 0x2f7eff, 0xffdc2d, 0x78d62f, 0xa94fe8, 0xff4e86, 0x55d6c5,
-] as const;
+const modelUrl = new URL(
+  "../assets/models/20260829155447_d0c3ff02-rigged.glb",
+  import.meta.url,
+).href;
 
-function toon(color: number): MeshToonMaterial {
-  return new MeshToonMaterial({ color });
+const requiredAnimations = ["idle", "win", "land"] as const;
+
+interface PufferfishActor {
+  readonly anchor: Group;
+  readonly model: Object3D;
+  readonly mixer: AnimationMixer;
+  readonly placement: SymbolPlacement;
+  readonly bobSpeed: number;
+  readonly bobHeight: number;
+  readonly swayAmount: number;
+}
+
+export function selectSymbolAnimation(
+  placement: Pick<SymbolPlacement, "column" | "row">,
+): (typeof requiredAnimations)[number] {
+  return requiredAnimations[(placement.row + placement.column * 2) % 3];
 }
 
 export class SymbolField extends Object3D {
   readonly #placements: SymbolPlacement[];
-  readonly #body: InstancedMesh;
-  readonly #tail: InstancedMesh;
-  readonly #topFin: InstancedMesh;
-  readonly #eye: InstancedMesh;
-  readonly #pupil: InstancedMesh;
-  readonly #dummy = new Object3D();
+  readonly #actors: PufferfishActor[] = [];
+  #lastUpdateTime = 0;
+  #loadError: Error | null = null;
+  #disposed = false;
 
   constructor(seed: number) {
     super();
-    this.name = "instanced-fish-symbol-grid";
+    this.name = "animated-pufferfish-symbol-grid";
     this.#placements = createSymbolPlacements(seed);
-    const count = this.#placements.length;
-    this.#body = new InstancedMesh(
-      new SphereGeometry(0.55, 18, 12),
-      toon(0xffffff),
-      count,
-    );
-    this.#tail = new InstancedMesh(
-      new ConeGeometry(0.38, 0.68, 3, 1),
-      toon(0xffffff),
-      count,
-    );
-    this.#topFin = new InstancedMesh(
-      new ConeGeometry(0.22, 0.48, 3, 1),
-      toon(0xffffff),
-      count,
-    );
-    this.#eye = new InstancedMesh(
-      new SphereGeometry(0.115, 12, 8),
-      new MeshStandardMaterial({ color: 0xf5ffff, roughness: 0.28 }),
-      count,
-    );
-    this.#pupil = new InstancedMesh(
-      new SphereGeometry(0.052, 10, 8),
-      new MeshStandardMaterial({
-        color: 0x07192c,
-        roughness: 0.15,
-        emissive: 0x04101c,
-        emissiveIntensity: 0.25,
-      }),
-      count,
-    );
-    for (const mesh of [
-      this.#body,
-      this.#tail,
-      this.#topFin,
-      this.#eye,
-      this.#pupil,
-    ]) {
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false;
-    }
-    this.add(this.#body, this.#tail, this.#topFin, this.#eye, this.#pupil);
-    this.#applyColors();
-    this.update(0);
+    void this.#loadModel();
   }
 
   update(time: number): void {
-    for (let index = 0; index < this.#placements.length; index += 1) {
-      const placement = this.#placements[index];
-      const bob = Math.sin(time * 1.25 + placement.phase) * 0.055;
-      const sway = Math.sin(time * 0.82 + placement.phase * 1.7) * 0.055;
-      const scale = placement.scale;
-      this.#setPart(
-        this.#body,
-        index,
-        placement.x,
-        placement.y + bob,
-        placement.z,
-        0,
-        0,
-        sway,
-        0.82 * scale,
-        0.6 * scale,
-        0.46 * scale,
-      );
-      this.#setPart(
-        this.#tail,
-        index,
-        placement.x - 0.68 * scale,
-        placement.y + bob - 0.01,
-        placement.z,
-        0,
-        0,
-        Math.PI / 2 + sway * 1.8,
-        0.72 * scale,
-        0.76 * scale,
-        0.52 * scale,
-      );
-      this.#setPart(
-        this.#topFin,
-        index,
-        placement.x - 0.06,
-        placement.y + bob + 0.45 * scale,
-        placement.z - 0.02,
-        0,
-        0,
-        Math.PI + sway,
-        0.7 * scale,
-        0.7 * scale,
-        0.48 * scale,
-      );
-      this.#setPart(
-        this.#eye,
-        index,
-        placement.x + 0.42 * scale,
-        placement.y + bob + 0.14 * scale,
-        placement.z + 0.39 * scale,
-        0,
-        0,
-        sway,
-        scale,
-        scale,
-        0.55 * scale,
-      );
-      this.#setPart(
-        this.#pupil,
-        index,
-        placement.x + 0.45 * scale,
-        placement.y + bob + 0.14 * scale,
-        placement.z + 0.48 * scale,
-        0,
-        0,
-        sway,
-        scale,
-        scale,
-        0.5 * scale,
-      );
+    if (this.#loadError) {
+      const error = this.#loadError;
+      this.#loadError = null;
+      throw error;
     }
-    for (const mesh of [
-      this.#body,
-      this.#tail,
-      this.#topFin,
-      this.#eye,
-      this.#pupil,
-    ]) {
-      mesh.instanceMatrix.needsUpdate = true;
+
+    const delta = Math.min(0.05, Math.max(0, time - this.#lastUpdateTime));
+    this.#lastUpdateTime = time;
+    for (const actor of this.#actors) {
+      actor.mixer.update(delta);
+      const phase = actor.placement.phase;
+      actor.anchor.position.y =
+        actor.placement.y +
+        Math.sin(time * actor.bobSpeed + phase) * actor.bobHeight;
+      actor.anchor.rotation.z =
+        Math.sin(time * (actor.bobSpeed * 0.63) + phase * 1.7) *
+        actor.swayAmount;
     }
   }
 
   dispose(): void {
-    for (const mesh of [
-      this.#body,
-      this.#tail,
-      this.#topFin,
-      this.#eye,
-      this.#pupil,
-    ]) {
-      mesh.geometry.dispose();
-      if (Array.isArray(mesh.material)) {
-        for (const material of mesh.material) material.dispose();
-      } else {
-        mesh.material.dispose();
+    this.#disposed = true;
+    for (const actor of this.#actors) {
+      actor.mixer.stopAllAction();
+      actor.mixer.uncacheRoot(actor.model);
+    }
+    this.#actors.length = 0;
+  }
+
+  async #loadModel(): Promise<void> {
+    try {
+      const gltf = await new GLTFLoader().loadAsync(modelUrl);
+      if (this.#disposed) return;
+
+      const clips = new Map(gltf.animations.map((clip) => [clip.name, clip]));
+      for (const name of requiredAnimations) {
+        if (!clips.has(name)) {
+          throw new Error(
+            `Pufferfish GLB is missing required animation: ${name}`,
+          );
+        }
       }
-    }
-  }
 
-  #applyColors(): void {
-    const color = new Color();
-    for (let index = 0; index < this.#placements.length; index += 1) {
-      const paletteColor = symbolPalette[this.#placements[index].paletteIndex];
-      color.setHex(paletteColor);
-      this.#body.setColorAt(index, color);
-      this.#tail.setColorAt(index, color.clone().offsetHSL(0.015, 0.03, -0.08));
-      this.#topFin.setColorAt(
-        index,
-        color.clone().offsetHSL(-0.012, 0.05, -0.04),
-      );
-    }
-    if (this.#body.instanceColor) this.#body.instanceColor.needsUpdate = true;
-    if (this.#tail.instanceColor) this.#tail.instanceColor.needsUpdate = true;
-    if (this.#topFin.instanceColor)
-      this.#topFin.instanceColor.needsUpdate = true;
-  }
+      for (let index = 0; index < this.#placements.length; index += 1) {
+        const placement = this.#placements[index];
+        const anchor = new Group();
+        anchor.name = `pufferfish-symbol-${placement.row}-${placement.column}`;
+        anchor.position.set(placement.x, placement.y, placement.z);
 
-  #setPart(
-    mesh: InstancedMesh,
-    index: number,
-    x: number,
-    y: number,
-    z: number,
-    rotationX: number,
-    rotationY: number,
-    rotationZ: number,
-    scaleX: number,
-    scaleY: number,
-    scaleZ: number,
-  ): void {
-    this.#dummy.position.set(x, y, z);
-    this.#dummy.rotation.set(rotationX, rotationY, rotationZ);
-    this.#dummy.scale.set(scaleX, scaleY, scaleZ);
-    this.#dummy.updateMatrix();
-    mesh.setMatrixAt(index, this.#dummy.matrix);
+        const model = cloneSkeleton(gltf.scene);
+        model.rotation.y = -Math.PI / 2;
+        model.scale.setScalar(0.92 * placement.scale);
+        model.updateMatrixWorld(true);
+
+        const center = new Box3().setFromObject(model).getCenter(new Vector3());
+        model.position.sub(center);
+        model.traverse((object) => {
+          if (!(object instanceof Mesh)) return;
+          object.castShadow = true;
+          object.receiveShadow = true;
+          object.frustumCulled = false;
+        });
+        anchor.add(model);
+        this.add(anchor);
+
+        const animationName = selectSymbolAnimation(placement);
+        const clip = clips.get(animationName);
+        if (!clip) throw new Error(`Missing animation clip: ${animationName}`);
+        const mixer = new AnimationMixer(model);
+        const action = mixer.clipAction(clip);
+        action.setLoop(LoopRepeat, Number.POSITIVE_INFINITY);
+        action.timeScale = 0.76 + ((index * 17) % 41) / 100;
+        action.play();
+        mixer.setTime(
+          (placement.phase / (Math.PI * 2)) * Math.max(clip.duration, 0.01),
+        );
+
+        this.#actors.push({
+          anchor,
+          model,
+          mixer,
+          placement,
+          bobSpeed: 0.82 + ((index * 13) % 29) / 32,
+          bobHeight: 0.035 + ((index * 7) % 9) / 180,
+          swayAmount: 0.018 + ((index * 11) % 13) / 430,
+        });
+      }
+    } catch (error) {
+      this.#loadError =
+        error instanceof Error
+          ? error
+          : new Error(`Failed to load pufferfish GLB: ${String(error)}`);
+    }
   }
 }

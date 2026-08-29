@@ -277,6 +277,7 @@ export class UnderwaterRenderer {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#renderer.setAnimationLoop(null);
+    this.#symbols.dispose();
     this.#renderer.domElement.removeEventListener(
       "pointermove",
       this.#onPointerMove,
