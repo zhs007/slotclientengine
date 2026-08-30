@@ -2,6 +2,7 @@ export * from "../errors.js";
 export * from "../manifest.js";
 export * from "../manifest-v2.js";
 export * from "../manifest-v3.js";
+export * from "../manifest-v6.js";
 export * from "../runtime-allocation.js";
 export * from "../geometry.js";
 export * from "./package-limits.js";
@@ -53,11 +54,13 @@ export type {
   SceneLayoutManifestV2,
   SceneLayoutRuntimeAllocationMode,
   SceneLayoutRuntimeAllocationV1,
+  SceneLayoutRuntimeAllocationV2,
   SceneLayoutManifestV3,
   SceneLayoutManifestV4,
   SceneLayoutEventAudioBindingV1,
   SceneLayoutEventAudioV1,
   SceneLayoutManifestV5,
+  SceneLayoutManifestV6,
   SceneLayoutManifestModern,
   SceneLayoutManifest,
   SceneLayoutManifestLatest,

@@ -37,7 +37,8 @@ export function parseSceneLayoutManifest(
   if (
     sourceRecord.version === 3 ||
     sourceRecord.version === 4 ||
-    sourceRecord.version === 5
+    sourceRecord.version === 5 ||
+    sourceRecord.version === 6
   )
     return materializeInitialSceneLayoutManifest(
       upgradeSceneLayoutManifestToLatest(value),
@@ -58,7 +59,8 @@ export function parseSceneLayoutManifestDocument(
   if (
     sourceRecord.version === 3 ||
     sourceRecord.version === 4 ||
-    sourceRecord.version === 5
+    sourceRecord.version === 5 ||
+    sourceRecord.version === 6
   )
     return upgradeSceneLayoutManifestToLatest(value);
   const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
@@ -69,6 +71,20 @@ export function parseSceneLayoutManifestDocument(
 
 export function parseSceneLayoutManifestV1(
   value: unknown,
+): SceneLayoutManifestV1 {
+  return parseSceneLayoutManifestV1Internal(value, false);
+}
+
+/** @internal Accepts the v1-compatible runtime view materialized from v6. */
+export function parseSceneLayoutRuntimeManifestV1(
+  value: unknown,
+): SceneLayoutManifestV1 {
+  return parseSceneLayoutManifestV1Internal(value, true);
+}
+
+function parseSceneLayoutManifestV1Internal(
+  value: unknown,
+  allowOrientationOrdinaryPlacements: boolean,
 ): SceneLayoutManifestV1 {
   const record = readRecord(value, "scene layout manifest");
   known(
@@ -102,7 +118,14 @@ export function parseSceneLayoutManifestV1(
     fail("scene layout manifest.nodes must be a non-empty array.");
   }
   const nodes = record.nodes
-    .map((node, index) => parseNode(node, index, adaptation.mode))
+    .map((node, index) =>
+      parseNode(
+        node,
+        index,
+        adaptation.mode,
+        allowOrientationOrdinaryPlacements,
+      ),
+    )
     .sort((left, right) => left.order - right.order);
   const nodeIds = unique(
     nodes.map((node) => node.id),
@@ -192,9 +215,9 @@ export function collectSceneLayoutAssetPaths(
 ): readonly string[] {
   const parsed = parseSceneLayoutManifestDocument(manifest);
   const paths = new Set<string>();
-  if (parsed.version === 4 || parsed.version === 5)
+  if (parsed.version === 4 || parsed.version === 5 || parsed.version === 6)
     for (const path of collectAudioAssetPaths(parsed.audio)) paths.add(path);
-  if (parsed.version === 5)
+  if (parsed.version === 5 || parsed.version === 6)
     for (const binding of parsed.eventAudio.bindings)
       for (const source of binding.audio.asset.sources) paths.add(source.path);
   for (const node of parsed.nodes) {
@@ -329,13 +352,16 @@ function parseNode(
   value: unknown,
   index: number,
   mode: SceneLayoutAdaptation["mode"],
+  allowOrientationOrdinaryPlacements = false,
 ): SceneLayoutNode {
   const label = `scene layout node[${index}]`;
   const record = readRecord(value, label);
   known(record, ["id", "order", "gameMode", "resource", "placements"], label);
   const placementsRecord = readRecord(record.placements, `${label}.placements`);
   const allowed =
-    mode === "maximized-focus" ? ["default"] : ["landscape", "portrait"];
+    mode === "maximized-focus" && !allowOrientationOrdinaryPlacements
+      ? ["default"]
+      : ["default", "landscape", "portrait"];
   known(placementsRecord, allowed, `${label}.placements`);
   const placements: Partial<
     Record<SceneLayoutVariantId, SceneLayoutNodePlacement>
@@ -346,7 +372,12 @@ function parseNode(
       `${label}.placements.${variantId}`,
     );
   }
-  if (mode === "maximized-focus" && !placements.default)
+  if (
+    mode === "maximized-focus" &&
+    !placements.default &&
+    !placements.landscape &&
+    !placements.portrait
+  )
     fail(`${label}.placements.default is required.`);
   if (
     mode === "orientation-focus" &&

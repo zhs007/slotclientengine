@@ -10,6 +10,7 @@ const state = vi.hoisted(() => {
     applyGeometryManifest: vi.fn(),
     applyViewport: vi.fn(() => ({
       variantId: "default",
+      orientationVariantId: "landscape",
       artSize: { width: 100, height: 100 },
       viewportSize: { width: 100, height: 100 },
       visibleRect: { x: 0, y: 0, width: 100, height: 100 },
@@ -118,6 +119,7 @@ const state = vi.hoisted(() => {
 function gridSnapshot(columns = 2, rows = 2) {
   return {
     variantId: "default",
+    orientationVariantId: "landscape",
     artSize: { width: 100, height: 100 },
     viewportSize: { width: 100, height: 100 },
     visibleRect: { x: 0, y: 0, width: 100, height: 100 },
@@ -340,6 +342,7 @@ describe("LayoutPreview", () => {
     state.canvas.removeAttribute("style");
     state.runtime.applyViewport.mockReturnValue({
       variantId: "default",
+      orientationVariantId: "landscape",
       artSize: { width: 100, height: 100 },
       viewportSize: { width: 100, height: 100 },
       visibleRect: { x: 0, y: 0, width: 100, height: 100 },
@@ -403,6 +406,7 @@ describe("LayoutPreview", () => {
     state.runtime.applyViewport.mockReturnValue({
       ...gridSnapshot(),
       variantId: "portrait",
+      orientationVariantId: "portrait",
     });
     await preview.setLayout(imageManifest, assetBytes);
 
@@ -448,7 +452,7 @@ describe("LayoutPreview", () => {
       "FreeGame",
       {},
     );
-    expect(preview.getCurrentVariantId()).toBe("default");
+    expect(preview.getCurrentVariantId()).toBe("landscape");
     preview.playAwardCelebration({ betAmountRaw: 100, winAmountRaw: 6000 });
     expect(
       state.packageRuntime.dismissActiveAwardCelebrationImmediately,

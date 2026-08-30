@@ -36,6 +36,7 @@ describe("preview helpers", () => {
         showReels: true,
         snapshot: {
           variantId: "default",
+          orientationVariantId: "landscape",
           artSize: { width: 100, height: 100 },
           viewportSize: { width: 100, height: 100 },
           visibleRect: { x: 0, y: 0, width: 100, height: 100 },

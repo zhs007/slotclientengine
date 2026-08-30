@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSceneLayoutResource,
   createSceneLayoutRuntime,
+  createSceneLayoutRuntimeAllocation,
   materializeSceneLayoutManifestForMode,
   parseSceneLayoutManifest,
+  parseSceneLayoutManifestV6,
   upgradeSceneLayoutManifestToLatest,
 } from "../../src/scene-layout/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
@@ -17,6 +19,73 @@ import {
 import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
 
 describe("scene layout runtime", () => {
+  it("applies independent ordinary-node orientations in a maximized scene", async () => {
+    const migrated = upgradeSceneLayoutManifestToLatest({
+      ...game002LayoutFixture,
+      nodes: [
+        ...game002LayoutFixture.nodes,
+        {
+          id: "ordinary",
+          order: 1,
+          resource: {
+            kind: "image" as const,
+            path: "assets/ordinary.png",
+            size: { width: 1, height: 1 },
+          },
+          placements: { default: { x: 10, y: 20, scale: 1 } },
+        },
+      ],
+    });
+    const draft = structuredClone(migrated) as any;
+    draft.nodes[1]!.placements = {
+      landscape: { x: 10, y: 20, scale: 1 },
+      portrait: { x: 30, y: 40, scale: 1 },
+    };
+    draft.runtimeAllocation = createSceneLayoutRuntimeAllocation(draft);
+    const latest = parseSceneLayoutManifestV6(draft);
+    const manifest = materializeSceneLayoutManifestForMode(latest, "BaseGame");
+    const runtime = createSceneLayoutRuntime({
+      resource: createSceneLayoutResource({
+        manifest,
+        allowOrientationPlacements: true,
+        imageModules: {
+          "assets/bg.png": "memory:bg",
+          "assets/ordinary.png": "memory:ordinary",
+        },
+      }),
+      loadTexture: vi.fn(async () => Texture.WHITE),
+    });
+    await runtime.init();
+
+    const landscape = runtime.applyViewport({ width: 1920, height: 1080 });
+    expect(landscape).toMatchObject({
+      variantId: "default",
+      orientationVariantId: "landscape",
+    });
+    expect(runtime.getNode("ordinary").parent!.position).toMatchObject({
+      x: 10,
+      y: 20,
+    });
+
+    const portrait = runtime.applyViewport({ width: 1080, height: 1920 });
+    expect(portrait).toMatchObject({
+      variantId: "default",
+      orientationVariantId: "portrait",
+    });
+    expect(runtime.getNode("ordinary").parent!.position).toMatchObject({
+      x: 30,
+      y: 40,
+    });
+
+    const square = runtime.applyViewport({ width: 1200, height: 1200 });
+    expect(square.orientationVariantId).toBe("portrait");
+    expect(runtime.getNode("ordinary").parent!.position).toMatchObject({
+      x: 30,
+      y: 40,
+    });
+    runtime.destroy();
+  });
+
   it("plays exact authored loop Spine animations and atomically binds slot objects", async () => {
     const manifest = parseSceneLayoutManifest({
       ...game002LayoutFixture,

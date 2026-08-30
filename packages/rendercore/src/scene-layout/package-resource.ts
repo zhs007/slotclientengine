@@ -783,6 +783,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       : materializedLayout;
     const layout = createSceneLayoutResource({
       manifest: layoutManifest,
+      allowOrientationPlacements: sourceDocument.version !== 1,
       imageModules,
       skeletonModules,
       atlasModules,

@@ -9,7 +9,10 @@ import {
   type RenderViewportSize,
 } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
-import { parseSceneLayoutManifest } from "./manifest.js";
+import {
+  parseSceneLayoutManifest,
+  parseSceneLayoutRuntimeManifestV1,
+} from "./manifest.js";
 import { materializeSceneLayoutManifestForMode } from "./manifest-v2.js";
 import type {
   ResolvedSceneLayoutReelGrid,
@@ -17,6 +20,7 @@ import type {
   SceneLayoutFrameViewport,
   SceneLayoutManifestV1,
   SceneLayoutManifest,
+  SceneLayoutOrientationVariantId,
   SceneLayoutSnapshot,
   SceneLayoutVariantId,
 } from "./types.js";
@@ -91,8 +95,13 @@ export function resolveSceneLayoutViewport(options: {
   readonly manifest: SceneLayoutManifestV1;
   readonly viewportSize: RenderViewportSize;
   readonly previousVariantId?: SceneLayoutVariantId;
+  readonly previousOrientationVariantId?: SceneLayoutOrientationVariantId;
 }): SceneLayoutSnapshot {
-  const manifest = parseSceneLayoutManifest(options.manifest);
+  const manifest = parseSceneLayoutRuntimeManifestV1(options.manifest);
+  const orientationVariantId = resolveSceneLayoutOrientationVariant(
+    options.viewportSize,
+    options.previousOrientationVariantId,
+  );
   const viewport =
     manifest.adaptation.mode === "maximized-focus"
       ? {
@@ -136,14 +145,16 @@ export function resolveSceneLayoutViewport(options: {
     worldOffset: viewport.worldOffset,
     focusRectInViewport: viewport.focusRectInViewport,
     variantId: viewport.variantId,
+    orientationVariantId,
     reels: Object.freeze(reels),
   });
 }
 
 export function resolveSceneLayoutArtSpace(
   manifestValue: SceneLayoutManifestV1,
+  orientationVariantId: SceneLayoutOrientationVariantId = "landscape",
 ): SceneLayoutSnapshot {
-  const manifest = parseSceneLayoutManifest(manifestValue);
+  const manifest = parseSceneLayoutRuntimeManifestV1(manifestValue);
   if (manifest.adaptation.mode !== "maximized-focus") {
     throw new SceneLayoutError(
       "Scene layout art-space projection requires maximized-focus adaptation.",
@@ -175,6 +186,7 @@ export function resolveSceneLayoutArtSpace(
     worldOffset: Object.freeze({ x: 0, y: 0 }),
     focusRectInViewport: manifest.adaptation.focusRect,
     variantId: "default",
+    orientationVariantId,
     reels: Object.freeze(reels),
   });
 }
@@ -184,7 +196,7 @@ export function resolveSceneLayoutReelGrid(
   reelId: string,
   variantId?: SceneLayoutVariantId,
 ): ResolvedSceneLayoutReelGrid {
-  const manifest = parseSceneLayoutManifest(manifestValue);
+  const manifest = parseSceneLayoutRuntimeManifestV1(manifestValue);
   const reel = manifest.reels[reelId];
   if (!reel)
     throw new SceneLayoutError(`Unknown scene layout reel "${reelId}".`);
@@ -296,14 +308,10 @@ function resolveOrientationSceneViewport(options: {
   readonly previousVariantId?: SceneLayoutVariantId;
 }) {
   const viewportSize = validateViewportSize(options.viewportSize);
-  const variantId =
-    viewportSize.height > viewportSize.width
-      ? ("portrait" as const)
-      : viewportSize.width > viewportSize.height
-        ? ("landscape" as const)
-        : options.previousVariantId === "portrait"
-          ? ("portrait" as const)
-          : ("landscape" as const);
+  const variantId = resolveSceneLayoutOrientationVariant(
+    viewportSize,
+    options.previousVariantId === "portrait" ? "portrait" : "landscape",
+  );
   const variant = options.variants[variantId];
   return resolveUnboundedSceneViewport({
     artSize: variant.artSize,
@@ -312,6 +320,18 @@ function resolveOrientationSceneViewport(options: {
     ...(variant.minFocusMargin ? { minMargin: variant.minFocusMargin } : {}),
     variantId,
   });
+}
+
+export function resolveSceneLayoutOrientationVariant(
+  pageSize: RenderViewportSize,
+  previousVariantId?: SceneLayoutOrientationVariantId,
+): SceneLayoutOrientationVariantId {
+  const size = validateViewportSize(pageSize);
+  return size.height > size.width
+    ? "portrait"
+    : size.width > size.height
+      ? "landscape"
+      : (previousVariantId ?? "landscape");
 }
 
 function resolveUnboundedSceneViewport<

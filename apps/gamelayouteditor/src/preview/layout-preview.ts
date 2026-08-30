@@ -430,7 +430,7 @@ export class LayoutPreview {
   }
 
   getCurrentVariantId(): SceneLayoutVariantId | null {
-    return this.#lastLayoutSnapshot?.variantId ?? null;
+    return this.#lastLayoutSnapshot?.orientationVariantId ?? null;
   }
 
   async selectAuthoringGameMode(modeId: string): Promise<void> {
@@ -768,10 +768,13 @@ export class LayoutPreview {
     this.assertReady();
     const runtime = this.#runtime;
     const manifest = this.#manifest;
-    const variantId = this.#lastLayoutSnapshot?.variantId;
-    if (!runtime || !manifest || !variantId) return Object.freeze([]);
+    const snapshot = this.#lastLayoutSnapshot;
+    if (!runtime || !manifest || !snapshot) return Object.freeze([]);
     return Object.freeze(
       manifest.nodes.flatMap((node) => {
+        const variantId = node.placements.default
+          ? snapshot.variantId
+          : snapshot.orientationVariantId;
         if (
           node.resource.kind !== "spine" ||
           !("stateMachine" in node.resource) ||
@@ -969,9 +972,10 @@ export class LayoutPreview {
       manifest,
       pageSize: this.#pageSize,
       ...(displayedMode ? { modeId: displayedMode } : {}),
-      ...(this.#lastLayoutSnapshot?.variantId === "landscape" ||
-      this.#lastLayoutSnapshot?.variantId === "portrait"
-        ? { previousVariantId: this.#lastLayoutSnapshot.variantId }
+      ...(this.#lastLayoutSnapshot
+        ? {
+            previousVariantId: this.#lastLayoutSnapshot.orientationVariantId,
+          }
         : {}),
     });
     this.#laidOutDisplayedMode = displayedMode ?? null;
@@ -1004,6 +1008,7 @@ export class LayoutPreview {
     this.drawSelectedLayerOutline();
     this.#diagnostics.textContent = [
       `variant=${snapshot.variantId}`,
+      `orientation=${snapshot.orientationVariantId}`,
       `page=${round(this.#pageSize.width)}×${round(this.#pageSize.height)}`,
       `logical=${round(frameViewport.frameDesignSize.width)}×${round(frameViewport.frameDesignSize.height)}`,
       `css=${round(frameViewport.cssSize.width)}×${round(frameViewport.cssSize.height)}`,
@@ -1170,9 +1175,12 @@ export class LayoutPreview {
     const nodeId = this.#selectedLayerId;
     const runtime = this.#runtime;
     const manifest = this.#manifest;
-    const variantId = this.#lastLayoutSnapshot?.variantId;
-    if (!nodeId || !runtime || !manifest || !variantId) return;
+    const snapshot = this.#lastLayoutSnapshot;
+    if (!nodeId || !runtime || !manifest || !snapshot) return;
     const spec = manifest.nodes.find((node) => node.id === nodeId);
+    const variantId = spec?.placements.default
+      ? snapshot.variantId
+      : snapshot.orientationVariantId;
     if (!spec?.placements[variantId]) return;
     try {
       const bounds = runtime.getNode(nodeId).getBounds();
@@ -1185,7 +1193,6 @@ export class LayoutPreview {
         bounds.height <= 0
       )
         return;
-      const snapshot = this.#lastLayoutSnapshot;
       const clipped = snapshot
         ? intersectRect(bounds, {
             x: 0,

@@ -43,14 +43,14 @@ describe("EditorStore", () => {
     });
   });
 
-  it("upgrades an editable v1 draft to latest v5 without inventing Splash", () => {
+  it("upgrades an editable v1 draft to latest v6 without inventing Splash", () => {
     const project = manifestToEditorProject(imageManifest, assetBytes);
     expect(project.gameModes.initialMode).toBe("BaseGame");
     expect(project.gameModes.modes.map((mode) => mode.id)).toEqual([
       "BaseGame",
     ]);
     const exported = editorProjectToManifest(project);
-    expect(exported.version).toBe(5);
+    expect(exported.version).toBe(6);
     expect(exported.runtimeAllocation.modes.BaseGame).toBeDefined();
     expect(exported).not.toHaveProperty("adaptation");
     expect(exported.gameModes.modes[0]).toMatchObject({

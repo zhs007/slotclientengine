@@ -1,7 +1,9 @@
 import { SceneLayoutError } from "./errors.js";
 import type {
   SceneLayoutManifestModern,
+  SceneLayoutManifestV6,
   SceneLayoutRuntimeAllocationV1,
+  SceneLayoutRuntimeAllocationV2,
   SceneLayoutVariantId,
 } from "./types.js";
 
@@ -12,6 +14,20 @@ export function sceneLayoutTransitionOwnerId(from: string, to: string): string {
 }
 
 export function createSceneLayoutRuntimeAllocation(
+  manifest: SceneLayoutManifestV6,
+): SceneLayoutRuntimeAllocationV2;
+export function createSceneLayoutRuntimeAllocation(
+  manifest: Exclude<SceneLayoutManifestModern, SceneLayoutManifestV6>,
+): SceneLayoutRuntimeAllocationV1;
+export function createSceneLayoutRuntimeAllocation(
+  manifest: SceneLayoutManifestModern,
+): SceneLayoutRuntimeAllocationV1 | SceneLayoutRuntimeAllocationV2 {
+  return manifest.version === 6
+    ? createSceneLayoutRuntimeAllocationV2(manifest)
+    : createSceneLayoutRuntimeAllocationV1(manifest);
+}
+
+export function createSceneLayoutRuntimeAllocationV1(
   manifest: SceneLayoutManifestModern,
 ): SceneLayoutRuntimeAllocationV1 {
   const backgroundNodes = new Set(
@@ -92,11 +108,90 @@ export function createSceneLayoutRuntimeAllocation(
   });
 }
 
+function createSceneLayoutRuntimeAllocationV2(
+  manifest: SceneLayoutManifestModern,
+): SceneLayoutRuntimeAllocationV2 {
+  const backgroundNodes = new Set(
+    manifest.gameModes.modes.flatMap((mode) =>
+      Object.values(mode.backgroundNodes),
+    ),
+  );
+  const orderedNodes = [...manifest.nodes].sort(
+    (left, right) => left.order - right.order,
+  );
+  const modes = Object.fromEntries(
+    manifest.gameModes.modes.map((mode) => [
+      mode.id,
+      {
+        variants: Object.fromEntries(
+          (["landscape", "portrait"] as const).map((orientation) => [
+            orientation,
+            {
+              activeNodes: Object.freeze(
+                orderedNodes.flatMap((node) => {
+                  if (backgroundNodes.has(node.id)) {
+                    const geometryVariant =
+                      mode.adaptation.mode === "maximized-focus"
+                        ? "default"
+                        : orientation;
+                    return mode.backgroundNodes[geometryVariant] === node.id
+                      ? [node.id]
+                      : [];
+                  }
+                  if (node.gameMode !== undefined && node.gameMode !== mode.id)
+                    return [];
+                  return node.placements[orientation] ? [node.id] : [];
+                }),
+              ),
+            },
+          ]),
+        ),
+        symbolPackage: manifest.symbolPackage
+          ? LEGACY_SCENE_LAYOUT_SYMBOL_PACKAGE_OWNER
+          : (mode.symbolPackage ?? null),
+        awardCelebrationPopup: mode.awardCelebrationPopup ?? null,
+      },
+    ]),
+  );
+  return deepFreeze({
+    version: 2,
+    package: {
+      nodes: orderedNodes.map((node) => node.id),
+      symbolPackages: manifest.symbolPackage
+        ? [LEGACY_SCENE_LAYOUT_SYMBOL_PACKAGE_OWNER]
+        : Object.keys(manifest.symbolPackages ?? {}).sort(compareText),
+      popups: Object.keys(manifest.popups ?? {}).sort(compareText),
+    },
+    onDemand: {
+      transitions: (manifest.gameModes.transitions ?? [])
+        .map((transition) =>
+          sceneLayoutTransitionOwnerId(transition.from, transition.to),
+        )
+        .sort(compareText),
+      runtimeResources: Object.keys(manifest.runtimeResources ?? {}).sort(
+        compareText,
+      ),
+    },
+    modes,
+  });
+}
+
+export function parseSceneLayoutRuntimeAllocation(
+  value: unknown,
+  manifest: SceneLayoutManifestV6,
+): SceneLayoutRuntimeAllocationV2;
+export function parseSceneLayoutRuntimeAllocation(
+  value: unknown,
+  manifest: Exclude<SceneLayoutManifestModern, SceneLayoutManifestV6>,
+): SceneLayoutRuntimeAllocationV1;
 export function parseSceneLayoutRuntimeAllocation(
   value: unknown,
   manifest: SceneLayoutManifestModern,
-): SceneLayoutRuntimeAllocationV1 {
-  const expected = createSceneLayoutRuntimeAllocation(manifest);
+): SceneLayoutRuntimeAllocationV1 | SceneLayoutRuntimeAllocationV2 {
+  const expected =
+    manifest.version === 6
+      ? createSceneLayoutRuntimeAllocationV2(manifest)
+      : createSceneLayoutRuntimeAllocationV1(manifest);
   assertExact(value, expected, "scene layout runtimeAllocation");
   return expected;
 }

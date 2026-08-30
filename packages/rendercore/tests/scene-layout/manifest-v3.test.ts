@@ -108,7 +108,7 @@ describe("scene layout manifest v3", () => {
       /order.*unique/,
     );
     const repairedV3 = parseSceneLayoutManifestDocument(conflictedV3);
-    expect(repairedV3.version).toBe(5);
+    expect(repairedV3.version).toBe(6);
     expect(repairedV3.nodes[0].order).toBe(1);
     expect(repairedV3.reels.main.order).toBe(0);
     expect(upgradeSceneLayoutManifestToLatest(conflictedV3)).toEqual(
@@ -155,7 +155,7 @@ describe("scene layout manifest v3", () => {
         ),
       },
     });
-    expect(withAudio.version).toBe(5);
+    expect(withAudio.version).toBe(6);
     expect(withAudio.gameModes.modes[0]!.bgm).toBe("base");
     expect(collectSceneLayoutAssetPaths(withAudio)).toEqual(
       expect.arrayContaining(["base.ogg", "click.mp3"]),
@@ -201,7 +201,7 @@ describe("scene layout manifest v3", () => {
         ],
       },
     });
-    expect(withEventAudio.version).toBe(5);
+    expect(withEventAudio.version).toBe(6);
     expect(withEventAudio.eventAudio.ignoreLegacyAudio).toBe(true);
     expect(collectSceneLayoutAssetPaths(withEventAudio)).toContain(
       "event-base.mp3",

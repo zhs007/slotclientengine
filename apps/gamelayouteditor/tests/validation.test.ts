@@ -270,7 +270,7 @@ describe("filename-key layout resource commands", () => {
       project,
       resourceId: resource.id,
       nodeId: "vni-fx",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
       loop: false,
     });
     expect(
@@ -313,13 +313,13 @@ describe("filename-key layout resource commands", () => {
       project,
       resourceId: "digits.image-string.manifest.json",
       nodeId: "amount-a",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
     });
     addLayerFromResource({
       project,
       resourceId: "digits.image-string.manifest.json",
       nodeId: "amount-b",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
     });
     setImageStringLayerText(project, "amount-a", "001");
     setImageStringLayerAnchor(project, "amount-a", { x: 0.25, y: 0.75 });
@@ -514,7 +514,7 @@ describe("filename-key layout resource commands", () => {
         project,
         resourceId: "bg2fg.mp4",
         nodeId: "bad-video-layer",
-        variants: ["default"],
+        variants: ["landscape", "portrait"],
       }),
     ).toThrow(/video/);
     expect(() =>
@@ -596,7 +596,7 @@ describe("filename-key layout resource commands", () => {
       project,
       resourceId: "hero.json",
       nodeId: "scene",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
       defaultAnimation: "Idle",
     });
     expect(project.nodes.find((node) => node.id === "scene")?.playback).toEqual(
@@ -1039,16 +1039,21 @@ describe("filename-key layout resource commands", () => {
       project,
       resourceId: "layer.png",
       nodeId: "layer-a",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
     });
     addLayerFromResource({
       project,
       resourceId: "layer.png",
       nodeId: "layer-b",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
     });
-    project.nodes[0].placements.default!.x = 10;
-    expect(project.nodes[1].placements.default!.x).toBe(0);
+    project.nodes.find(
+      (node) => node.id === "layer-a",
+    )!.placements.landscape!.x = 10;
+    expect(
+      project.nodes.find((node) => node.id === "layer-b")!.placements.landscape!
+        .x,
+    ).toBe(0);
     expect(getLayoutResourceReferences(project, "layer.png")).toHaveLength(2);
     removeLayer(project, "layer-a");
     expect(project.resources.has("layer.png")).toBe(true);
@@ -1098,21 +1103,21 @@ describe("filename-key layout resource commands", () => {
         project,
         resourceId: "hero.json",
         nodeId: "hero-a",
-        variants: ["default"],
+        variants: ["landscape", "portrait"],
       }),
     ).toThrow(/明确选择/);
     addLayerFromResource({
       project,
       resourceId: "hero.json",
       nodeId: "hero-a",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
       defaultAnimation: "Idle",
     });
     addLayerFromResource({
       project,
       resourceId: "hero.json",
       nodeId: "hero-b",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
       defaultAnimation: "Win",
     });
     expect(
@@ -1123,7 +1128,7 @@ describe("filename-key layout resource commands", () => {
         ),
     ).toEqual(["Idle", "Win"]);
     expect(
-      project.nodes.slice(-2).map((node) => node.placements.default),
+      project.nodes.slice(-2).map((node) => node.placements.landscape),
     ).toEqual([
       {
         x: 1000,
@@ -1146,10 +1151,10 @@ describe("filename-key layout resource commands", () => {
       project,
       resourceId: "hero.json",
       nodeId: "hero-centered-origin",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
       defaultAnimation: "Idle",
     });
-    expect(project.nodes.at(-1)?.placements.default).toEqual({
+    expect(project.nodes.at(-1)?.placements.landscape).toEqual({
       x: 0,
       y: 0,
       scale: 1,
@@ -1222,7 +1227,7 @@ describe("filename-key layout resource commands", () => {
       project,
       resourceId: "hero.json",
       nodeId: "hero-layer",
-      variants: ["default"],
+      variants: ["landscape", "portrait"],
       defaultAnimation: "Win",
     });
     const before = cloneEditorProject(project);

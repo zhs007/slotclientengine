@@ -1,6 +1,6 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v5 编辑器，覆盖 layout、mode/variant、optional loop BGM、全局 event 音乐音效、程序音效、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v4 ZIP 会在打开事务中自动升级；后续预览和导出只生成 v5。
+纯前端 Scene Layout v6 编辑器，覆盖 layout、mode/variant、optional loop BGM、全局 event 音乐音效、程序音效、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v6 ZIP 会在打开事务中规范化；后续预览和导出只生成 v6。
 
 ## Splash-first 与 per-mode 适配
 
@@ -14,9 +14,10 @@ mode 的适配类型，不继承当前 mode。
 mode 默认开启；关闭的 mode 不显示 reel guide、不能绑定 Symbols，focus 四边相对 art 配置。
 开启的 mode 继续以 main reel 为基准配置 focus 外扩。已有 Symbols 时必须先解绑才能关闭。
 
-适配、focus、背景和 main reel placement 都属于各自 mode。单背景 mode 只有 default focus，
-双背景 mode 的 landscape/portrait 各有独立 focus。预览尺寸宽高相等时维持当前方向；首次以
-正方形启动时选择 landscape。
+适配、focus、背景和 main reel placement 都属于各自 mode。单背景 mode 只有 default geometry/background，
+双背景 mode 的 landscape/portrait 各有独立 geometry/background；两种 mode 的普通图层都始终拥有独立
+landscape/portrait placement 与可见性。预览和 production runtime 按宿主原始页面宽高选择普通图层方向；
+尺寸宽高相等时维持当前方向，首次以正方形启动时选择 landscape。
 
 award-celebration Popup 作为自包含 dependency，通过 `rendercore/popup/editor` 完成 standalone ZIP 校验、flatten、namespace 与 vendor。任一受支持的 Popup v1–v9 都先按 source strict 校验，再由默认 loader 转成 latest v9；Popup/Symbol 音效保持 local name，直到 Scene Layout 按 binding id 聚合为全局 route。画面和音频预览继续只走 Scene Layout production runtime/inspector。
 三类 Popup 都可在 Popup 工作区设为“程序 Popup”。这只负责让没有 mode/transition 直接引用的 package 仍进入 production `popups`；已有直接引用的 Popup 本来就可从相同 canonical 地址打开。普通 Spine 仍可在具体转场中选择。Popup root 的 placement、order 与统一 open/close 预览由 Layout Editor 配置并随 layout vendor；一个 preview runtime 同时只允许一个 active Popup。

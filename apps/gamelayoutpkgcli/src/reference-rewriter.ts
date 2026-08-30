@@ -209,10 +209,12 @@ export function rewriteLayoutManifest(
     : undefined;
   return parseSceneLayoutManifestDocument({
     ...manifest,
-    ...(manifest.version === 4 || manifest.version === 5
+    ...(manifest.version === 4 ||
+    manifest.version === 5 ||
+    manifest.version === 6
       ? { audio: rewriteOptimizedAudioAssets(manifest.audio, mapping) }
       : {}),
-    ...(manifest.version === 5
+    ...(manifest.version === 5 || manifest.version === 6
       ? {
           eventAudio: {
             ...manifest.eventAudio,

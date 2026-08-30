@@ -36,6 +36,7 @@ import {
   activeVariantIds,
   activateEditorGameMode,
   createDefaultNodePlacement,
+  ordinaryLayerVariantIds,
   cloneEditorProject,
   resetVariantGeometry,
   updateVariantFocusFromReel,
@@ -865,7 +866,7 @@ export function addLayerFromResource(options: {
   if (resource.kind === "video" || resource.kind === "audio")
     throw new Error(`${resource.kind} 资源不能创建普通图层。`);
   assertNodeIdAvailable(options.project, options.nodeId);
-  assertVariantsAllowed(options.project, options.variants);
+  assertLayerVariantsAllowed(options.variants);
   const defaultAnimation = validateAnimation(
     resource,
     options.defaultAnimation,
@@ -1100,13 +1101,15 @@ function defaultBackgroundPlacement(
 }
 
 function defaultLayerPlacement(
-  project: Pick<EditorProject, "coordinateOrigin" | "variants">,
+  project: Pick<EditorProject, "coordinateOrigin" | "mode" | "variants">,
   resource: EditorLayoutResource,
   variant: SceneLayoutVariantId,
 ): EditorNodePlacement {
   if (project.coordinateOrigin === "center" || resource.kind !== "spine")
     return createDefaultNodePlacement();
-  const artSize = project.variants[variant].artSize;
+  const artSize =
+    project.variants[project.mode === "maximized-focus" ? "default" : variant]
+      .artSize;
   return createDefaultNodePlacement(artSize.width / 2, artSize.height / 2);
 }
 
@@ -1120,7 +1123,7 @@ export function clearBackground(
     : project.gameModes.initialMode;
   const variantId =
     explicitVariantId ?? (modeIdOrVariant as SceneLayoutVariantId);
-  assertVariantsAllowed(project, [variantId]);
+  assertGeometryVariantsAllowed(project, [variantId]);
   const variant = project.variants[variantId];
   const mode = project.gameModes.modes.find(
     (candidate) => candidate.id === modeId,
@@ -1288,7 +1291,7 @@ export function setLayerVariantVisibility(
   visible: boolean,
 ): void {
   const node = requireLayer(project, nodeId);
-  assertVariantsAllowed(project, [variant]);
+  assertLayerVariantsAllowed([variant]);
   const placement = node.placements[variant];
   if (visible) {
     if (placement) return;
@@ -1432,7 +1435,7 @@ function isBackgroundNode(project: EditorProject, nodeId: string): boolean {
   );
 }
 
-function assertVariantsAllowed(
+function assertGeometryVariantsAllowed(
   project: EditorProject,
   variants: readonly SceneLayoutVariantId[],
 ): void {
@@ -1442,6 +1445,20 @@ function assertVariantsAllowed(
   for (const variant of variants) {
     if (!allowed.has(variant))
       throw new Error(`当前模式不允许 variant：${variant}`);
+    if (duplicate.has(variant)) throw new Error(`variant 重复：${variant}`);
+    duplicate.add(variant);
+  }
+}
+
+function assertLayerVariantsAllowed(
+  variants: readonly SceneLayoutVariantId[],
+): void {
+  if (variants.length === 0) throw new Error("至少选择一个可见 variant。");
+  const allowed = new Set<SceneLayoutVariantId>(ordinaryLayerVariantIds);
+  const duplicate = new Set<SceneLayoutVariantId>();
+  for (const variant of variants) {
+    if (!allowed.has(variant))
+      throw new Error(`普通图层不允许 variant：${variant}`);
     if (duplicate.has(variant)) throw new Error(`variant 重复：${variant}`);
     duplicate.add(variant);
   }

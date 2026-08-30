@@ -20,6 +20,10 @@ import type {
   SceneLayoutManifestV4,
   SceneLayoutManifestV5,
 } from "./types.js";
+import {
+  parseSceneLayoutManifestV6,
+  upgradeSceneLayoutManifestV5ToV6,
+} from "./manifest-v6.js";
 
 export function parseSceneLayoutManifestV3(
   value: unknown,
@@ -48,36 +52,46 @@ export function upgradeSceneLayoutManifestToLatest(
   value: unknown,
 ): SceneLayoutManifestLatest {
   const root = record(value, "scene layout manifest");
-  if (root.version === 5) return parseSceneLayoutManifestV5(value);
+  if (root.version === 6) return parseSceneLayoutManifestV6(value);
+  if (root.version === 5)
+    return upgradeSceneLayoutManifestV5ToV6(parseSceneLayoutManifestV5(value));
   if (root.version === 4)
-    return upgradeV4ToV5(parseSceneLayoutManifestV4(value));
+    return upgradeSceneLayoutManifestV5ToV6(
+      upgradeV4ToV5(parseSceneLayoutManifestV4(value)),
+    );
   if (root.version === 3) {
     const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
     if (normalized === value)
-      return upgradeV4ToV5(upgradeV3ToV4(parseSceneLayoutManifestV3(value)));
+      return upgradeSceneLayoutManifestV5ToV6(
+        upgradeV4ToV5(upgradeV3ToV4(parseSceneLayoutManifestV3(value))),
+      );
     const { runtimeAllocation: _allocation, ...source } = record(
       normalized,
       "scene layout manifest",
     );
     const parsedV2 = parseSceneLayoutManifestV2({ ...source, version: 2 });
-    return upgradeV4ToV5(
-      upgradeV3ToV4(
-        parseSceneLayoutManifestV3({
-          ...parsedV2,
-          version: 3,
-          runtimeAllocation: createSceneLayoutRuntimeAllocation(parsedV2),
-        }),
+    return upgradeSceneLayoutManifestV5ToV6(
+      upgradeV4ToV5(
+        upgradeV3ToV4(
+          parseSceneLayoutManifestV3({
+            ...parsedV2,
+            version: 3,
+            runtimeAllocation: createSceneLayoutRuntimeAllocation(parsedV2),
+          }),
+        ),
       ),
     );
   }
   const source = upgradeSceneLayoutManifestToV2(value);
-  return upgradeV4ToV5(
-    upgradeV3ToV4(
-      parseSceneLayoutManifestV3({
-        ...source,
-        version: 3,
-        runtimeAllocation: createSceneLayoutRuntimeAllocation(source),
-      }),
+  return upgradeSceneLayoutManifestV5ToV6(
+    upgradeV4ToV5(
+      upgradeV3ToV4(
+        parseSceneLayoutManifestV3({
+          ...source,
+          version: 3,
+          runtimeAllocation: createSceneLayoutRuntimeAllocation(source),
+        }),
+      ),
     ),
   );
 }

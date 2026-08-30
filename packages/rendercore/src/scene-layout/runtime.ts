@@ -402,7 +402,10 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         manifest: this.#manifest,
         viewportSize,
         ...(this.#snapshot
-          ? { previousVariantId: this.#snapshot.variantId }
+          ? {
+              previousVariantId: this.#snapshot.variantId,
+              previousOrientationVariantId: this.#snapshot.orientationVariantId,
+            }
           : {}),
       }),
     );
@@ -411,13 +414,19 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   applyArtSpace(): SceneLayoutSnapshot {
     this.assertReady();
     this.#artSpaceApplied = true;
-    return this.applySnapshot(resolveSceneLayoutArtSpace(this.#manifest));
+    return this.applySnapshot(
+      resolveSceneLayoutArtSpace(
+        this.#manifest,
+        this.#snapshot?.orientationVariantId,
+      ),
+    );
   }
 
   private applySnapshot(snapshot: SceneLayoutSnapshot): SceneLayoutSnapshot {
     const variantChanged =
       this.#snapshot !== null &&
-      this.#snapshot.variantId !== snapshot.variantId;
+      (this.#snapshot.variantId !== snapshot.variantId ||
+        this.#snapshot.orientationVariantId !== snapshot.orientationVariantId);
     if (variantChanged)
       this.resetAllNodeMotions("Scene layout variant was replaced.");
     this.#snapshot = snapshot;
@@ -428,7 +437,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       .fill({ color: 0xffffff, alpha: 1 });
     for (const node of this.#nodes) {
       const spec = this.requireCurrentNode(node.spec.id);
-      const placement = spec.placements[snapshot.variantId];
+      const placementVariantId = this.nodePlacementVariant(spec.id, snapshot);
+      const placement = spec.placements[placementVariantId];
       const active =
         node.prepared &&
         this.#authoredNodeActive.get(node.spec.id) !== false &&
@@ -440,7 +450,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
           node,
           this.#resource,
           this.#manifest,
-          snapshot.variantId,
+          placementVariantId,
           placement,
         );
       }
@@ -469,11 +479,15 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   ): SceneLayoutSnapshot | null {
     const nextSnapshot = this.#snapshot
       ? this.#artSpaceApplied
-        ? resolveSceneLayoutArtSpace(manifest)
+        ? resolveSceneLayoutArtSpace(
+            manifest,
+            this.#snapshot.orientationVariantId,
+          )
         : resolveSceneLayoutViewport({
             manifest,
             viewportSize: this.#snapshot.viewportSize,
             previousVariantId: this.#snapshot.variantId,
+            previousOrientationVariantId: this.#snapshot.orientationVariantId,
           })
       : null;
     this.resetAllNodeMotions("Scene layout geometry was replaced.");
@@ -1020,13 +1034,17 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       if (this.#snapshot) {
         for (const node of pending) {
           const spec = this.requireCurrentNode(node.spec.id);
-          const placement = spec.placements[this.#snapshot.variantId];
+          const placementVariantId = this.nodePlacementVariant(
+            spec.id,
+            this.#snapshot,
+          );
+          const placement = spec.placements[placementVariantId];
           if (placement)
             applyNodePlacementTransform(
               node,
               this.#resource,
               this.#manifest,
-              this.#snapshot.variantId,
+              placementVariantId,
               placement,
             );
           this.refreshNodeVisibility(node);
@@ -1614,7 +1632,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   private refreshNodeVisibility(node: RuntimeNode): void {
     const spec = this.requireCurrentNode(node.spec.id);
     const placement = this.#snapshot
-      ? spec.placements[this.#snapshot.variantId]
+      ? spec.placements[this.nodePlacementVariant(spec.id, this.#snapshot)]
       : undefined;
     const visible =
       Boolean(placement) &&
@@ -1623,6 +1641,22 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       this.#programNodeVisible.get(node.spec.id) !== false;
     node.slot.visible = visible;
     node.slot.renderable = visible;
+  }
+
+  private nodePlacementVariant(
+    nodeId: string,
+    snapshot: SceneLayoutSnapshot,
+  ): SceneLayoutVariantId {
+    const backgrounds =
+      this.#manifest.adaptation.mode === "maximized-focus"
+        ? [this.#manifest.adaptation.backgroundNode]
+        : [
+            this.#manifest.adaptation.variants.landscape.backgroundNode,
+            this.#manifest.adaptation.variants.portrait.backgroundNode,
+          ];
+    if (backgrounds.includes(nodeId)) return snapshot.variantId;
+    const node = this.requireCurrentNode(nodeId);
+    return node.placements.default ? "default" : snapshot.orientationVariantId;
   }
 
   private authoredToArt(point: SceneLayoutPoint): SceneLayoutPoint {

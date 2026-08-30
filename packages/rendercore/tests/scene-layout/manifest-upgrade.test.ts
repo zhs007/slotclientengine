@@ -10,7 +10,7 @@ import { game002LayoutFixture } from "./fixtures.js";
 describe("scene layout manifest latest upgrade", () => {
   it("upgrades v1 without inventing Splash and copies root geometry to each mode", () => {
     const latest = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
-    expect(latest.version).toBe(5);
+    expect(latest.version).toBe(6);
     expect(latest.eventAudio).toEqual({
       version: 1,
       ignoreLegacyAudio: false,
@@ -28,12 +28,15 @@ describe("scene layout manifest latest upgrade", () => {
       reelPlacements: { main: { default: { x: 640, y: 337 } } },
     });
     expect(latest.runtimeAllocation).toEqual({
-      version: 1,
+      version: 2,
       package: { nodes: ["bg"], symbolPackages: [], popups: [] },
       onDemand: { transitions: [], runtimeResources: [] },
       modes: {
         BaseGame: {
-          variants: { default: { activeNodes: ["bg"] } },
+          variants: {
+            landscape: { activeNodes: ["bg"] },
+            portrait: { activeNodes: ["bg"] },
+          },
           symbolPackage: null,
           awardCelebrationPopup: null,
         },

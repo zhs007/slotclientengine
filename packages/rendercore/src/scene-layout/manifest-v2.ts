@@ -1,5 +1,8 @@
 import { SceneLayoutError } from "./errors.js";
-import { parseSceneLayoutManifestV1 } from "./manifest.js";
+import {
+  parseSceneLayoutManifestV1,
+  parseSceneLayoutRuntimeManifestV1,
+} from "./manifest.js";
 import type {
   SceneLayoutAdaptation,
   SceneLayoutGameModeV2,
@@ -230,7 +233,10 @@ export function materializeSceneLayoutManifestForMode(
   if (manifest.version === 1) return parseSceneLayoutManifestV1(manifest);
   const parsed = parseSceneLayoutManifestModernWithoutMaterialization(manifest);
   const selected = modeId ?? parsed.gameModes.initialMode;
-  return parseSceneLayoutManifestV1(materializeModeDraft(parsed, selected));
+  const materialized = materializeModeDraft(parsed, selected);
+  return parsed.version === 6
+    ? parseSceneLayoutRuntimeManifestV1(materialized)
+    : parseSceneLayoutManifestV1(materialized);
 }
 
 function parseSceneLayoutManifestModernWithoutMaterialization(
@@ -285,7 +291,10 @@ function materializeModeDraft(
     // its lowest values. Foreign backgrounds remain hidden without colliding
     // with the authored main reel or Popup roots.
     order: materializedBackgroundOrders.get(node.id) ?? node.order,
-    placements: effectivePlacements(node, variants),
+    placements:
+      manifest.version === 6 && !backgroundNodeIds.has(node.id)
+        ? structuredClone(node.placements)
+        : effectivePlacements(node, variants),
   }));
   const validationBackgrounds = Object.fromEntries(
     variants.map((variant) => {

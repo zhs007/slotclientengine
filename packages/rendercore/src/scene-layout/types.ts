@@ -381,6 +381,13 @@ export interface SceneLayoutRuntimeAllocationV1 {
   readonly modes: Readonly<Record<string, SceneLayoutRuntimeAllocationMode>>;
 }
 
+export interface SceneLayoutRuntimeAllocationV2 extends Omit<
+  SceneLayoutRuntimeAllocationV1,
+  "version"
+> {
+  readonly version: 2;
+}
+
 export interface SceneLayoutManifestV3 extends Omit<
   SceneLayoutManifestV2,
   "version"
@@ -418,15 +425,24 @@ export interface SceneLayoutManifestV5 extends Omit<
   readonly eventAudio: SceneLayoutEventAudioV1;
 }
 
+export interface SceneLayoutManifestV6 extends Omit<
+  SceneLayoutManifestV5,
+  "version" | "runtimeAllocation"
+> {
+  readonly version: 6;
+  readonly runtimeAllocation: SceneLayoutRuntimeAllocationV2;
+}
+
 export type SceneLayoutManifestModern =
   | SceneLayoutManifestV2
   | SceneLayoutManifestV3
   | SceneLayoutManifestV4
-  | SceneLayoutManifestV5;
+  | SceneLayoutManifestV5
+  | SceneLayoutManifestV6;
 export type SceneLayoutManifest =
   | SceneLayoutManifestV1
   | SceneLayoutManifestModern;
-export type SceneLayoutManifestLatest = SceneLayoutManifestV5;
+export type SceneLayoutManifestLatest = SceneLayoutManifestV6;
 
 export type SceneLayoutRuntimeResource =
   | {
@@ -695,7 +711,10 @@ export interface ResolvedSceneLayoutReelGrid {
 }
 
 export interface SceneLayoutSnapshot extends FocusedArtViewport {
+  /** Geometry/background/reel variant selected by the active adaptation. */
   readonly variantId: SceneLayoutVariantId;
+  /** Raw-page orientation used by ordinary scene-node placements. */
+  readonly orientationVariantId: SceneLayoutOrientationVariantId;
   readonly reels: Readonly<
     Record<
       string,

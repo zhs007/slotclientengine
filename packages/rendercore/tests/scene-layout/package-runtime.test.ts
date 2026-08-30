@@ -681,7 +681,7 @@ describe("scene layout package runtime", () => {
         lazyRuntimeResources: true,
         decodeImage: async () => ({ width: 1, height: 1 }),
       });
-      expect(resource.runtimeManifest.version).toBe(5);
+      expect(resource.runtimeManifest.version).toBe(6);
       expect(resource.layout.manifest.runtimeResources).toBeUndefined();
       const runtime = createSceneLayoutPackageRuntime({
         resource,
@@ -1860,7 +1860,7 @@ describe("scene layout package runtime", () => {
       const runtime = createSceneLayoutPackageRuntime({ resource });
       await runtime.init();
       expect(resource.manifest.version).toBe(1);
-      expect(resource.runtimeManifest.version).toBe(5);
+      expect(resource.runtimeManifest.version).toBe(6);
       expect(runtime.getGameModeIds()).toEqual(["BaseGame"]);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
         stableMode: "BaseGame",

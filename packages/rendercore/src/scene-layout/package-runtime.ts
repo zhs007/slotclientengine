@@ -160,7 +160,7 @@ type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
 function readEventAudio(
   document: SceneLayoutManifest,
 ): SceneLayoutEventAudioV1 {
-  return document.version === 5
+  return document.version === 5 || document.version === 6
     ? document.eventAudio
     : Object.freeze({
         version: 1,
@@ -488,7 +488,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #initialized = false;
   #initializing = false;
   #destroyed = false;
-  #publishedVariantId: SceneLayoutSnapshot["variantId"] | null = null;
+  #publishedVariantId: SceneLayoutSnapshot["orientationVariantId"] | null =
+    null;
   readonly #presentationDelayWaiters =
     new Set<PackagePresentationDelayWaiter>();
   #stableMode: string | null = null;
@@ -1022,11 +1023,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       activeTransition.player.applyViewport(viewportSize);
     this.redrawVideoBlackout(viewportSize);
     const previousVariantId = this.#publishedVariantId;
-    this.#publishedVariantId = snapshot.variantId;
-    if (previousVariantId !== null && previousVariantId !== snapshot.variantId)
+    this.#publishedVariantId = snapshot.orientationVariantId;
+    if (
+      previousVariantId !== null &&
+      previousVariantId !== snapshot.orientationVariantId
+    )
       this.#addressController.emit(this.#variantChangedAddress, {
         previousVariantId,
-        variantId: snapshot.variantId,
+        variantId: snapshot.orientationVariantId,
       });
     return snapshot;
   }
@@ -4900,7 +4904,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const ids =
       this.#document.version === 3 ||
       this.#document.version === 4 ||
-      this.#document.version === 5
+      this.#document.version === 5 ||
+      this.#document.version === 6
         ? this.#document.runtimeAllocation.package.symbolPackages
         : Object.keys(this.#manifest.symbolPackages ?? {}).sort((left, right) =>
             left.localeCompare(right, "en"),
@@ -4948,7 +4953,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       (this.#document.version !== 2 &&
         this.#document.version !== 3 &&
         this.#document.version !== 4 &&
-        this.#document.version !== 5)
+        this.#document.version !== 5 &&
+        this.#document.version !== 6)
     )
       return true;
     const mode = this.#document.gameModes.modes.find(
@@ -5613,7 +5619,8 @@ function materializeModeGeometry(
     document.version !== 2 &&
     document.version !== 3 &&
     document.version !== 4 &&
-    document.version !== 5
+    document.version !== 5 &&
+    document.version !== 6
   )
     return null;
   return materializeSceneLayoutManifestForMode(document, modeId);

@@ -2,6 +2,7 @@ import type { SceneLayoutCoordinateOrigin } from "@slotclientengine/rendercore/s
 import {
   activeVariantIds,
   calculateReelSize,
+  ordinaryLayerVariantIds,
   type EditorProject,
 } from "./editor-project.js";
 
@@ -13,39 +14,29 @@ export function convertProjectCoordinateOrigin(
   if (target !== "top-left" && target !== "center")
     throw new Error(`未知坐标类型：${String(target)}`);
   const toCenter = target === "center";
+  const backgroundNodeIds = new Set(
+    project.gameModes.modes.flatMap((mode) =>
+      Object.values(mode.backgroundNodes),
+    ),
+  );
+  for (const variantId of ordinaryLayerVariantIds) {
+    const geometryVariantId =
+      project.mode === "maximized-focus" ? "default" : variantId;
+    const artSize = project.variants[geometryVariantId].artSize;
+    assertPositiveSize(artSize, `${variantId} artSize`);
+    const center = { x: artSize.width / 2, y: artSize.height / 2 };
+    for (const node of project.nodes) {
+      if (backgroundNodeIds.has(node.id)) continue;
+      convertNodePlacement(node, variantId, center, toCenter, project);
+    }
+  }
   for (const variantId of activeVariantIds(project)) {
     const artSize = project.variants[variantId].artSize;
     assertPositiveSize(artSize, `${variantId} artSize`);
     const center = { x: artSize.width / 2, y: artSize.height / 2 };
     for (const node of project.nodes) {
-      const placements = [
-        [node.placements[variantId], `节点 ${node.id} ${variantId}`],
-        [
-          node.hiddenPlacements?.[variantId],
-          `节点 ${node.id} ${variantId} 隐藏缓存`,
-        ],
-      ] as const;
-      if (!placements.some(([placement]) => placement)) continue;
-      const resource = project.resources.get(node.resourceId);
-      if (!resource)
-        throw new Error(`节点 ${node.id} 引用了未知资源：${node.resourceId}`);
-      for (const [placement, label] of placements) {
-        if (!placement) continue;
-        assertPlacement(placement, label);
-        if (resource.kind === "image" || resource.kind === "vni") {
-          const size =
-            resource.kind === "image" ? resource.size : resource.project.stage;
-          placement.x +=
-            (toCenter ? 1 : -1) *
-            ((placement.scale * size.width) / 2 - center.x);
-          placement.y +=
-            (toCenter ? 1 : -1) *
-            ((placement.scale * size.height) / 2 - center.y);
-        } else {
-          placement.x += (toCenter ? -1 : 1) * center.x;
-          placement.y += (toCenter ? -1 : 1) * center.y;
-        }
-      }
+      if (!backgroundNodeIds.has(node.id)) continue;
+      convertNodePlacement(node, variantId, center, toCenter, project);
     }
     for (const transition of project.gameModes.transitions) {
       if (transition.kind !== "spine") continue;
@@ -79,6 +70,41 @@ export function convertProjectCoordinateOrigin(
     }
   }
   project.coordinateOrigin = target;
+}
+
+function convertNodePlacement(
+  node: EditorProject["nodes"][number],
+  variantId: "default" | "landscape" | "portrait",
+  center: { readonly x: number; readonly y: number },
+  toCenter: boolean,
+  project: EditorProject,
+): void {
+  const placements = [
+    [node.placements[variantId], `节点 ${node.id} ${variantId}`],
+    [
+      node.hiddenPlacements?.[variantId],
+      `节点 ${node.id} ${variantId} 隐藏缓存`,
+    ],
+  ] as const;
+  if (!placements.some(([placement]) => placement)) return;
+  const resource = project.resources.get(node.resourceId);
+  if (!resource)
+    throw new Error(`节点 ${node.id} 引用了未知资源：${node.resourceId}`);
+  for (const [placement, label] of placements) {
+    if (!placement) continue;
+    assertPlacement(placement, label);
+    if (resource.kind === "image" || resource.kind === "vni") {
+      const size =
+        resource.kind === "image" ? resource.size : resource.project.stage;
+      placement.x +=
+        (toCenter ? 1 : -1) * ((placement.scale * size.width) / 2 - center.x);
+      placement.y +=
+        (toCenter ? 1 : -1) * ((placement.scale * size.height) / 2 - center.y);
+    } else {
+      placement.x += (toCenter ? -1 : 1) * center.x;
+      placement.y += (toCenter ? -1 : 1) * center.y;
+    }
+  }
 }
 
 function assertPositiveSize(

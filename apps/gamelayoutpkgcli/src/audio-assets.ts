@@ -17,13 +17,17 @@ export function collectPackageAudioAssetRoles(
   files: ReadonlyMap<string, Uint8Array>,
 ): ReadonlyMap<string, PackageAudioAssetDescriptor> {
   const roles = new Map<string, PackageAudioAssetDescriptor>();
-  if (manifest.version === 4 || manifest.version === 5) {
+  if (
+    manifest.version === 4 ||
+    manifest.version === 5 ||
+    manifest.version === 6
+  ) {
     for (const effect of manifest.audio.effects)
       addBinding(roles, effect.asset.sources, "effect");
     for (const music of manifest.audio.music)
       addBinding(roles, music.asset.sources, "music");
   }
-  if (manifest.version === 5)
+  if (manifest.version === 5 || manifest.version === 6)
     for (const binding of manifest.eventAudio.bindings)
       addBinding(roles, binding.audio.asset.sources, binding.audio.category);
   for (const binding of symbolBindings(manifest)) {

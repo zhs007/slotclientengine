@@ -1,5 +1,6 @@
 import {
   activeVariantIds,
+  ordinaryLayerVariantIds,
   type EditorProject,
 } from "../model/editor-project.js";
 import {
@@ -51,7 +52,7 @@ export function createResourcePickerState(
     variants:
       context.kind === "assign-background"
         ? [context.variant]
-        : [...activeVariantIds(project)],
+        : [...ordinaryLayerVariantIds],
     defaultAnimation: "",
     backgroundArtSize,
   };

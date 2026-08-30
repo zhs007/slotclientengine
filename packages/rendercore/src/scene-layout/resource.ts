@@ -16,6 +16,7 @@ import {
 import {
   collectSceneLayoutAssetPaths,
   parseSceneLayoutManifest,
+  parseSceneLayoutRuntimeManifestV1,
 } from "./manifest.js";
 import type {
   SceneLayoutManifestV1,
@@ -25,6 +26,8 @@ import type {
 
 export interface CreateSceneLayoutResourceOptions {
   readonly manifest: unknown;
+  /** @internal Canonical v6 materialized views carry ordinary L/P placements. */
+  readonly allowOrientationPlacements?: boolean;
   readonly imageModules?: Readonly<Record<string, string>>;
   readonly skeletonModules?: Readonly<Record<string, unknown>>;
   readonly atlasModules?: Readonly<Record<string, string>>;
@@ -47,7 +50,9 @@ export interface CreateSceneLayoutResourceOptions {
 export function createSceneLayoutResource(
   options: CreateSceneLayoutResourceOptions,
 ): SceneLayoutResource {
-  const manifest = parseSceneLayoutManifest(options.manifest);
+  const manifest = options.allowOrientationPlacements
+    ? parseSceneLayoutRuntimeManifestV1(options.manifest)
+    : parseSceneLayoutManifest(options.manifest);
   const imageModules = normalizeMap(options.imageModules);
   const skeletonModules = normalizeMap(options.skeletonModules);
   const atlasModules = normalizeMap(options.atlasModules);

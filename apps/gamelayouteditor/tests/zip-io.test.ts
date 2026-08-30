@@ -255,13 +255,16 @@ describe("layout zip IO", () => {
         packedManifest.nodes.map((node: { id: string }) => node.id),
       ).toEqual(["background", "jackpot-title"]);
       expect(packedManifest.nodes[0].resource.path).toBe(canonicalKey);
-      expect(packedManifest.nodes[1].placements.default).toEqual({
+      expect(packedManifest.nodes[1].placements.landscape).toEqual({
         x: 10,
         y: 10,
         scale: 1,
         rotation: -90,
         center: { x: 0.25, y: 0.75 },
       });
+      expect(packedManifest.nodes[1].placements.portrait).toEqual(
+        packedManifest.nodes[1].placements.landscape,
+      );
       const imported = await importLayoutZip(exported.bytes, { decodeImage });
       const project = manifestToEditorProject(
         imported.manifest,
@@ -271,13 +274,16 @@ describe("layout zip IO", () => {
         "background",
         "jackpot-title",
       ]);
-      expect(project.nodes[1].placements.default).toEqual({
+      expect(project.nodes[1].placements.landscape).toEqual({
         x: 10,
         y: 10,
         scale: 1,
         rotation: -90,
         center: { x: 0.25, y: 0.75 },
       });
+      expect(project.nodes[1].placements.portrait).toEqual(
+        project.nodes[1].placements.landscape,
+      );
       expect([...project.resources.keys()]).toEqual([canonicalKey]);
       expect([...project.resources.keys()]).not.toContain(
         map.files[canonicalKey]?.path,
@@ -909,7 +915,7 @@ describe("layout zip IO", () => {
       ]);
       const imported = await importLayoutZip(first.bytes, { decodeImage });
       expect(imported.manifest).toMatchObject({
-        version: 5,
+        version: 6,
         id: fixture.manifest.id,
         symbolPackages: fixture.manifest.symbolPackages,
       });
@@ -1254,7 +1260,7 @@ describe("layout zip IO", () => {
     expect(first.bytes).toEqual(second.bytes);
     const imported = await importLayoutZip(first.bytes, { decodeImage });
     expect(imported.manifest).toMatchObject({
-      version: 5,
+      version: 6,
       id: imageManifest.id,
     });
     expect(

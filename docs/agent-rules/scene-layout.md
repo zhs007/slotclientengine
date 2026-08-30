@@ -12,13 +12,14 @@
 
 ## Mode、variant 与稳定节点
 
-- Scene Layout v5 沿用 v4 音频目录并新增 `eventAudio`：每项只绑定一个现有 audio asset、一个 canonical runtime event，以及 loop 时必填且不同于开始 event 的结束 event。RenderCore runtime 直接接受 v1–v5，读取后确定性补齐 allocation、空旧音频目录与 `{ ignoreLegacyAudio: false, bindings: [] }`，统一规范化为 v5；共享 upgrader 不伪造 Splash、BGM 或 event binding。Editor 可导入 v1–v5，但只预览和导出 canonical v5。
+- Scene Layout v5 沿用 v4 音频目录并新增 `eventAudio`；v6 将普通 scene node 的 canonical placement 统一为可独立缺失的 `landscape` / `portrait`，并以 runtime allocation v2 表达两侧 active node。RenderCore 直接接受 v1–v6，旧单背景 ordinary `default` 深复制到两侧、旧双背景方向数据保持，统一规范化为 v6；共享 upgrader 不伪造 Splash、BGM 或 event binding。Editor 可导入 v1–v6，但只预览和导出 canonical v6。
 - 每个 mode 可选择零或一首 loop BGM；Splash 通常留空但 schema 不强制。成功 mode commit 后才以显式 fade-out/fade-in 切歌，相同 BGM 不重启；失败或 rollback 保留原 BGM。
 - Game Layout Editor 中 root 音频先作为统一 filename-key asset 导入，不因文件名自动绑定用途；BGM 只在 exact mode 上选择，程序音效只通过 strict local name 进入 `audio.effects` 与 `programmaticEffects`，event 音乐音效对话框也只选择已上传 audio，不负责导入 bytes。未绑定音频保留在 authoring workspace，但不进入 production closure；audio 不得伪装成 scene node 或通用 `runtimeResources`。
 - event audio 的 `music` / `effect` 是玩家可独立控制的音量总线，不是互斥播放策略。once track 可独立降低 BGM，并在 `same-audio` / `all` 中至多选择一种音效范围；target gain 为 `0..1`，默认 authoring 值为 `0.5`。衰减由每个 active voice 的 owner-scoped lease 持有，owner 自身不被降低，重叠 lease 取最小 gain，结束、停止、失败和 destroy 必须恢复。loop track 不配置 focus，开始 event 在解锁前保留播放意图，once event 在解锁前丢弃。
 - `ignoreLegacyAudio` 默认 false；true 只禁止 runtime 自动 mode BGM、Popup cue 与 Symbol cue，不删除旧配置/资源，也不改变显式程序 `playEffect` / `stopEffect` API。初始 mode 的 displayed/stable entered occurrence 必须在 init 成功后发出，使 event audio 与其它 event consumer 看到一致的首次状态。
 - 每个v2 mode显式声明reelEnabled；关闭时不得绑定Symbols或导出mode reel placement，focus相对art边缘，开启时focus由reel区域与四边外扩派生。runtime不得按mode id猜测开关。
 - orientation variant只由宿主原始page width/height决定；正方形保持当前variant，首次正方形为landscape，focus和派生frame尺寸不得反馈成方向输入。
+- 单背景/双背景只决定 geometry、背景、reel、Popup 与 transition 使用 `default` 还是方向 variant；普通 scene node 始终按原始 page orientation 使用 `landscape` / `portrait` placement。runtime snapshot 必须分别保留 geometry variant 与 orientation variant，方向 resize 只更新普通图层 placement/visibility，不重建稳定 player。
 - orientation variant选定后必须把该variant的actual focusRect（及显式margin）按contain最大化；无margin时focus映射到CSS page后至少一轴与page相等。Scene Layout的frameDesignSize、visibleRect、worldOffset和focusRectInViewport只由page aspect、所选actual focus及显式margin决定，artSize只描述背景覆盖和authored坐标，不参与缩放、逻辑viewport尺寸、居中或边界钳制。Scene Layout不得让legacy frameFocusRect的最大设计尺寸/最低容纳规则覆盖actual focus，也不得在Editor、app或CSS复制第二套公式。
 - primary action只引用同source的显式direct transition target；runtime复用既有prepare/commit/rollback和trusted gesture边界，不按mode名称推断点击行为。
 - editor 拥有通用 game mode draft，以及 mode 到独立 per-variant background、symbols package 和 award popup 的显式 binding；普通 Spine popup 可绑定到一条有向 Spine transition 或独立显式注册，不伪装成 mode award binding。
@@ -28,7 +29,7 @@
 - stable Spine background 只使用显式 single loop。未来稳定背景 kind 也遵守 exact-resource 和 stable-node 合同。
 - 普通 scene node 可使用 official Spine 或 runtime VNI：Spine 显式选择 animation/loop，VNI 播放完整 timeline 并显式选择 loop；每个 node 保持独立 player/playhead。新建普通 Spine node 的骨架原点放在各 variant art center（`top-left` 坐标写入 `artSize / 2`，`center` 坐标写入 `0,0`），不得要求或使用 skeleton bounds/atlas texture 尺寸；Spine background 仍要求显式完整 art size。VNI 不得作为 background 或 transition。
 - VNI scene node 的 `project.stage` 是 100% art-space 尺寸；top-left 原点对齐 stage 左上角，center 原点对齐 stage 中心。runtime 使用宿主 ticker 手动 update，并跳过不可渲染节点。
-- 普通 scene node 和 main reel 的 order 可由用户显式编辑并保留稀疏值；canonical v5 中 node、main reel、Popup root 的 order 全局唯一。历史 v1–v3 冲突只由 RenderCore 默认 parser/latest upgrader 确定性重排并同步重建 runtimeAllocation；显式 v4/v5 parser 执行 strict canonical 校验。Popup root 默认从 `2000` 分配且必须高于全部 node/main reel。
+- 普通 scene node 和 main reel 的 order 可由用户显式编辑并保留稀疏值；canonical v6 中 node、main reel、Popup root 的 order 全局唯一。历史 v1–v3 冲突只由 RenderCore 默认 parser/latest upgrader 确定性重排并同步重建 runtimeAllocation；显式 v4–v6 parser 执行 strict canonical 校验。Popup root 默认从 `2000` 分配且必须高于全部 node/main reel。
 - 普通 scene node 的 optional `gameMode` 表示 exact 单一 mode 作用域；字段缺失表示全局并兼容旧 v1 数据。background node 禁止声明该字段。最终可见性是 mode 作用域匹配与当前 variant placement 的 AND；不可见不删除 node、不改变全局 order。mode rename 必须改写引用，仍有 scoped node 引用时禁止删除。
 
 ## Symbols binding 与 preview

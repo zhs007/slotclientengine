@@ -1,8 +1,10 @@
 import {
   materializeSceneLayoutManifestForMode,
+  createSceneLayoutRuntimeAllocation,
   parseSceneLayoutJsonData,
   parseSceneLayoutManifest,
   parseSceneLayoutManifestDocument,
+  parseSceneLayoutManifestV6,
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutCoordinateOrigin,
   type SceneLayoutManifest,
@@ -237,6 +239,11 @@ export function activeVariantIds(
     ? ["default"]
     : ["landscape", "portrait"];
 }
+
+export const ordinaryLayerVariantIds = Object.freeze([
+  "landscape",
+  "portrait",
+] as const satisfies readonly SceneLayoutVariantId[]);
 
 export function createNewEditorProject(mode: EditorMode): EditorProject {
   const geometry = createEmptyModeGeometry(mode);
@@ -704,8 +711,13 @@ export function editorProjectToPreviewManifest(
     const variant = project.variants[available];
     const placement = project.reel.placements[available];
     if (!placement) return null;
+    const ordinaryVariant =
+      preferredVariant === "portrait" ? "portrait" : "landscape";
     const nodes = project.nodes.flatMap((node) => {
-      const nodePlacement = node.placements[available];
+      const isBackground =
+        node.id === project.variants[available].backgroundNode;
+      const nodePlacement =
+        node.placements[isBackground ? available : ordinaryVariant];
       if (
         !nodePlacement ||
         (node.gameMode !== undefined &&
@@ -769,6 +781,11 @@ export function editorProjectToManifest(
   );
   if (!initialMode)
     throw new Error(`initial 主状态不存在：${project.gameModes.initialMode}`);
+  const backgroundNodeIds = new Set(
+    project.gameModes.modes.flatMap((mode) =>
+      Object.values(mode.backgroundNodes),
+    ),
+  );
   const base = upgradeSceneLayoutManifestToLatest({
     version: 2,
     kind: "scene-layout",
@@ -779,7 +796,7 @@ export function editorProjectToManifest(
       order: node.order,
       ...(node.gameMode ? { gameMode: node.gameMode } : {}),
       resource: resolveEditorNodeResource(project, node),
-      placements: node.placements,
+      placements: editorNodePlacementsForV2(project, node, backgroundNodeIds),
     })),
     reels: {
       main: {
@@ -997,9 +1014,16 @@ export function editorProjectToManifest(
         }),
     },
   });
-  const manifest = upgradeSceneLayoutManifestToLatest({
+  const latestDraft = {
     ...base,
-    version: 5,
+    version: 6 as const,
+    nodes: project.nodes.map((node) => ({
+      id: node.id,
+      order: node.order,
+      ...(node.gameMode ? { gameMode: node.gameMode } : {}),
+      resource: resolveEditorNodeResource(project, node),
+      placements: structuredClone(node.placements),
+    })),
     audio: canonicalEditorAudioCatalog(project),
     eventAudio: canonicalEditorEventAudio(project),
     gameModes: {
@@ -1011,6 +1035,13 @@ export function editorProjectToManifest(
         return { ...mode, ...(draft.bgm ? { bgm: draft.bgm } : {}) };
       }),
     },
+  } as SceneLayoutManifestLatest;
+  const runtimeAllocation = createSceneLayoutRuntimeAllocation(latestDraft);
+  if (runtimeAllocation.version !== 2)
+    throw new Error("Scene Layout v6 必须生成 runtimeAllocation v2。");
+  const manifest = parseSceneLayoutManifestV6({
+    ...latestDraft,
+    runtimeAllocation,
   });
   if (manifest.eventAudio.bindings.length > 0) {
     const catalog = inspectEditorWorkspaceRuntimeEventCatalog({
@@ -1547,6 +1578,27 @@ function createEmptyVariant(): EditorVariantDraft {
     frameFocusRect: { width: 0, height: 0 },
     minFocusMargin: { left: 0, right: 0, top: 0, bottom: 0 },
     backgroundNode: "",
+  };
+}
+
+function editorNodePlacementsForV2(
+  project: EditorProject,
+  node: EditorNodeDraft,
+  backgroundNodeIds: ReadonlySet<string>,
+): EditorNodeDraft["placements"] {
+  if (backgroundNodeIds.has(node.id)) return structuredClone(node.placements);
+  const usedByMaximizedMode = project.gameModes.modes.some(
+    (mode) =>
+      mode.mode === "maximized-focus" &&
+      (node.gameMode === undefined || node.gameMode === mode.id),
+  );
+  if (!usedByMaximizedMode) return structuredClone(node.placements);
+  const fallback = node.placements.landscape ?? node.placements.portrait;
+  if (!fallback)
+    throw new Error(`普通图层 ${node.id} 至少需要一个横版或竖版 placement。`);
+  return {
+    ...structuredClone(node.placements),
+    default: structuredClone(fallback),
   };
 }
 
