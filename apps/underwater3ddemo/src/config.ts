@@ -19,11 +19,6 @@ export const BUBBLES = {
   seed: 0x5ea5_2026,
 } as const;
 
-export const PARTICLES = {
-  count: 620,
-  seed: 0x0cea_2026,
-} as const;
-
 export const boardWidth =
   BOARD.columns * BOARD.cellWidth + (BOARD.columns - 1) * BOARD.gapX;
 export const boardHeight =
