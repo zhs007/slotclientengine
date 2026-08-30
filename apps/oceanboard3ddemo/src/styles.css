@@ -1,0 +1,43 @@
+:root {
+  color-scheme: dark;
+  background: #078dca;
+  font-family:
+    Inter, ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+#app {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(#0e91d2, #21b6dc 40%, #027eb9);
+}
+
+.ocean-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.fatal-error {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  padding: 2rem;
+  color: #e8fbff;
+  white-space: pre-wrap;
+}
