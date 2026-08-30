@@ -2,8 +2,10 @@ import {
   ACESFilmicToneMapping,
   AdditiveBlending,
   Color,
+  DirectionalLight,
   FogExp2,
   Group,
+  HemisphereLight,
   LinearFilter,
   LinearMipmapLinearFilter,
   Mesh,
@@ -22,6 +24,11 @@ import {
 } from "three";
 import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 import { BubbleField } from "./bubble-field.js";
+import { DistantFishSchool } from "./distant-fish-school.js";
+import {
+  PufferfishActor,
+  type PufferfishSymbolPlacement,
+} from "./pufferfish-actor.js";
 import { UnderwaterPass } from "./underwater-pass.js";
 
 const densityFlowTextureUrl = new URL(
@@ -32,6 +39,49 @@ const surfaceCausticTextureUrl = new URL(
   "../assets/textures/surface-caustic-field.ktx2",
   import.meta.url,
 ).href;
+
+const pufferfishRowPlacements = [
+  {
+    name: "one",
+    position: [-5.2, -0.2, -2.2],
+    modelSpan: 4.05,
+    rotationY: -0.44,
+    motionPhase: 0.3,
+    idleSpeed: 0.66,
+  },
+  {
+    name: "two",
+    position: [-2.6, -0.2, -2.2],
+    modelSpan: 4.05,
+    rotationY: -0.44,
+    motionPhase: 1.45,
+    idleSpeed: 0.72,
+  },
+  {
+    name: "three",
+    position: [0, -0.2, -2.2],
+    modelSpan: 4.05,
+    rotationY: -0.44,
+    motionPhase: 2.65,
+    idleSpeed: 0.69,
+  },
+  {
+    name: "four",
+    position: [2.6, -0.2, -2.2],
+    modelSpan: 4.05,
+    rotationY: -0.44,
+    motionPhase: 3.95,
+    idleSpeed: 0.74,
+  },
+  {
+    name: "five",
+    position: [5.2, -0.2, -2.2],
+    modelSpan: 4.05,
+    rotationY: -0.44,
+    motionPhase: 5.1,
+    idleSpeed: 0.7,
+  },
+] as const satisfies readonly PufferfishSymbolPlacement[];
 
 const waterVolumeVertexShader = /* glsl */ `
 varying vec2 vUv;
@@ -157,33 +207,6 @@ void main() {
 }
 `;
 
-const surfaceLightFieldFragmentShader = /* glsl */ `
-uniform float uTime;
-uniform float uSurfaceMix;
-uniform sampler2D uSurfaceCaustic;
-varying vec2 vUv;
-
-void main() {
-  vec2 uvA = vUv * vec2(1.08, 0.62) + vec2(uTime * 0.013, -uTime * 0.004);
-  vec4 fieldA = texture2D(uSurfaceCaustic, uvA);
-  vec2 flow = fieldA.ba * 2.0 - 1.0;
-  vec2 uvB = vUv * vec2(1.67, 0.91) + flow * 0.035 +
-    vec2(-uTime * 0.009, uTime * 0.003);
-  vec4 fieldB = texture2D(uSurfaceCaustic, uvB);
-  float ridge = max(fieldA.r * 0.74, fieldB.g * 0.64);
-  float shimmer = smoothstep(0.18, 0.86, ridge);
-
-  float upperBand = smoothstep(0.69, 0.93, vUv.y);
-  float horizontalFade = smoothstep(0.0, 0.16, vUv.x) *
-    smoothstep(0.0, 0.16, 1.0 - vUv.x);
-  float broadField = 0.78 + 0.22 * sin(vUv.x * 4.1 + uTime * 0.12);
-  float alpha = (0.006 + shimmer * 0.038) * upperBand * horizontalFade *
-    broadField * uSurfaceMix;
-  vec3 color = mix(vec3(0.2, 0.63, 0.72), vec3(0.62, 0.91, 0.91), shimmer);
-  gl_FragColor = vec4(color, alpha);
-}
-`;
-
 const primaryVolumeLightFragmentShader = /* glsl */ `
 uniform float uTime;
 uniform float uTextureMix;
@@ -265,6 +288,8 @@ export class UnderwaterRenderer {
   readonly #animatedMaterials: ShaderMaterial[] = [];
   readonly #depthHazeLayers: DepthHazeLayer[] = [];
   readonly #bubbleField = new BubbleField();
+  readonly #distantFishSchool = new DistantFishSchool();
+  readonly #pufferfish = new PufferfishActor(pufferfishRowPlacements);
   readonly #ktx2Loader: KTX2Loader;
   #densityFlowTexture = new Texture();
   #surfaceCausticTexture = new Texture();
@@ -293,11 +318,13 @@ export class UnderwaterRenderer {
     this.#scene.background = new Color(0x021331);
     this.#scene.fog = new FogExp2(0x052a4d, 0.032);
     this.#scene.add(this.#root);
+    this.#createModelLighting();
     this.#createWaterVolume();
     this.#createAmbientLightField();
-    this.#createSurfaceLightField();
     this.#createPrimaryVolumeLight();
     this.#createDepthHaze();
+    this.#root.add(this.#distantFishSchool.mesh);
+    this.#root.add(this.#pufferfish.root);
     this.#bubbleField.mesh.renderOrder = 20;
     this.#root.add(this.#bubbleField.mesh);
 
@@ -331,6 +358,8 @@ export class UnderwaterRenderer {
 
     const geometries = new Set<BufferGeometry>();
     const materials = new Set<Material>();
+    const textures = new Set<Texture>();
+    this.#pufferfish.dispose();
     this.#root.traverse((object) => {
       if (!(object instanceof Mesh)) return;
       geometries.add(object.geometry);
@@ -340,7 +369,13 @@ export class UnderwaterRenderer {
       for (const material of objectMaterials) materials.add(material);
     });
     for (const geometry of geometries) geometry.dispose();
-    for (const material of materials) material.dispose();
+    for (const material of materials) {
+      for (const value of Object.values(material)) {
+        if (value instanceof Texture) textures.add(value);
+      }
+      material.dispose();
+    }
+    for (const texture of textures) texture.dispose();
     this.#densityFlowTexture.dispose();
     this.#surfaceCausticTexture.dispose();
     this.#ktx2Loader.dispose();
@@ -369,6 +404,8 @@ export class UnderwaterRenderer {
       layer.mesh.position.y =
         layer.baseY + Math.cos(time * layer.drift * 0.73 + layer.phase) * 0.1;
     }
+    this.#distantFishSchool.update(time);
+    this.#pufferfish.update(time);
     this.#bubbleField.update(time, this.#camera);
 
     this.#underwaterPass.render(
@@ -392,6 +429,22 @@ export class UnderwaterRenderer {
     volume.name = "water-volume-gradient";
     volume.position.set(0, 0.7, -24);
     this.#root.add(volume);
+  }
+
+  #createModelLighting(): void {
+    const waterFill = new HemisphereLight(0xa9ecf2, 0x03152d, 1.3);
+    waterFill.name = "underwater-model-fill";
+    this.#scene.add(waterFill);
+
+    const keyLight = new DirectionalLight(0xd6ffff, 2.35);
+    keyLight.name = "underwater-model-key";
+    keyLight.position.set(-4.5, 7.5, 6);
+    this.#scene.add(keyLight);
+
+    const rimLight = new DirectionalLight(0x29bde0, 1.45);
+    rimLight.name = "underwater-model-rim";
+    rimLight.position.set(5, 1.8, -5);
+    this.#scene.add(rimLight);
   }
 
   #createDepthHaze(): void {
@@ -479,27 +532,6 @@ export class UnderwaterRenderer {
     this.#root.add(field);
   }
 
-  #createSurfaceLightField(): void {
-    const material = new ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uSurfaceMix: { value: 0 },
-        uSurfaceCaustic: { value: this.#surfaceCausticTexture },
-      },
-      vertexShader: depthHazeVertexShader,
-      fragmentShader: surfaceLightFieldFragmentShader,
-      transparent: true,
-      depthWrite: false,
-      blending: AdditiveBlending,
-      fog: false,
-    });
-    const field = new Mesh(new PlaneGeometry(42, 25), material);
-    field.name = "dynamic-surface-light-field";
-    field.position.set(0, 0.8, -4.5);
-    this.#animatedMaterials.push(material);
-    this.#root.add(field);
-  }
-
   #createPrimaryVolumeLight(): void {
     const material = new ShaderMaterial({
       uniforms: {
@@ -518,7 +550,7 @@ export class UnderwaterRenderer {
     });
     const light = new Mesh(new PlaneGeometry(46, 28), material);
     light.name = "surface-modulated-primary-volume-light";
-    light.position.set(0, 0.55, -6);
+    light.position.set(0, 0.55, -11);
     this.#animatedMaterials.push(material);
     this.#root.add(light);
   }
@@ -560,6 +592,7 @@ export class UnderwaterRenderer {
         this.#configureDataTexture(texture, "surface-caustic-field-data");
         this.#surfaceCausticTexture = texture;
         this.#replaceTextureUniform("uSurfaceCaustic", texture);
+        this.#pufferfish.setSurfaceCausticTexture(texture);
         placeholder.dispose();
         this.#surfaceCausticReady = true;
       },
