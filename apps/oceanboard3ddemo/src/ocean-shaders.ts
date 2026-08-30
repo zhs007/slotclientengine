@@ -199,7 +199,7 @@ void main() {
     uUnderwaterTexture,
     clamp(screenUv + refractionOffset, vec2(0.002), vec2(0.998))
   ).rgb;
-  float absorption = 0.1 + depthMix * 0.72;
+  float absorption = 0.055 + depthMix * 0.76;
   vec3 transmittedWater = mix(refractedUnderwater, bodyColor, absorption);
   float reflectionMix = clamp(
     0.035 + fresnel * 0.48 + smoothstep(150.0, 460.0, distanceToCamera) * 0.22,
@@ -253,32 +253,58 @@ uniform sampler2D uCausticTexture;
 uniform float uCausticTextureMix;
 varying vec3 vWorldPosition;
 
+float hashSeabed(vec2 point) {
+  point = fract(point * vec2(127.1, 311.7));
+  point += dot(point, point + 19.19);
+  return fract(point.x * point.y);
+}
+
+float seabedNoise(vec2 point) {
+  vec2 cell = floor(point);
+  vec2 local = fract(point);
+  local = local * local * (3.0 - 2.0 * local);
+  float a = hashSeabed(cell);
+  float b = hashSeabed(cell + vec2(1.0, 0.0));
+  float c = hashSeabed(cell + vec2(0.0, 1.0));
+  float d = hashSeabed(cell + vec2(1.0, 1.0));
+  return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
+}
+
 void main() {
   vec2 point = vWorldPosition.xz;
   mat2 rotateA = mat2(0.88, -0.48, 0.48, 0.88);
   mat2 rotateB = mat2(0.59, 0.81, -0.81, 0.59);
-  vec2 uvA = rotateA * point * 0.095 +
-    vec2(uTime * 0.016, -uTime * 0.011);
-  vec2 uvB = rotateB * point * 0.16 +
-    vec2(-uTime * 0.021, uTime * 0.013);
-  float fieldA = texture2D(uCausticTexture, uvA).r;
+  vec2 uvA = rotateA * point * 0.062 +
+    vec2(uTime * 0.012, -uTime * 0.008);
+  vec2 uvB = rotateB * point * 0.118 +
+    vec2(-uTime * 0.017, uTime * 0.011);
   float fieldB = texture2D(uCausticTexture, uvB).r;
-  float ridgeA = smoothstep(0.28, 0.82, fieldA);
-  float ridgeB = smoothstep(0.32, 0.86, fieldB);
+  float warpY = texture2D(uCausticTexture, uvB + vec2(0.37, -0.21)).r;
+  vec2 warp = vec2(fieldB, warpY) - 0.24;
+  float fieldA = texture2D(uCausticTexture, uvA + warp * 0.055).r;
+  float ridgeA = smoothstep(0.1, 0.48, fieldA);
+  float ridgeB = smoothstep(0.14, 0.56, fieldB);
+  float breakup = smoothstep(
+    0.27,
+    0.72,
+    seabedNoise(point * 0.075 + vec2(uTime * 0.018, -uTime * 0.012))
+  );
   float caustic = clamp(
-    ridgeA * mix(0.12, 1.0, ridgeB) + ridgeB * 0.1,
+    ridgeA * mix(0.24, 1.0, breakup) +
+      ridgeB * mix(0.34, 0.12, breakup),
     0.0,
     1.0
   ) * uCausticTextureMix;
 
   float distanceToCamera = length(cameraPosition - vWorldPosition);
-  float visibility = 1.0 - smoothstep(58.0, 275.0, distanceToCamera);
-  float broadVariation = mix(0.92, 1.04, fieldA);
-  vec3 shallowBed = vec3(0.012, 0.285, 0.32);
+  float visibility = 1.0 - smoothstep(72.0, 245.0, distanceToCamera);
+  float broadVariation = mix(0.86, 1.08, seabedNoise(point * 0.035));
+  vec3 shallowBed = vec3(0.016, 0.335, 0.325);
   vec3 deepBed = vec3(0.003, 0.06, 0.12);
-  vec3 color = mix(shallowBed, deepBed, smoothstep(28.0, 285.0, distanceToCamera));
+  vec3 color = mix(shallowBed, deepBed, smoothstep(34.0, 285.0, distanceToCamera));
   color *= broadVariation;
-  color += vec3(0.22, 0.82, 0.7) * caustic * visibility * 0.78;
+  float pulse = 0.9 + sin(uTime * 0.72 + point.x * 0.035) * 0.1;
+  color += vec3(0.23, 0.88, 0.7) * caustic * visibility * pulse * 0.58;
 
   gl_FragColor = vec4(color, 1.0);
 }
