@@ -12,8 +12,7 @@ import {
 describe("transitions workspace", () => {
   it("uses strict resource/animation/event selects and excludes duplicate event names", () => {
     const project = createNewEditorProject("maximized-focus");
-    const freeGame = createEditorGameModeDraft("FreeGame", "maximized-focus");
-    freeGame.backgroundNodes.default = "background";
+    const freeGame = createEditorGameModeDraft("FreeGame");
     project.gameModes.modes.push(freeGame);
     project.resources.set("bridge", {
       id: "bridge",
@@ -118,8 +117,7 @@ describe("transitions workspace", () => {
 
   it("shows the popup root configuration for the popup selected by one exact edge", () => {
     const project = createNewEditorProject("maximized-focus");
-    const freeGame = createEditorGameModeDraft("FreeGame", "maximized-focus");
-    freeGame.backgroundNodes.default = "background";
+    const freeGame = createEditorGameModeDraft("FreeGame");
     project.gameModes.modes.push(freeGame);
     project.popupDependencies.set("enter-free", {
       id: "enter-free",
@@ -127,7 +125,10 @@ describe("transitions workspace", () => {
       rootKey: "enter-free-popup.manifest.json",
       keys: ["enter-free-popup.manifest.json"],
       order: 2007,
-      placements: { default: { x: 12, y: 34, scale: 0.8 } },
+      placements: {
+        landscape: { x: 12, y: 34, scale: 0.8 },
+        portrait: { x: 12, y: 34, scale: 0.8 },
+      },
     });
     project.popupDependencies.set("leave-free", {
       id: "leave-free",
@@ -172,7 +173,7 @@ describe("transitions workspace", () => {
     expect(
       (
         host.querySelector(
-          '[data-transition-popup-placement="default"][data-transition-popup-placement-field="x"]',
+          '[data-transition-popup-placement="landscape"][data-transition-popup-placement-field="x"]',
         ) as HTMLInputElement
       ).value,
     ).toBe("12");
@@ -180,8 +181,7 @@ describe("transitions workspace", () => {
 
   it("lists only video resources and derives fade timing and prepared controls", () => {
     const project = createNewEditorProject("orientation-focus");
-    const freeGame = createEditorGameModeDraft("FreeGame", "orientation-focus");
-    freeGame.backgroundNodes = { landscape: "bg", portrait: "bg" };
+    const freeGame = createEditorGameModeDraft("FreeGame");
     project.gameModes.modes.push(freeGame);
     project.resources.set("image", {
       id: "image",

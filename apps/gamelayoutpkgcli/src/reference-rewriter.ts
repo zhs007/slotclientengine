@@ -211,10 +211,13 @@ export function rewriteLayoutManifest(
     ...manifest,
     ...(manifest.version === 4 ||
     manifest.version === 5 ||
-    manifest.version === 6
+    manifest.version === 6 ||
+    manifest.version === 7
       ? { audio: rewriteOptimizedAudioAssets(manifest.audio, mapping) }
       : {}),
-    ...(manifest.version === 5 || manifest.version === 6
+    ...(manifest.version === 5 ||
+    manifest.version === 6 ||
+    manifest.version === 7
       ? {
           eventAudio: {
             ...manifest.eventAudio,

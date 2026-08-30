@@ -28,7 +28,6 @@ describe("scene layer order", () => {
         placements: { default: { x: 0, y: 0, scale: 1 } },
       },
     );
-    project.gameModes.modes[0]!.backgroundNodes.default = "bg";
     project.popupDependencies.set("entry", {
       id: "entry",
       type: "spine",

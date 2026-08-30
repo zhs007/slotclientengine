@@ -34,12 +34,9 @@ import {
 } from "@slotclientengine/vnicore/data";
 import {
   activeVariantIds,
-  activateEditorGameMode,
   createDefaultNodePlacement,
   ordinaryLayerVariantIds,
   cloneEditorProject,
-  resetVariantGeometry,
-  updateVariantFocusFromReel,
   type EditorNodeDraft,
   type EditorNodePlacement,
   type EditorProject,
@@ -55,7 +52,6 @@ import {
 import {
   editorResourcePaths,
   editorResourcePrimaryPath,
-  editorResourceArtSize,
   type EditorLayoutResource,
   type EditorAudioLayoutResource,
   type EditorImageStringLayoutResource,
@@ -538,14 +534,11 @@ export function getLayoutResourceReferences(
     .filter((node) => node.resourceId === resourceId)
     .map((node) => {
       const variants = activeVariantIds(project).filter((variant) =>
-        project.gameModes.modes.some(
-          (mode) => mode.backgroundNodes[variant] === node.id,
-        ),
+        Boolean(node.placements[variant]),
       );
       return Object.freeze({
         nodeId: node.id,
-        role:
-          variants.length > 0 ? ("background" as const) : ("layer" as const),
+        role: "layer" as const,
         variants: Object.freeze(variants),
       });
     });
@@ -832,17 +825,15 @@ export function deleteLayoutResource(
     throw new Error(
       `资源 ${resourceId} 仍被 ${references
         .map((reference) =>
-          reference.role === "background"
-            ? `${reference.nodeId} (${reference.variants.join(", ")} 背景)`
-            : reference.role === "scene-transition"
-              ? `${reference.nodeId} (scene-transition)`
-              : reference.role === "mode-bgm"
-                ? `${reference.nodeId} (mode BGM)`
-                : reference.role === "event-audio"
-                  ? `${reference.nodeId} (event audio)`
-                  : reference.role === "programmatic-audio"
-                    ? `${reference.nodeId} (程序音效)`
-                    : `${reference.nodeId} (图层)`,
+          reference.role === "scene-transition"
+            ? `${reference.nodeId} (scene-transition)`
+            : reference.role === "mode-bgm"
+              ? `${reference.nodeId} (mode BGM)`
+              : reference.role === "event-audio"
+                ? `${reference.nodeId} (event audio)`
+                : reference.role === "programmatic-audio"
+                  ? `${reference.nodeId} (程序音效)`
+                  : `${reference.nodeId} (图层)`,
         )
         .join("、")} 引用，不能删除。`,
     );
@@ -957,199 +948,12 @@ export function rebindLayerResource(options: {
         : { text: "", anchor: { x: 0.5, y: 0.5 } };
 }
 
-export function assignBackgroundResource(options: {
-  readonly project: EditorProject;
-  readonly modeId?: string;
-  readonly variant: SceneLayoutVariantId;
-  readonly resourceId: string;
-  readonly nodeId?: string;
-  readonly defaultAnimation?: string;
-}): EditorNodeDraft {
-  const resource = requireResource(options.project, options.resourceId);
-  if (
-    resource.kind === "image-string" ||
-    resource.kind === "video" ||
-    resource.kind === "vni" ||
-    resource.kind === "audio"
-  )
-    throw new Error(`${resource.kind} 资源不能设为背景。`);
-  const modeId = options.modeId ?? options.project.gameModes.initialMode;
-  const mode = options.project.gameModes.modes.find(
-    (candidate) => candidate.id === modeId,
-  );
-  if (!mode) throw new Error(`未知主状态：${modeId}`);
-  if (!activeVariantIds(mode).includes(options.variant))
-    throw new Error(`主状态 ${modeId} 不允许 variant：${options.variant}`);
-  const variant = mode.variants[options.variant];
-  const currentBackgroundNode = mode.backgroundNodes[options.variant] ?? "";
-  let node = currentBackgroundNode
-    ? options.project.nodes.find((item) => item.id === currentBackgroundNode)
-    : undefined;
-  const replacedNode = node;
-  const sharedByAnotherMode =
-    node &&
-    options.project.gameModes.modes.some(
-      (candidate) =>
-        candidate.id !== modeId &&
-        Object.values(candidate.backgroundNodes).includes(node!.id),
-    );
-  if (node && sharedByAnotherMode) node = undefined;
-  const previousSize = { ...variant.artSize };
-  const nextSize = editorResourceArtSize(resource);
-  const hasPreviousSize = previousSize.width > 0 && previousSize.height > 0;
-  const sizeChanged =
-    Boolean(nextSize) &&
-    hasPreviousSize &&
-    (previousSize.width !== nextSize!.width ||
-      previousSize.height !== nextSize!.height);
-  if (!node) {
-    const animation = validateAnimation(resource, options.defaultAnimation);
-    const nodeId =
-      options.nodeId ??
-      suggestModeBackgroundNodeId(options.project, modeId, options.variant);
-    assertNodeIdAvailable(options.project, nodeId);
-    node = {
-      id: nodeId,
-      order: nextOrder(options.project),
-      resourceId: resource.id,
-      ...(resource.kind === "spine"
-        ? {
-            playback: {
-              kind: "loop" as const,
-              animation: animation!,
-              loop: true,
-            },
-          }
-        : {}),
-      placements: {
-        [options.variant]: defaultBackgroundPlacement(
-          options.project,
-          resource,
-          previousSize,
-        ),
-      },
-    };
-    options.project.nodes.push(node);
-  } else {
-    const previousResource = requireResource(options.project, node.resourceId);
-    const resourceChanged = previousResource.id !== resource.id;
-    const previousPlayback = node.playback;
-    const animation =
-      resource.kind === "spine"
-        ? validateAnimation(
-            resource,
-            options.defaultAnimation ??
-              (previousResource.kind === "spine" &&
-              previousPlayback?.kind === "loop" &&
-              resource.animationNames.includes(previousPlayback.animation)
-                ? previousPlayback.animation
-                : undefined),
-          )
-        : validateAnimation(resource, options.defaultAnimation);
-    node.resourceId = resource.id;
-    node.placements[options.variant] ??= defaultBackgroundPlacement(
-      options.project,
-      resource,
-      previousSize,
-    );
-    delete node.imageString;
-    if (resource.kind === "spine" && resourceChanged)
-      node.playback = { kind: "loop", animation: animation!, loop: true };
-    else if (resource.kind !== "spine") delete node.playback;
-    else node.playback = { kind: "loop", animation: animation!, loop: true };
-  }
-  mode.backgroundNodes[options.variant] = node.id;
-  variant.backgroundNode = node.id;
-  if (nextSize && !hasPreviousSize) {
-    const activeModeId = options.project.gameModes.activeModeId;
-    activateEditorGameMode(options.project, modeId);
-    resetVariantGeometry(options.project, options.variant, nextSize);
-    activateEditorGameMode(options.project, activeModeId);
-  } else if (nextSize && sizeChanged) {
-    const activeModeId = options.project.gameModes.activeModeId;
-    activateEditorGameMode(options.project, modeId);
-    variant.artSize = { ...nextSize };
-    updateVariantFocusFromReel(options.project, options.variant);
-    activateEditorGameMode(options.project, activeModeId);
-  }
-  if (
-    replacedNode &&
-    !options.project.gameModes.modes.some((candidate) =>
-      Object.values(candidate.backgroundNodes).includes(replacedNode.id),
-    )
-  ) {
-    options.project.nodes = options.project.nodes.filter(
-      (candidate) => candidate.id !== replacedNode.id,
-    );
-  }
-  synchronizeGameModeNodeStates(options.project);
-  normalizeGameModeNodeOrders(options.project);
-  return node;
-}
-
-function defaultBackgroundPlacement(
-  project: Pick<EditorProject, "coordinateOrigin">,
-  resource: EditorLayoutResource,
-  artSize: { readonly width: number; readonly height: number },
-): EditorNodePlacement {
-  if (project.coordinateOrigin === "center")
-    return createDefaultNodePlacement();
-  if (resource.kind === "spine" && artSize.width > 0 && artSize.height > 0) {
-    return createDefaultNodePlacement(artSize.width / 2, artSize.height / 2);
-  }
-  return createDefaultNodePlacement();
-}
-
 function defaultLayerPlacement(
-  project: Pick<EditorProject, "coordinateOrigin" | "mode" | "variants">,
-  resource: EditorLayoutResource,
-  variant: SceneLayoutVariantId,
+  _project: EditorProject,
+  _resource: EditorLayoutResource,
+  _variant: SceneLayoutVariantId,
 ): EditorNodePlacement {
-  if (project.coordinateOrigin === "center" || resource.kind !== "spine")
-    return createDefaultNodePlacement();
-  const artSize =
-    project.variants[project.mode === "maximized-focus" ? "default" : variant]
-      .artSize;
-  return createDefaultNodePlacement(artSize.width / 2, artSize.height / 2);
-}
-
-export function clearBackground(
-  project: EditorProject,
-  modeIdOrVariant: string,
-  explicitVariantId?: SceneLayoutVariantId,
-): void {
-  const modeId = explicitVariantId
-    ? modeIdOrVariant
-    : project.gameModes.initialMode;
-  const variantId =
-    explicitVariantId ?? (modeIdOrVariant as SceneLayoutVariantId);
-  assertGeometryVariantsAllowed(project, [variantId]);
-  const variant = project.variants[variantId];
-  const mode = project.gameModes.modes.find(
-    (candidate) => candidate.id === modeId,
-  );
-  if (!mode) throw new Error(`未知主状态：${modeId}`);
-  const nodeId = mode.backgroundNodes[variantId] ?? "";
-  if (!nodeId) throw new Error(`${variantId} 背景尚未设置。`);
-  mode.backgroundNodes[variantId] = "";
-  if (project.gameModes.initialMode === modeId) {
-    variant.backgroundNode = "";
-    resetVariantGeometry(project, variantId);
-  }
-  const stillBackground = project.gameModes.modes.some((candidate) =>
-    Object.values(candidate.backgroundNodes).includes(nodeId),
-  );
-  if (!stillBackground) {
-    const index = project.nodes.findIndex((node) => node.id === nodeId);
-    if (index >= 0) project.nodes.splice(index, 1);
-  } else {
-    const node = project.nodes.find((item) => item.id === nodeId);
-    const stillUsedInVariant = project.gameModes.modes.some(
-      (candidate) => candidate.backgroundNodes[variantId] === nodeId,
-    );
-    if (node && !stillUsedInVariant) delete node.placements[variantId];
-  }
-  normalizeGameModeNodeOrders(project);
+  return createDefaultNodePlacement();
 }
 
 export function removeLayer(project: EditorProject, nodeId: string): void {
@@ -1165,9 +969,7 @@ export function moveLayer(
   direction: -1 | 1,
 ): void {
   requireLayer(project, nodeId);
-  const layers = project.nodes
-    .filter((node) => !isBackgroundNode(project, node.id))
-    .sort((left, right) => left.order - right.order);
+  const layers = project.nodes.sort((left, right) => left.order - right.order);
   const index = layers.findIndex((node) => node.id === nodeId);
   const target = index + direction;
   if (target < 0 || target >= layers.length) return;
@@ -1192,16 +994,8 @@ export function renameNode(
       mode.nodeStates[nextNodeId] = mode.nodeStates[nodeId];
       delete mode.nodeStates[nodeId];
     }
-    for (const variant of activeVariantIds(project))
-      if (mode.backgroundNodes[variant] === nodeId)
-        mode.backgroundNodes[variant] = nextNodeId;
   }
   node.id = nextNodeId;
-  for (const variant of activeVariantIds(project)) {
-    if (project.variants[variant].backgroundNode === nodeId) {
-      project.variants[variant].backgroundNode = nextNodeId;
-    }
-  }
 }
 
 export function setNodeDefaultAnimation(
@@ -1320,10 +1114,12 @@ export function setLayerGameMode(
   const node = requireLayer(project, nodeId);
   if (gameMode === null) {
     delete node.gameMode;
+    delete node.scope;
     return;
   }
   if (!project.gameModes.modes.some((mode) => mode.id === gameMode))
     throw new Error(`未知游戏模式：${gameMode}`);
+  delete node.scope;
   node.gameMode = gameMode;
 }
 
@@ -1423,31 +1219,7 @@ function pruneUnusedMusicBindings(project: EditorProject): void {
 function requireLayer(project: EditorProject, nodeId: string): EditorNodeDraft {
   const node = project.nodes.find((item) => item.id === nodeId);
   if (!node) throw new Error(`未知节点：${nodeId}`);
-  if (isBackgroundNode(project, nodeId)) {
-    throw new Error(`节点 ${nodeId} 是背景引用，不能作为普通图层操作。`);
-  }
   return node;
-}
-
-function isBackgroundNode(project: EditorProject, nodeId: string): boolean {
-  return project.gameModes.modes.some((mode) =>
-    Object.values(mode.backgroundNodes).includes(nodeId),
-  );
-}
-
-function assertGeometryVariantsAllowed(
-  project: EditorProject,
-  variants: readonly SceneLayoutVariantId[],
-): void {
-  if (variants.length === 0) throw new Error("至少选择一个可见 variant。");
-  const allowed = new Set(activeVariantIds(project));
-  const duplicate = new Set<SceneLayoutVariantId>();
-  for (const variant of variants) {
-    if (!allowed.has(variant))
-      throw new Error(`当前模式不允许 variant：${variant}`);
-    if (duplicate.has(variant)) throw new Error(`variant 重复：${variant}`);
-    duplicate.add(variant);
-  }
 }
 
 function assertLayerVariantsAllowed(
@@ -2007,23 +1779,10 @@ function commitResourceReplacement(
           .join(", ")}。`,
       );
   }
-  const backgroundVariants = new Set(
-    references
-      .filter((reference) => reference.role === "background")
-      .flatMap((reference) => reference.variants),
-  );
-  const nextSize = editorResourceArtSize(prepared.resource);
   for (const [path, bytes] of prepared.assets)
     project.assets.set(path, bytes.slice());
   project.resources.set(current.id, prepared.resource);
   garbageCollectAssetPaths(project, oldPaths);
-  for (const variantId of backgroundVariants) {
-    const currentSize = project.variants[variantId].artSize;
-    if (!nextSize) continue;
-    if (currentSize.width <= 0 || currentSize.height <= 0)
-      resetVariantGeometry(project, variantId, nextSize);
-    else project.variants[variantId].artSize = { ...nextSize };
-  }
 }
 
 function decodeImageFile(
@@ -2200,7 +1959,7 @@ export function describeResource(resource: EditorLayoutResource): string {
     return `${resource.path} · ${resource.rootKind} · program-only`;
   if (resource.kind === "vni")
     return `${resource.projectPath} · ${resource.project.stage.width}×${resource.project.stage.height} · ${resource.project.stage.duration}s · ${resource.assetPaths.length} assets`;
-  return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}`;
+  return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}` : " · 无 export bounds"}`;
 }
 
 function requireImageStringNode(project: EditorProject, nodeId: string) {

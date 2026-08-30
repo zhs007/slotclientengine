@@ -210,9 +210,7 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
           "Configured scene-layout round is already in progress.",
         );
       const runtime = this.requireRuntime();
-      const geometry = this.#resource.manifest.reels.main;
-      if (!geometry)
-        throw new SceneLayoutError("Scene layout has no reels.main.");
+      const geometry = this.requireMainGeometry();
       const symbolResource = getInitialSceneLayoutSymbolPackageResource(
         this.#resource,
       );
@@ -280,14 +278,21 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
   };
 
   private createLocalPhases(): readonly number[] {
-    const geometry = this.#resource.manifest.reels.main;
-    if (!geometry)
-      throw new SceneLayoutError("Scene layout has no reels.main.");
+    const geometry = this.requireMainGeometry();
     return Object.freeze(
       Array.from({ length: geometry.columns }, () =>
         Math.floor(this.#random() * 1_000_000),
       ),
     );
+  }
+
+  private requireMainGeometry() {
+    const geometry = this.#resource.manifest.main;
+    if (!geometry)
+      throw new SceneLayoutError(
+        "Configured scene-layout package has no main geometry.",
+      );
+    return geometry;
   }
 
   private applyViewport(size: {

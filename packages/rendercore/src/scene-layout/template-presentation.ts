@@ -172,7 +172,7 @@ export function validateSlotTemplateCompatibility(options: {
     | { readonly manifest: SceneLayoutManifest };
 }): SlotTemplateCompatibilitySnapshot {
   const manifest = options.packageResource.manifest;
-  const reel = manifest.reels.main;
+  const reel = manifest.version === 7 ? manifest.main : manifest.reels.main;
   if (!reel)
     throw new SceneLayoutError("Scene layout must declare reels.main.");
   const binding = resolveInitialBinding(manifest);

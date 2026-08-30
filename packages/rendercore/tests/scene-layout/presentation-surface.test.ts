@@ -47,18 +47,24 @@ describe("scene layout presentation surface", () => {
     );
     await surface.init();
     await expect(surface.init()).rejects.toThrow(/only initialize once/);
-    surface.applyArtSpace();
+    const snapshot = surface.applyViewport({ width: 2000, height: 2000 });
     expect(surface.backgroundContainer.position).toMatchObject({ x: 0, y: 0 });
     expect(
       surface.backgroundContainer.getChildByLabel("scene-layout:game002", true)
         ?.position,
-    ).toMatchObject({ x: 0, y: 0 });
-    expect(
-      surface.backgroundContainer.getChildByLabel("scene-layout-slot:bg", true),
-    ).toMatchObject({
+    ).toMatchObject(snapshot.worldOffset);
+    const background = surface.backgroundContainer.getChildByLabel(
+      "scene-layout-slot:bg",
+      true,
+    )!;
+    expect({
+      angle: background.angle,
+      pivot: { x: background.pivot.x, y: background.pivot.y },
+      position: { x: background.position.x, y: background.position.y },
+    }).toEqual({
       angle: 90,
-      pivot: { x: 0.5, y: 0.5 },
-      position: { x: 1000.5, y: 1000.5 },
+      pivot: { x: 0, y: 0 },
+      position: { x: 0.5, y: 0.5 },
     });
     const canvas = new EventTarget();
     const keyboard = new EventTarget();
@@ -169,7 +175,7 @@ describe("scene layout presentation surface", () => {
     const surface = createSceneLayoutPresentationSurface({ resource });
     await surface.init();
     const snapshot = surface.applyViewport({ width: 1125, height: 2000 });
-    expect(snapshot.variantId).toBe("default");
+    expect(snapshot.variantId).toBe("portrait");
     expect(
       surface.backgroundContainer.getChildByLabel(
         "scene-layout-slot:base",
@@ -185,7 +191,6 @@ describe("scene layout presentation surface", () => {
     expect(() => surface.getAwardCelebrationRuntime("missing")).toThrow(
       /unavailable/,
     );
-    surface.applyArtSpace();
     expect(surface.backgroundContainer.position).toMatchObject({ x: 0, y: 0 });
     surface.update(1 / 60);
     await surface.requestGameMode("FreeGame", { immediate: true });

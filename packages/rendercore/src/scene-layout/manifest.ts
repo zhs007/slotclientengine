@@ -14,6 +14,7 @@ import type {
   SceneLayoutPopupBinding,
   SceneLayoutGameModes,
   SceneLayoutGameModeTransition,
+  SceneLayoutManifestV7,
   SceneLayoutRuntimeResourceSpec,
   SceneLayoutScaledPlacement,
   SceneLayoutVariantId,
@@ -23,7 +24,10 @@ import {
   normalizeLegacySceneLayoutPresentationOrders,
   parseSceneLayoutManifestV2,
 } from "./manifest-v2.js";
-import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
+import {
+  upgradeSceneLayoutManifestToLatest,
+  upgradeSceneLayoutManifestToV6,
+} from "./manifest-v3.js";
 
 const PATH_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]*$/;
@@ -34,6 +38,8 @@ export function parseSceneLayoutManifest(
   value: unknown,
 ): SceneLayoutManifestV1 {
   const sourceRecord = readRecord(value, "scene layout manifest");
+  if (sourceRecord.version === 7)
+    fail("Scene Layout v7 must be consumed through the center-layout runtime.");
   if (
     sourceRecord.version === 3 ||
     sourceRecord.version === 4 ||
@@ -41,7 +47,7 @@ export function parseSceneLayoutManifest(
     sourceRecord.version === 6
   )
     return materializeInitialSceneLayoutManifest(
-      upgradeSceneLayoutManifestToLatest(value),
+      upgradeSceneLayoutManifestToV6(value),
     );
   const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
   const record = readRecord(normalized, "scene layout manifest");
@@ -60,7 +66,8 @@ export function parseSceneLayoutManifestDocument(
     sourceRecord.version === 3 ||
     sourceRecord.version === 4 ||
     sourceRecord.version === 5 ||
-    sourceRecord.version === 6
+    sourceRecord.version === 6 ||
+    sourceRecord.version === 7
   )
     return upgradeSceneLayoutManifestToLatest(value);
   const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
@@ -215,9 +222,14 @@ export function collectSceneLayoutAssetPaths(
 ): readonly string[] {
   const parsed = parseSceneLayoutManifestDocument(manifest);
   const paths = new Set<string>();
-  if (parsed.version === 4 || parsed.version === 5 || parsed.version === 6)
+  if (
+    parsed.version === 4 ||
+    parsed.version === 5 ||
+    parsed.version === 6 ||
+    parsed.version === 7
+  )
     for (const path of collectAudioAssetPaths(parsed.audio)) paths.add(path);
-  if (parsed.version === 5 || parsed.version === 6)
+  if (parsed.version === 5 || parsed.version === 6 || parsed.version === 7)
     for (const binding of parsed.eventAudio.bindings)
       for (const source of binding.audio.asset.sources) paths.add(source.path);
   for (const node of parsed.nodes) {
@@ -810,6 +822,14 @@ export function assertSceneLayoutGeometryCompatible(
   currentValue: SceneLayoutManifest,
   nextValue: SceneLayoutManifest,
 ): void {
+  if (currentValue.version === 7 && nextValue.version === 7) {
+    if (
+      JSON.stringify(sceneLayoutStructureV7(currentValue)) !==
+      JSON.stringify(sceneLayoutStructureV7(nextValue))
+    )
+      fail("scene layout geometry update changed immutable structure.");
+    return;
+  }
   const current = parseSceneLayoutManifest(currentValue);
   const next = parseSceneLayoutManifest(nextValue);
   if (
@@ -817,6 +837,44 @@ export function assertSceneLayoutGeometryCompatible(
     JSON.stringify(sceneLayoutStructure(next))
   )
     fail("scene layout geometry update changed immutable structure.");
+}
+
+function sceneLayoutStructureV7(manifest: SceneLayoutManifestV7): unknown {
+  return {
+    version: manifest.version,
+    kind: manifest.kind,
+    id: manifest.id,
+    main: manifest.main,
+    nodes: manifest.nodes.map(({ placements: _placements, ...node }) => node),
+    symbolPackage: manifest.symbolPackage,
+    symbolPackages: manifest.symbolPackages,
+    popups: manifest.popups
+      ? Object.fromEntries(
+          Object.entries(manifest.popups).map(
+            ([id, { placements: _placements, ...popup }]) => [id, popup],
+          ),
+        )
+      : undefined,
+    runtimeResources: manifest.runtimeResources,
+    gameModes: {
+      ...manifest.gameModes,
+      modes: manifest.gameModes.modes.map(({ main, ...mode }) => ({
+        ...mode,
+        main: { enabled: main.enabled },
+      })),
+      transitions: manifest.gameModes.transitions?.map((transition) =>
+        "placements" in transition.overlay
+          ? {
+              ...transition,
+              overlay: { ...transition.overlay, placements: undefined },
+            }
+          : transition,
+      ),
+    },
+    audio: manifest.audio,
+    eventAudio: manifest.eventAudio,
+    runtimeAllocation: manifest.runtimeAllocation,
+  };
 }
 
 function sceneLayoutStructure(manifest: SceneLayoutManifestV1): unknown {

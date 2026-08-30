@@ -87,9 +87,32 @@ class FakePreludePopup {
   destroy() {}
 }
 
+function modeMain() {
+  const variant = {
+    x: 0,
+    y: 0,
+    focusRect: { x: -400, y: -240, width: 800, height: 480 },
+  };
+  return {
+    enabled: true,
+    variants: { landscape: { ...variant }, portrait: { ...variant } },
+  };
+}
+
+function modeAllocation() {
+  return {
+    variants: {
+      landscape: { activeNodes: [] },
+      portrait: { activeNodes: [] },
+    },
+    symbolPackage: null,
+    awardCelebrationPopup: null,
+  };
+}
+
 function snapshot() {
   return {
-    variantId: "default",
+    variantId: "landscape",
     worldOffset: { x: 0, y: 0 },
     reels: {},
   };
@@ -104,55 +127,75 @@ function createRuntime(
   },
 ) {
   const hash = "b".repeat(64);
+  const manifest = {
+    version: 7,
+    kind: "scene-layout",
+    id: "package-runtime-video-test",
+    main: {
+      columns: 5,
+      rows: 3,
+      cellSize: { width: 160, height: 160 },
+      gap: { x: 0, y: 0 },
+    },
+    nodes: [],
+    gameModes: {
+      initialMode: "BaseGame",
+      modes: [
+        { id: "BaseGame", main: modeMain(), nodeStates: {} },
+        { id: "FreeGame", main: modeMain(), nodeStates: {} },
+      ],
+      transitions: [
+        {
+          from: "BaseGame",
+          to: "FreeGame",
+          ...(prelude ? { preludePopup: "free-entry" } : {}),
+          overlay: {
+            resource: {
+              kind: "video",
+              path: `assets/${hash}.mp4`,
+              mimeType: "video/mp4",
+            },
+            fit: "contain",
+            fadeOutSeconds: 0.5,
+          },
+        },
+      ],
+    },
+    ...(prelude
+      ? {
+          popups: {
+            "free-entry": {
+              type: "spine",
+              manifest: "free-entry-popup.manifest.json",
+              order: 2000,
+              placements: {
+                landscape: { x: 0, y: 0, scale: 1 },
+                portrait: { x: 0, y: 0, scale: 1 },
+              },
+            },
+          },
+        }
+      : {}),
+    audio: { version: 1, effects: [], music: [], programmaticEffects: [] },
+    eventAudio: { version: 1, ignoreLegacyAudio: false, bindings: [] },
+    runtimeAllocation: {
+      version: 3,
+      package: {
+        nodes: [],
+        symbolPackages: [],
+        popups: prelude ? ["free-entry"] : [],
+      },
+      onDemand: { transitions: ["BaseGame=>FreeGame"], runtimeResources: [] },
+      modes: {
+        BaseGame: modeAllocation(),
+        FreeGame: modeAllocation(),
+      },
+    },
+  };
   return createSceneLayoutPackageRuntime({
     resource: {
-      manifest: {
-        nodes: [],
-        reels: {},
-        gameModes: {
-          initialMode: "BaseGame",
-          modes: [
-            {
-              id: "BaseGame",
-              backgroundNodes: { default: "base" },
-              nodeStates: {},
-            },
-            {
-              id: "FreeGame",
-              backgroundNodes: { default: "free" },
-              nodeStates: {},
-            },
-          ],
-          transitions: [
-            {
-              from: "BaseGame",
-              to: "FreeGame",
-              ...(prelude ? { preludePopup: "free-entry" } : {}),
-              overlay: {
-                resource: {
-                  kind: "video",
-                  path: `assets/${hash}.mp4`,
-                  mimeType: "video/mp4",
-                },
-                fit: "contain",
-                fadeOutSeconds: 0.5,
-              },
-            },
-          ],
-        },
-        ...(prelude
-          ? {
-              popups: {
-                "free-entry": {
-                  type: "spine",
-                  manifest: "free-entry-popup.manifest.json",
-                  order: 2000,
-                  placements: { default: { x: 0, y: 0, scale: 1 } },
-                },
-              },
-            }
-          : {}),
-      },
+      manifest,
+      runtimeManifest: manifest,
       layout: {
         spineResources: {},
         videoUrls: { [`assets/${hash}.mp4`]: "blob:video" },
@@ -179,6 +222,7 @@ describe("scene layout package video-blackout transition", () => {
       prepareNodes: vi.fn(async () => undefined),
       applyViewport: vi.fn(() => snapshot()),
       commitPreparedGeometryManifest: vi.fn(() => null),
+      commitGameMode: vi.fn(() => null),
       update: vi.fn(),
       getSnapshot: vi.fn(() => snapshot()),
       getNode: vi.fn(),

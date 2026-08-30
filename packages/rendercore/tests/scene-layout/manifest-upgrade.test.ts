@@ -1,51 +1,50 @@
 import { describe, expect, it } from "vitest";
 import {
-  materializeSceneLayoutManifestForMode,
   parseSceneLayoutManifestDocument,
-  resolveSceneLayoutViewport,
+  resolveSceneLayoutViewportV7,
   upgradeSceneLayoutManifestToLatest,
 } from "../../src/scene-layout/index.js";
 import { game002LayoutFixture } from "./fixtures.js";
 
 describe("scene layout manifest latest upgrade", () => {
-  it("upgrades v1 without inventing Splash and copies root geometry to each mode", () => {
+  it("upgrades v1 to a canonical v7 center-coordinate document", () => {
     const latest = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
-    expect(latest.version).toBe(6);
-    expect(latest.eventAudio).toEqual({
-      version: 1,
-      ignoreLegacyAudio: false,
-      bindings: [],
+    expect(latest.version).toBe(7);
+    expect(latest).not.toHaveProperty("adaptation");
+    expect(latest).not.toHaveProperty("reels");
+    expect(latest.main).toEqual({
+      columns: 6,
+      rows: 9,
+      cellSize: { width: 120, height: 120 },
+      gap: { x: 0, y: 0 },
     });
-    expect(latest.gameModes.initialMode).toBe("BaseGame");
-    expect(latest.gameModes.modes.map((mode) => mode.id)).toEqual(["BaseGame"]);
+    expect(latest.gameModes.modes).toHaveLength(1);
     expect(latest.gameModes.modes[0]).toMatchObject({
-      adaptation: {
-        mode: "maximized-focus",
-        artSize: { width: 2000, height: 2000 },
+      id: "BaseGame",
+      main: {
+        enabled: true,
+        variants: {
+          landscape: { x: 0, y: -123 },
+          portrait: { x: 0, y: -123 },
+        },
       },
-      reelEnabled: true,
-      backgroundNodes: { default: "bg" },
-      reelPlacements: { main: { default: { x: 640, y: 337 } } },
     });
-    expect(latest.runtimeAllocation).toEqual({
-      version: 2,
-      package: { nodes: ["bg"], symbolPackages: [], popups: [] },
-      onDemand: { transitions: [], runtimeResources: [] },
+    expect(latest.runtimeAllocation).toMatchObject({
+      version: 3,
+      package: { nodes: ["bg"] },
       modes: {
         BaseGame: {
           variants: {
             landscape: { activeNodes: ["bg"] },
             portrait: { activeNodes: ["bg"] },
           },
-          symbolPackage: null,
-          awardCelebrationPopup: null,
         },
       },
     });
     expect(upgradeSceneLayoutManifestToLatest(latest)).toEqual(latest);
   });
 
-  it("upgrades game002-style mode backgrounds without a synthetic reel order conflict", () => {
+  it("turns legacy per-mode backgrounds into ordinary scoped nodes", () => {
     const legacy = structuredClone(game002LayoutFixture) as any;
     legacy.nodes.push({
       ...structuredClone(legacy.nodes[0]),
@@ -60,11 +59,7 @@ describe("scene layout manifest latest upgrade", () => {
     legacy.gameModes = {
       initialMode: "BaseGame",
       modes: [
-        {
-          id: "BaseGame",
-          backgroundNodes: { default: "bg" },
-          nodeStates: {},
-        },
+        { id: "BaseGame", backgroundNodes: { default: "bg" }, nodeStates: {} },
         {
           id: "FreeGame",
           backgroundNodes: { default: "free-bg" },
@@ -75,80 +70,20 @@ describe("scene layout manifest latest upgrade", () => {
     };
 
     const latest = upgradeSceneLayoutManifestToLatest(legacy);
-    expect(latest.nodes.map((node) => node.order)).toEqual([0, 1]);
-    expect(latest.reels.main.order).toBe(2);
-    const freeGame = materializeSceneLayoutManifestForMode(latest, "FreeGame");
-    expect(freeGame.nodes.map((node) => [node.id, node.order])).toEqual([
-      ["free-bg", 0],
-      ["bg", 1],
-    ]);
-    expect(freeGame.reels.main.order).toBe(2);
+    expect(latest.main.order).toBe(2);
+    expect(latest.nodes.find(({ id }) => id === "bg")?.scope).toEqual({
+      BaseGame: ["landscape", "portrait"],
+    });
+    expect(latest.nodes.find(({ id }) => id === "free-bg")?.scope).toEqual({
+      FreeGame: ["landscape", "portrait"],
+    });
+    expect(
+      latest.runtimeAllocation.modes.FreeGame?.variants.landscape?.activeNodes,
+    ).toEqual(["free-bg"]);
   });
 
-  it("keeps the reel between three mode background orders", () => {
-    const legacy = structuredClone(game002LayoutFixture) as any;
-    legacy.nodes.push(
-      {
-        ...structuredClone(legacy.nodes[0]),
-        id: "free-bg",
-        order: 1,
-        resource: {
-          ...structuredClone(legacy.nodes[0].resource),
-          path: "assets/free-bg.png",
-        },
-      },
-      {
-        ...structuredClone(legacy.nodes[0]),
-        id: "bonus-bg",
-        order: 3,
-        resource: {
-          ...structuredClone(legacy.nodes[0].resource),
-          path: "assets/bonus-bg.png",
-        },
-      },
-    );
-    legacy.reels.main.order = 2;
-    legacy.gameModes = {
-      initialMode: "BaseGame",
-      modes: [
-        {
-          id: "BaseGame",
-          backgroundNodes: { default: "bg" },
-          nodeStates: {},
-        },
-        {
-          id: "FreeGame",
-          backgroundNodes: { default: "free-bg" },
-          nodeStates: {},
-        },
-        {
-          id: "BonusGame",
-          backgroundNodes: { default: "bonus-bg" },
-          nodeStates: {},
-        },
-      ],
-      transitions: [],
-    };
-
-    const latest = upgradeSceneLayoutManifestToLatest(legacy);
-    expect(latest.nodes.map((node) => node.order)).toEqual([0, 1, 3]);
-    expect(latest.reels.main.order).toBe(2);
-    for (const [modeId, backgroundId] of [
-      ["BaseGame", "bg"],
-      ["FreeGame", "free-bg"],
-      ["BonusGame", "bonus-bg"],
-    ] as const) {
-      const view = materializeSceneLayoutManifestForMode(latest, modeId);
-      expect(view.nodes.find((node) => node.id === backgroundId)?.order).toBe(
-        0,
-      );
-      expect(view.nodes.map((node) => node.order)).toEqual([0, 1, 3]);
-      expect(view.reels.main.order).toBe(2);
-    }
-  });
-
-  it("accepts mixed per-mode adaptation and materializes either stable geometry", () => {
-    const mixed = parseSceneLayoutManifestDocument({
+  it("reads legacy mixed mode geometry and exports only v7 main variants", () => {
+    const legacy = parseSceneLayoutManifestDocument({
       version: 2,
       kind: "scene-layout",
       id: "mixed",
@@ -184,10 +119,6 @@ describe("scene layout manifest latest upgrade", () => {
               portrait: "splash-port",
             },
             nodeStates: {},
-            primaryAction: {
-              kind: "request-game-mode",
-              targetMode: "BaseGame",
-            },
           },
           {
             id: "BaseGame",
@@ -202,77 +133,29 @@ describe("scene layout manifest latest upgrade", () => {
             nodeStates: {},
           },
         ],
-        transitions: [
-          {
-            from: "Splash",
-            to: "BaseGame",
-            overlay: { kind: "none" },
-          },
-        ],
       },
     });
-    expect(mixed.version).toBe(2);
-    if (mixed.version !== 2) throw new Error("expected v2");
-    expect(mixed.gameModes.modes[0]?.reelEnabled).toBe(false);
-    expect(mixed.gameModes.modes[0]?.reelPlacements).toEqual({});
-    expect(
-      materializeSceneLayoutManifestForMode(mixed, "Splash").adaptation.mode,
-    ).toBe("orientation-focus");
-    expect(
-      materializeSceneLayoutManifestForMode(mixed, "BaseGame").adaptation.mode,
-    ).toBe("maximized-focus");
+    const latest = upgradeSceneLayoutManifestToLatest(legacy);
+    expect(latest.gameModes.modes[0]).not.toHaveProperty("adaptation");
+    expect(latest.gameModes.modes[0]?.main.enabled).toBe(false);
+    expect(latest.gameModes.modes[1]?.main.enabled).toBe(true);
+    expect(Object.keys(latest.gameModes.modes[1]!.main.variants)).toEqual([
+      "landscape",
+      "portrait",
+    ]);
   });
 
-  it("retains the active orientation on square input and defaults the first square to landscape", () => {
-    const manifest = upgradeSceneLayoutManifestToLatest({
-      ...game002LayoutFixture,
-      id: "orientation",
-      adaptation: {
-        mode: "orientation-focus",
-        variants: {
-          landscape: {
-            artSize: { width: 2000, height: 2000 },
-            focusRect: { x: 580, y: 277, width: 840, height: 1200 },
-            frameFocusRect: { width: 840, height: 1200 },
-            backgroundNode: "bg",
-          },
-          portrait: {
-            artSize: { width: 2000, height: 2000 },
-            focusRect: { x: 580, y: 277, width: 840, height: 1200 },
-            frameFocusRect: { width: 840, height: 1200 },
-            backgroundNode: "bg",
-          },
-        },
-      },
-      nodes: [
-        {
-          ...game002LayoutFixture.nodes[0],
-          placements: {
-            landscape: placement(),
-            portrait: placement(),
-          },
-        },
-      ],
-      reels: {
-        main: {
-          ...game002LayoutFixture.reels.main,
-          placements: {
-            landscape: { x: 640, y: 337 },
-            portrait: { x: 640, y: 337 },
-          },
-        },
-      },
-    });
-    const effective = materializeSceneLayoutManifestForMode(manifest);
+  it("retains the active orientation on square input", () => {
+    const manifest = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
     expect(
-      resolveSceneLayoutViewport({
-        manifest: effective,
+      resolveSceneLayoutViewportV7({
+        manifest,
         viewportSize: { width: 2000, height: 2000 },
       }).variantId,
     ).toBe("landscape");
     expect(
-      resolveSceneLayoutViewport({
-        manifest: effective,
+      resolveSceneLayoutViewportV7({
+        manifest,
         viewportSize: { width: 2000, height: 2000 },
         previousVariantId: "portrait",
       }).variantId,

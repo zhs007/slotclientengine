@@ -39,11 +39,6 @@ export interface SceneLayoutPresentationSurface {
   readonly popupContainer: Container;
   init(): Promise<void>;
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot;
-  /**
-   * Keeps the surface in manifest art coordinates when a parent container
-   * already owns the focus/viewport transform.
-   */
-  applyArtSpace(): void;
   update(deltaSeconds: number): void;
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
   prepareGameModeTransition(modeId: string): Promise<void>;
@@ -87,7 +82,6 @@ export function createSceneLayoutPresentationSurface(options: {
 }
 
 class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSurface {
-  readonly #resource: SceneLayoutPackageResource;
   readonly #runtime;
   readonly #initialMode: SceneLayoutGameMode | null;
   readonly #backgroundContainer = new Container();
@@ -102,7 +96,6 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
     readonly initialMode?: string;
     readonly formatPopupAmount?: import("../popup/data/types.js").PopupAmountFormatter;
   }) {
-    this.#resource = options.resource;
     this.#runtime = createSceneLayoutPackageRuntime({
       resource: options.resource,
       presentationOnly: true,
@@ -168,18 +161,6 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot {
     this.assertReady();
     return this.#runtime.applyViewport(viewportSize);
-  }
-
-  applyArtSpace(): void {
-    this.assertReady();
-    const adaptation = this.#resource.layout.manifest.adaptation;
-    if (adaptation.mode !== "maximized-focus") {
-      throw new SceneLayoutError(
-        "Scene layout art-space presentation requires maximized-focus adaptation.",
-      );
-    }
-    this.#runtime.applyArtSpace();
-    this.#backgroundContainer.position.set(0, 0);
   }
 
   update(deltaSeconds: number): void {

@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 import {
-  getMinecart2AwardVniProjectPath,
-  getMinecart2SymbolResourcePath,
-  readMinecart2LogicalBytes,
-  readMinecart2LogicalJson,
-  readMinecart2SymbolBytes,
-  readMinecart2SymbolFixtureBytes,
-} from "../../../../test-utils/minecart2-fixtures.js";
+  createTestSpineAtlas,
+  createTestSpineSkeleton,
+  createTestVniProject,
+  encodeTestJson,
+} from "../fixtures/artifact-fixtures.js";
 
 const destroyImageString = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("../../src/image-string/package-runtime.js", async (original) => {
@@ -630,14 +628,13 @@ describe("popup package resource", () => {
 
 function fixture() {
   const hex = (value: number) => value.toString(16).padStart(64, "0");
-  const project = structuredClone(
-    readMinecart2LogicalJson(getMinecart2AwardVniProjectPath("bigwin")),
-  ) as { assets: Array<{ path: string }> };
+  const project = createTestVniProject("popup-effect") as {
+    assets: Array<{ path: string }>;
+  };
   const files = new Map<string, Uint8Array>();
   project.assets.forEach((asset: { path: string }, index: number) => {
-    const original = asset.path;
     asset.path = `${hex(index + 10)}.png`;
-    files.set(`assets/${asset.path}`, readMinecart2LogicalBytes(original));
+    files.set(`assets/${asset.path}`, new Uint8Array([index + 10]));
   });
   const projectPath = `assets/${hex(1)}.json`;
   files.set(projectPath, new TextEncoder().encode(JSON.stringify(project)));
@@ -645,9 +642,12 @@ function fixture() {
   const atlasPath = `assets/${hex(3)}.atlas`;
   const texturePath = `assets/${hex(4)}.png`;
   const texturePage = "Symbol.png";
-  files.set(skeletonPath, readMinecart2SymbolBytes("WL", "skeleton"));
-  files.set(atlasPath, readMinecart2SymbolFixtureBytes("Symbol.atlas"));
-  files.set(texturePath, readMinecart2SymbolBytes("WL", "texture"));
+  files.set(skeletonPath, encodeTestJson(createTestSpineSkeleton()));
+  files.set(
+    atlasPath,
+    new TextEncoder().encode(createTestSpineAtlas(texturePage)),
+  );
+  files.set(texturePath, new Uint8Array([1]));
   const imagePath = `assets/${hex(5)}.png`;
   files.set(imagePath, new Uint8Array([1]));
   const webpPath = `assets/${hex(6)}.webp`;
@@ -860,9 +860,7 @@ function multiPageSpinePopupFixture() {
   const skeleton = "FG.json";
   const atlas = "BG.atlas";
   const textures = Object.fromEntries(logicalPages.map((page) => [page, page]));
-  const atlasText = new TextDecoder()
-    .decode(readMinecart2SymbolBytes("WL", "atlas"))
-    .replace(/^[^\r\n]+/u, logicalPages[0]!);
+  const atlasText = createTestSpineAtlas(logicalPages[0]!);
   const manifest = {
     version: 1,
     kind: "popup",
@@ -890,14 +888,14 @@ function multiPageSpinePopupFixture() {
   } as const;
   const files = new Map<string, Uint8Array>([
     ["popup.manifest.json", new TextEncoder().encode(JSON.stringify(manifest))],
-    [skeleton, readMinecart2SymbolBytes("WL", "skeleton")],
+    [skeleton, encodeTestJson(createTestSpineSkeleton())],
     [
       atlas,
       new TextEncoder().encode(
         `${atlasText.replace(/\n+$/u, "")}\n\n${logicalPages[1]}\nsize: 1,1\nfilter: Linear,Linear\n`,
       ),
     ],
-    [textures[logicalPages[0]!]!, readMinecart2SymbolBytes("WL", "texture")],
+    [textures[logicalPages[0]!]!, new Uint8Array([1])],
     [textures[logicalPages[1]!]!, new Uint8Array([1])],
   ]);
   return { manifest, files };

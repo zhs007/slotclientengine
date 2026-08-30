@@ -70,7 +70,7 @@ describe("Game Layout Editor JSON program assets", () => {
 
     bindRuntimeResource(project, resource!.id, "spin-config");
     const manifest = editorProjectToManifest(project);
-    expect(manifest.version).toBe(6);
+    expect(manifest.version).toBe(7);
     expect(manifest.runtimeResources?.["spin-config"]).toEqual({
       kind: "json",
       path: "spin-config.json",

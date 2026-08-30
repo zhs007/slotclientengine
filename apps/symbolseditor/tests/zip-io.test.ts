@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
+import { readSymbolArtifactFixtureBytes } from "./artifact-fixtures.js";
 import {
   createDeterministicZip,
   extractBoundedZip,
@@ -25,7 +25,7 @@ const gameConfig = {
   reels: { main: [[0]] },
 };
 const imageBytes = () =>
-  new Uint8Array(readMinecart2SymbolFixtureBytes("H1.png"));
+  new Uint8Array(readSymbolArtifactFixtureBytes("H1.png"));
 const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
 const vniProject = {
@@ -343,7 +343,7 @@ describe("symbols zip IO", () => {
   it("preserves distinct logical keys when symbol and VNI images share bytes", async () => {
     const sharedImage = imageBytes();
     const vniProject = new Uint8Array(
-      readMinecart2SymbolFixtureBytes("L1-wins.json"),
+      readSymbolArtifactFixtureBytes("L1-wins.json"),
     );
     const parsedVniProject = JSON.parse(
       new TextDecoder().decode(vniProject),
@@ -402,21 +402,22 @@ describe("symbols zip IO", () => {
       limits: SYMBOL_ZIP_LIMITS,
     });
     const assetsMap = decodeEditorAssetsMap(files.get("assets.map.json")!);
+    const exportedVniAssetKey = "vni-image.png";
     expect(Object.keys(assetsMap.files).sort()).toEqual(
-      ["A-wins.json", "A.png", vniAssetKey].sort(),
+      ["A-wins.json", "A.png", exportedVniAssetKey].sort(),
     );
     expect(assetsMap.files["A.png"]?.sha256).toBe(
-      assetsMap.files[vniAssetKey]?.sha256,
+      assetsMap.files[exportedVniAssetKey]?.sha256,
     );
     expect(assetsMap.files["A.png"]?.path.replace(/\.[^.]+$/u, "")).toBe(
-      assetsMap.files[vniAssetKey]?.path.replace(/\.[^.]+$/u, ""),
+      assetsMap.files[exportedVniAssetKey]?.path.replace(/\.[^.]+$/u, ""),
     );
 
     const reimported = await importSymbolPackageZip(exported.bytes, {
       loadTextures: false,
     });
     expect([...reimported.project.assetLibrary.records.keys()].sort()).toEqual(
-      ["A-wins.json", "A.png", vniAssetKey].sort(),
+      ["A-wins.json", "A.png", exportedVniAssetKey].sort(),
     );
     expect(
       reimported.project.symbols.get("A")?.states.get("win"),

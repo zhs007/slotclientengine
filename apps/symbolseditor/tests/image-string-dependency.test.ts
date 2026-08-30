@@ -1,7 +1,7 @@
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
+import { readSymbolArtifactFixtureBytes } from "./artifact-fixtures.js";
 import { Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import { importImageStringDependencyZip } from "../src/io/image-string-dependency.js";
@@ -146,7 +146,7 @@ describe("image-string logical dependency", () => {
     );
   });
 
-  it("rejects missing glyph and extra files", async () => {
+  it("rejects a missing glyph and ignores unrelated archive files", async () => {
     const files = createFiles();
     files.delete("assets/0.png");
     await expect(
@@ -154,15 +154,17 @@ describe("image-string logical dependency", () => {
         decodeImage: async () => ({ width: 172, height: 130 }),
         loadTexture: async () => Texture.EMPTY,
       }),
-    ).rejects.toThrow(/缺少/);
+    ).rejects.toThrow(/缺少|缺失/);
     const extra = createFiles();
     extra.set("assets/orphan.png", glyphBytes());
-    await expect(
-      importImageStringDependencyZip(createDeterministicZip(extra), {
+    const imported = await importImageStringDependencyZip(
+      createDeterministicZip(extra),
+      {
         decodeImage: async () => ({ width: 172, height: 130 }),
         loadTexture: async () => Texture.EMPTY,
-      }),
-    ).rejects.toThrow(/额外|orphan/);
+      },
+    );
+    expect(imported.keys).not.toContain("orphan.png");
   });
 });
 
@@ -250,7 +252,7 @@ function createFiles(): Map<string, Uint8Array> {
 }
 
 function fixture(name: string): Uint8Array {
-  return new Uint8Array(readMinecart2SymbolFixtureBytes(name));
+  return new Uint8Array(readSymbolArtifactFixtureBytes(name));
 }
 
 function glyphBytes(): Uint8Array {

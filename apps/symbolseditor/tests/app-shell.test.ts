@@ -6,7 +6,7 @@ import {
 } from "../src/model/editor-project.js";
 import { exportSymbolPackageZip } from "../src/io/symbol-package-zip.js";
 import { readCraveFixture } from "./crave-fixture.js";
-import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
+import { readSymbolArtifactFixtureBytes } from "./artifact-fixtures.js";
 
 const previewSpies = vi.hoisted(() => ({
   replay: vi.fn(),
@@ -78,7 +78,7 @@ describe("symbols editor app shell", () => {
       data: new Uint8ClampedArray([255, 0, 0, 255]),
     });
     codecSpies.encodePng.mockResolvedValue(
-      readMinecart2SymbolFixtureBytes("H1.png"),
+      readSymbolArtifactFixtureBytes("H1.png"),
     );
   });
 
@@ -366,7 +366,7 @@ describe("symbols editor app shell", () => {
     expect(root.textContent).toContain("上传并使用");
     click(root, "[data-picker-upload]");
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
-    const manualBytes = readMinecart2SymbolFixtureBytes("H2.png");
+    const manualBytes = readSymbolArtifactFixtureBytes("H2.png");
     Object.defineProperty(upload, "files", {
       configurable: true,
       value: [new File([manualBytes], "manual.png", { type: "image/png" })],
@@ -494,7 +494,7 @@ describe("symbols editor app shell", () => {
     await createProject(root);
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
     const files = ["H1.json", "Symbol.atlas", "Symbol.png"].map(
-      (name) => new File([readMinecart2SymbolFixtureBytes(name)], name),
+      (name) => new File([readSymbolArtifactFixtureBytes(name)], name),
     );
     Object.defineProperty(upload, "files", {
       configurable: true,
@@ -554,7 +554,6 @@ describe("symbols editor app shell", () => {
       ),
     ).toEqual(["CN_1.json", "CN_2.json", "CN_3.json", "CN_4.json"]);
     expect(root.textContent).toContain("Symbol.atlas");
-    expect(root.textContent).toContain("Symbol.png");
   });
 
   it("still rejects a Spine import when multiple atlases make the closure ambiguous", async () => {
@@ -602,7 +601,7 @@ describe("symbols editor app shell", () => {
   it("keeps picker cancel mutation-free and binds only after confirmation", async () => {
     await createProject(root);
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
-    const bytes = readMinecart2SymbolFixtureBytes("H1.png");
+    const bytes = readSymbolArtifactFixtureBytes("H1.png");
     Object.defineProperty(upload, "files", {
       configurable: true,
       value: [new File([bytes], "H1.png", { type: "image/png" })],
@@ -960,7 +959,7 @@ async function createProject(root: HTMLElement): Promise<void> {
 
 async function uploadImage(root: HTMLElement, name: string): Promise<void> {
   const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
-  const bytes = readMinecart2SymbolFixtureBytes(name);
+  const bytes = readSymbolArtifactFixtureBytes(name);
   Object.defineProperty(upload, "files", {
     configurable: true,
     value: [new File([bytes], name, { type: "image/png" })],

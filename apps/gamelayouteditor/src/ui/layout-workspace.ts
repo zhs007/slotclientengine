@@ -26,34 +26,13 @@ export function layoutWorkspaceMarkup(
   currentVariant: SceneLayoutVariantId | null = null,
 ): string {
   const activeMode = project.gameModes.modes.find((mode) => mode.id === modeId);
-  const backgroundIds = new Set(
-    project.gameModes.modes
-      .flatMap((mode) => Object.values(mode.backgroundNodes))
-      .filter(Boolean),
-  );
-  const layers = project.nodes
-    .filter((node) => !backgroundIds.has(node.id))
-    .sort((left, right) => left.order - right.order);
+  const layers = project.nodes.sort((left, right) => left.order - right.order);
   return `<section class="workspace-panel layout-workspace" aria-labelledby="layout-heading">
     <aside class="layout-outline">
       <div class="outline-toolbar"><h2 id="layout-heading">布局大纲</h2><button type="button" class="primary" data-open-add-layer>＋ 添加图层</button></div>
       <div class="outline-list" role="listbox" aria-label="布局对象" tabindex="0" data-outline-list aria-activedescendant="outline-${escapeHtml(selectionKey(selection))}">
-        <div class="outline-group"><strong>背景</strong>${activeVariantIds(
-          project,
-        )
-          .map((variant) =>
-            outlineRow({
-              key: `background:${variant}`,
-              label: variant,
-              meta: backgroundMeta(project, modeId, variant),
-              selected:
-                selection.kind === "background" &&
-                selection.variant === variant,
-            }),
-          )
-          .join("")}</div>
-        <div class="outline-group"><strong>主转轮</strong>${activeMode?.reelEnabled ? outlineRow({ key: "reel:main", label: "main", meta: `${project.reel.columns}×${project.reel.rows} · ready`, selected: selection.kind === "reel" }) : '<span class="outline-empty">当前 mode 未启用主转轮</span>'}</div>
-        <div class="outline-group"><strong>图层 · ${layers.length}</strong>${
+        <div class="outline-group"><strong>主转轮</strong>${activeMode?.mainEnabled ? outlineRow({ key: "reel:main", label: "main", meta: `${project.reel.columns}×${project.reel.rows} · ready`, selected: selection.kind === "reel" }) : '<span class="outline-empty">当前 mode 未启用 main</span>'}</div>
+        <div class="outline-group"><strong>普通图层 · ${layers.length}</strong>${
           layers.length
             ? layers
                 .map((node) => {
@@ -111,24 +90,6 @@ function outlineRow(options: {
   return `<button type="button" role="option" id="outline-${escapeHtml(options.key)}" data-outline-key="${escapeHtml(options.key)}" aria-selected="${options.selected}" ${options.muted ? 'class="is-currently-hidden" data-currently-hidden="true"' : ""}><span>${escapeHtml(options.label)}</span><small>${escapeHtml(options.meta)}</small></button>`;
 }
 
-function backgroundMeta(
-  project: EditorProject,
-  modeId: string,
-  variant: "default" | "landscape" | "portrait",
-): string {
-  const node = project.nodes.find(
-    (item) =>
-      item.id ===
-      project.gameModes.modes.find((mode) => mode.id === modeId)
-        ?.backgroundNodes[variant],
-  );
-  if (!node) return "未设置 · incomplete";
-  const resource = project.resources.get(node.resourceId);
-  return resource
-    ? `${resource.kind} · ${node.id} · ready`
-    : "未知资源 · error";
-}
-
 function layerMeta(
   project: EditorProject,
   node: EditorNodeDraft,
@@ -157,15 +118,12 @@ function inspectorMarkup(
   modeId: string,
   session: EditorUiSession,
 ): string {
-  if (selection.kind === "background") {
-    return backgroundInspector(project, modeId, selection.variant, session);
-  }
   if (selection.kind === "reel") {
     const mode = project.gameModes.modes.find(
       (candidate) => candidate.id === modeId,
     );
-    return mode?.reelEnabled
-      ? reelInspector(project, session)
+    return mode?.mainEnabled
+      ? reelInspector(project, modeId, session)
       : '<div class="empty-state">当前 mode 未启用主转轮；可在“管理状态”中开启。</div>';
   }
   const node = project.nodes.find((item) => item.id === selection.nodeId);
@@ -174,40 +132,27 @@ function inspectorMarkup(
     : '<div class="empty-state">所选图层已不存在。</div>';
 }
 
-function backgroundInspector(
-  project: EditorProject,
-  modeId: string,
-  variantId: "default" | "landscape" | "portrait",
-  session: EditorUiSession,
-): string {
-  const variant = project.variants[variantId];
-  const backgroundNode = project.gameModes.modes.find(
-    (mode) => mode.id === modeId,
-  )?.backgroundNodes[variantId];
-  const node = project.nodes.find((item) => item.id === backgroundNode);
-  const nodeIndex = node ? project.nodes.indexOf(node) : -1;
-  const resource = node ? project.resources.get(node.resourceId) : undefined;
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>背景 Inspector</span><h2>${variantId}</h2></div>
-    <section class="inspector-section"><h3>资源绑定</h3>${resource && node ? `<p><strong>${escapeHtml(node.id)}</strong> · order ${node.order}</p><p class="path">${escapeHtml(describeResource(resource))}</p>${nodeIdField(node)}${resource.kind === "spine" ? spinePlaybackEditor(resource, node) : ""}` : '<p class="hint">尚未绑定背景资源。</p>'}<div class="button-row"><button type="button" data-choose-background="${variantId}">${resource ? "更换资源" : "选择资源"}</button><button type="button" class="danger" data-clear-background="${variantId}" ${node ? "" : "disabled"}>清除背景</button></div></section>
-    <section class="inspector-section"><h3>Art / Focus</h3><div class="field-grid">${numberField("art width", `variants.${variantId}.artSize.width`, variant.artSize.width)}${numberField("art height", `variants.${variantId}.artSize.height`, variant.artSize.height)}</div><p class="derived">focus ${variant.focusRect.x}, ${variant.focusRect.y}, ${variant.focusRect.width} × ${variant.focusRect.height}</p><p class="hint">${project.gameModes.modes.find((mode) => mode.id === modeId)?.reelEnabled ? "focus 四边值相对主转轮区域外扩。" : "当前 mode 无主转轮；focus 四边值相对 art 边缘配置。"}</p><details data-inspector-section="layout:background:${variantId}:focus" ${session.expandedInspectorSections.has(`layout:background:${variantId}:focus`) ? "open" : ""}><summary>高级 focus 配置</summary><div class="field-grid">${numberField("left", `variants.${variantId}.focusOffsets.left`, variant.focusOffsets.left)}${numberField("top", `variants.${variantId}.focusOffsets.top`, variant.focusOffsets.top)}${numberField("right", `variants.${variantId}.focusOffsets.right`, variant.focusOffsets.right)}${numberField("bottom", `variants.${variantId}.focusOffsets.bottom`, variant.focusOffsets.bottom)}</div>${project.mode === "orientation-focus" ? `<fieldset><legend>frame focus rect</legend><div class="field-grid">${numberField("width", `variants.${variantId}.frameFocusRect.width`, variant.frameFocusRect.width)}${numberField("height", `variants.${variantId}.frameFocusRect.height`, variant.frameFocusRect.height)}</div></fieldset><fieldset><legend>min focus margins</legend><div class="field-grid">${numberField("left", `variants.${variantId}.minFocusMargin.left`, variant.minFocusMargin.left)}${numberField("right", `variants.${variantId}.minFocusMargin.right`, variant.minFocusMargin.right)}${numberField("top", `variants.${variantId}.minFocusMargin.top`, variant.minFocusMargin.top)}${numberField("bottom", `variants.${variantId}.minFocusMargin.bottom`, variant.minFocusMargin.bottom)}</div></fieldset>` : ""}</details></section>
-    ${node ? `<section class="inspector-section"><h3>背景 Placement</h3><p class="hint">rotation 使用角度；Spine 的 center 0.5 / 0.5 对应 authored 原点。</p>${placementFields(node, nodeIndex, variantId)}</section>` : ""}
-  </div>`;
-}
-
 function reelInspector(
   project: EditorProject,
+  modeId: string,
   session: EditorUiSession,
 ): string {
   const reel = project.reel;
+  const modeIndex = project.gameModes.modes.findIndex(
+    (mode) => mode.id === modeId,
+  );
+  const mode = project.gameModes.modes[modeIndex]!;
   const size = calculateReelSize(project);
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>主转轮 Inspector</span><h2>main</h2></div><section class="inspector-section"><div class="field-grid">${numberField("order", "reel.order", reel.order ?? 0)}${numberField("columns", "reel.columns", reel.columns)}${numberField("rows", "reel.rows", reel.rows)}</div><p class="derived">派生尺寸 ${size.width} × ${size.height}</p><details data-inspector-section="layout:reel:main:advanced" ${session.expandedInspectorSections.has("layout:reel:main:advanced") ? "open" : ""}><summary>高级 cell / gap / placement</summary><div class="field-grid">${numberField("cell width", "reel.cellWidth", reel.cellWidth)}${numberField("cell height", "reel.cellHeight", reel.cellHeight)}${numberField("gap x", "reel.gapX", reel.gapX)}${numberField("gap y", "reel.gapY", reel.gapY)}</div>${activeVariantIds(
+  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>主转轮 Inspector</span><h2>main</h2></div><section class="inspector-section"><div class="field-grid">${numberField("order", "reel.order", reel.order ?? 0)}${numberField("columns", "reel.columns", reel.columns)}${numberField("rows", "reel.rows", reel.rows)}</div><p class="derived">派生尺寸 ${size.width} × ${size.height}</p><details data-inspector-section="layout:reel:main:advanced" ${session.expandedInspectorSections.has("layout:reel:main:advanced") ? "open" : ""}><summary>高级 cell / gap</summary><div class="field-grid">${numberField("cell width", "reel.cellWidth", reel.cellWidth)}${numberField("cell height", "reel.cellHeight", reel.cellHeight)}${numberField("gap x", "reel.gapX", reel.gapX)}${numberField("gap y", "reel.gapY", reel.gapY)}</div></details>${activeVariantIds(
     project,
   )
     .map((variant) => {
-      const placement = reel.placements[variant] ?? { x: 0, y: 0 };
-      return `<fieldset><legend>${variant} art-space</legend><div class="field-grid">${numberField("x", `reel.placements.${variant}.x`, placement.x)}${numberField("y", `reel.placements.${variant}.y`, placement.y)}</div></fieldset>`;
+      if (variant === "default") return "";
+      const value = mode.mainVariants[variant];
+      const prefix = `gameModes.modes.${modeIndex}.mainVariants.${variant}`;
+      return `<fieldset><legend>${variant} · 中心坐标</legend><div class="field-grid">${numberField("main x", `${prefix}.x`, value.x)}${numberField("main y", `${prefix}.y`, value.y)}${numberField("focus x", `${prefix}.focusRect.x`, value.focusRect.x)}${numberField("focus y", `${prefix}.focusRect.y`, value.focusRect.y)}${numberField("focus width", `${prefix}.focusRect.width`, value.focusRect.width)}${numberField("focus height", `${prefix}.focusRect.height`, value.focusRect.height)}</div><details><summary>min focus margins</summary><div class="field-grid">${numberField("left", `${prefix}.minFocusMargin.left`, value.minFocusMargin.left)}${numberField("right", `${prefix}.minFocusMargin.right`, value.minFocusMargin.right)}${numberField("top", `${prefix}.minFocusMargin.top`, value.minFocusMargin.top)}${numberField("bottom", `${prefix}.minFocusMargin.bottom`, value.minFocusMargin.bottom)}</div></details></fieldset>`;
     })
-    .join("")}</details></section></div>`;
+    .join("")}</section></div>`;
 }
 
 function layerInspector(

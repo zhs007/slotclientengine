@@ -48,12 +48,18 @@ export function createSceneLayoutAssetGroups(options: {
   const gameModes = options.manifest.gameModes;
   if (!gameModes) throw new Error("资源分组要求 Scene Layout gameModes。");
   const allBackgroundIds = new Set(
-    gameModes.modes.flatMap((mode) =>
-      Object.values(mode.backgroundNodes ?? {}),
-    ),
+    options.manifest.version === 7
+      ? []
+      : gameModes.modes.flatMap((mode) =>
+          "backgroundNodes" in mode
+            ? Object.values(mode.backgroundNodes ?? {})
+            : [],
+        ),
   );
-  const sharedNodes = options.manifest.nodes.filter(
-    (node) => !allBackgroundIds.has(node.id) && node.gameMode === undefined,
+  const sharedNodes = options.manifest.nodes.filter((node) =>
+    options.manifest.version === 7
+      ? node.scope === undefined
+      : !allBackgroundIds.has(node.id) && node.gameMode === undefined,
   );
   const sharedRequired = nodeClosure(sharedNodes, options.files);
   const audioAssets = collectPackageAudioAssets(
@@ -91,12 +97,17 @@ export function createSceneLayoutAssetGroups(options: {
       requiredAssets: runtimeResourceClosure(resource, options.files),
     });
   for (const mode of gameModes.modes) {
-    const nodeIds = new Set(Object.values(mode.backgroundNodes ?? {}));
+    const nodeIds = new Set(
+      "backgroundNodes" in mode
+        ? Object.values(mode.backgroundNodes ?? {})
+        : [],
+    );
     const nodes = options.manifest.nodes.filter(
       (node) =>
         nodeIds.has(node.id) ||
         sharedNodes.includes(node) ||
-        node.gameMode === mode.id,
+        node.gameMode === mode.id ||
+        Boolean(node.scope?.[mode.id]),
     );
     provisional.push({
       id: `mode:${mode.id}`,

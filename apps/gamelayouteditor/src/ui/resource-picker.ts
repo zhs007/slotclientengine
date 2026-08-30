@@ -1,5 +1,4 @@
 import {
-  activeVariantIds,
   ordinaryLayerVariantIds,
   type EditorProject,
 } from "../model/editor-project.js";
@@ -34,27 +33,15 @@ export function createResourcePickerState(
   const selectedResourceId = project.resources.has(preferredResourceId)
     ? preferredResourceId
     : "";
-  const backgroundArtSize =
-    context.kind === "assign-background"
-      ? { ...project.variants[context.variant].artSize }
-      : { width: 0, height: 0 };
   const state: ResourcePickerState = {
     context,
     query: "",
     type: "all",
     selectedResourceId,
     nodeId:
-      context.kind === "rebind-layer"
-        ? context.nodeId
-        : context.kind === "add-layer"
-          ? selectedResourceId
-          : "",
-    variants:
-      context.kind === "assign-background"
-        ? [context.variant]
-        : [...ordinaryLayerVariantIds],
+      context.kind === "rebind-layer" ? context.nodeId : selectedResourceId,
+    variants: [...ordinaryLayerVariantIds],
     defaultAnimation: "",
-    backgroundArtSize,
   };
   state.defaultAnimation = preferredResourcePickerAnimation(
     project,
@@ -73,11 +60,6 @@ export function preferredResourcePickerAnimation(
   if (resource?.kind !== "spine") return "";
   let nodeId: string | undefined;
   if (state.context.kind === "rebind-layer") nodeId = state.context.nodeId;
-  else if (state.context.kind === "assign-background") {
-    const { modeId, variant } = state.context;
-    nodeId = project.gameModes.modes.find(({ id }) => id === modeId)
-      ?.backgroundNodes[variant];
-  }
   const node = nodeId
     ? project.nodes.find((candidate) => candidate.id === nodeId)
     : undefined;
@@ -113,7 +95,7 @@ export function getResourcePickerCandidates(
         editorResourcePrimaryPath(resource).toLowerCase().includes(query)
       );
     })
-    .map((resource) => candidateFromResource(project, resource, state.context))
+    .map((resource) => candidateFromResource(project, resource))
     .sort((left, right) =>
       left.resourceId.localeCompare(right.resourceId, "en"),
     );
@@ -127,25 +109,16 @@ function candidateFromResource(
     | EditorAudioLayoutResource
     | EditorJsonLayoutResource
   >,
-  context: LayoutResourceBindingContext,
 ): LayoutResourcePickerCandidate {
   const referenceCount = getLayoutResourceReferences(
     project,
     resource.id,
   ).length;
-  const forbidden =
-    context.kind === "assign-background" &&
-    (resource.kind === "image-string" || resource.kind === "vni");
-  const needsArtSize =
-    context.kind === "assign-background" &&
-    resource.kind === "spine" &&
-    (project.variants[context.variant].artSize.width <= 0 ||
-      project.variants[context.variant].artSize.height <= 0);
   const summary =
     resource.kind === "image"
       ? `${resource.size.width}×${resource.size.height}`
       : resource.kind === "spine"
-        ? `${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}${needsArtSize ? " · 背景需手填 art size" : ""}`
+        ? `${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}` : " · 无 export bounds"}`
         : resource.kind === "vni"
           ? `${resource.project.stage.width}×${resource.project.stage.height} · ${resource.project.stage.duration}s · ${resource.assetPaths.length} assets`
           : `${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
@@ -153,9 +126,8 @@ function candidateFromResource(
     resourceId: resource.id,
     kind: resource.kind,
     primaryPath: editorResourcePrimaryPath(resource),
-    status: needsArtSize ? "incomplete" : "ready",
+    status: "ready",
     referenceCount,
     summary,
-    ...(forbidden ? { disabledReason: `${resource.kind} 不能设为背景` } : {}),
   });
 }

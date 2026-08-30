@@ -24,7 +24,7 @@ import { createSceneLayoutPackageRuntime } from "./package-runtime.js";
 import { resolveSceneLayoutFrameViewport } from "./geometry.js";
 import { loadSceneLayoutPackageFromZipBytes } from "./production-zip.js";
 import type {
-  SceneLayoutManifestV1,
+  SceneLayoutManifestLatest,
   SceneLayoutPackageRuntime,
 } from "./types.js";
 
@@ -105,7 +105,7 @@ export async function createSceneOtherSceneFlowRuntime(options: {
       application,
       runtime,
       readiness,
-      resource.layout.manifest,
+      resource.runtimeManifest,
       options.random ?? secureSceneOtherSceneBoundedRandom,
       options.operationPlan,
     );
@@ -126,7 +126,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
   readonly readiness: SceneOtherSceneFlowReadiness;
   readonly #application: Application;
   readonly #runtime: SceneLayoutPackageRuntime;
-  readonly #manifest: SceneLayoutManifestV1;
+  readonly #manifest: SceneLayoutManifestLatest;
   readonly #random: SceneOtherSceneBoundedRandom;
   readonly #statePhases: ReadonlyMap<string, "stable" | "once">;
   readonly #operationPlan: SlotOperationPlanV2 | null;
@@ -148,7 +148,7 @@ class DefaultSceneOtherSceneFlowRuntime implements SceneOtherSceneFlowRuntime {
     application: Application,
     runtime: SceneLayoutPackageRuntime,
     readiness: SceneOtherSceneFlowReadiness,
-    manifest: SceneLayoutManifestV1,
+    manifest: SceneLayoutManifestLatest,
     random: SceneOtherSceneBoundedRandom,
     operationPlan?: SlotOperationPlanV2,
   ) {

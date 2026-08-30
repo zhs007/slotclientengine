@@ -89,7 +89,6 @@ export interface EditorResourceReference {
   readonly nodeId: string;
   readonly role:
     | "layer"
-    | "background"
     | "scene-transition"
     | "mode-bgm"
     | "event-audio"
@@ -125,20 +124,6 @@ export function editorResourcePaths(
   if (resource.kind === "vni")
     return [resource.projectPath, ...resource.assetPaths];
   return [resource.manifestPath, ...resource.assetPaths];
-}
-
-export function editorResourceArtSize(
-  resource: EditorLayoutResource,
-): { readonly width: number; readonly height: number } | undefined {
-  // A Spine skeleton header describes exported content bounds. It does not
-  // declare the scene's art-space canvas, so only raster images are intrinsic.
-  if (resource.kind === "image") return resource.size;
-  if (resource.kind === "vni")
-    return {
-      width: resource.project.stage.width,
-      height: resource.project.stage.height,
-    };
-  return undefined;
 }
 
 export function editorResourceSignature(

@@ -9,14 +9,12 @@ const state = vi.hoisted(() => {
     update: vi.fn(),
     applyGeometryManifest: vi.fn(),
     applyViewport: vi.fn(() => ({
-      variantId: "default",
-      orientationVariantId: "landscape",
-      artSize: { width: 100, height: 100 },
+      variantId: "landscape",
       viewportSize: { width: 100, height: 100 },
       visibleRect: { x: 0, y: 0, width: 100, height: 100 },
       worldOffset: { x: 0, y: 0 },
       focusRectInViewport: { x: 10, y: 10, width: 80, height: 80 },
-      reels: {},
+      main: mainSnapshot(),
     })),
     getNode: vi.fn(() => ({
       getBounds: () => ({ x: 12, y: 14, width: 30, height: 40 }),
@@ -30,6 +28,7 @@ const state = vi.hoisted(() => {
     startAwardCelebrationForCurrentMode: vi.fn(),
     requestAdvanceAwardCelebration: vi.fn(),
     getGameModeIds: vi.fn(() => ["BaseGame", "FreeGame"]),
+    getStableGameMode: vi.fn(() => "BaseGame"),
     getGameModeSnapshot: vi.fn(() => ({
       stableMode: "BaseGame",
       targetMode: null,
@@ -76,7 +75,7 @@ const state = vi.hoisted(() => {
     runtime,
     packageRuntime,
     pkg,
-    validate: vi.fn(async () => pkg),
+    validate: vi.fn(async (_manifest: unknown) => pkg),
     resize: vi.fn(),
     stageAdd: vi.fn(),
     stageAddAt: vi.fn(),
@@ -118,22 +117,32 @@ const state = vi.hoisted(() => {
 
 function gridSnapshot(columns = 2, rows = 2) {
   return {
-    variantId: "default",
-    orientationVariantId: "landscape",
-    artSize: { width: 100, height: 100 },
+    variantId: "landscape",
     viewportSize: { width: 100, height: 100 },
     visibleRect: { x: 0, y: 0, width: 100, height: 100 },
     worldOffset: { x: 0, y: 0 },
     focusRectInViewport: { x: 10, y: 10, width: 80, height: 80 },
-    reels: {
-      main: {
-        columns,
-        rows,
-        cellSize: { width: 20, height: 20 },
-        stride: { width: 25, height: 23 },
-        viewportRect: { x: 7, y: 11, width: 45, height: 43 },
-      },
+    main: {
+      ...mainSnapshot(),
+      columns,
+      rows,
+      viewportRect: { x: 7, y: 11, width: 45, height: 43 },
     },
+  };
+}
+
+function mainSnapshot() {
+  return {
+    id: "main" as const,
+    variantId: "landscape" as "landscape" | "portrait",
+    enabled: true,
+    columns: 2,
+    rows: 2,
+    cellSize: { width: 20, height: 20 },
+    gap: { x: 5, y: 3 },
+    stride: { width: 25, height: 23 },
+    layoutRect: { x: -22.5, y: -21.5, width: 45, height: 43 },
+    viewportRect: { x: 7, y: 11, width: 45, height: 43 },
   };
 }
 
@@ -295,11 +304,16 @@ vi.mock("../src/preview/preview-guides.js", () => ({
 }));
 
 import { LayoutPreview } from "../src/preview/layout-preview.js";
+import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore/scene-layout/data";
 import { imageManifest, assetBytes } from "./fixtures.js";
 
 describe("LayoutPreview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.validate.mockImplementation(async (manifest) => ({
+      ...state.pkg,
+      manifest: upgradeSceneLayoutManifestToLatest(manifest),
+    }));
     state.packageRuntime.getGameModeSnapshot.mockImplementation(() => ({
       stableMode: "BaseGame",
       displayedMode: "BaseGame",
@@ -341,14 +355,12 @@ describe("LayoutPreview", () => {
     state.tickerCallbacks.length = 0;
     state.canvas.removeAttribute("style");
     state.runtime.applyViewport.mockReturnValue({
-      variantId: "default",
-      orientationVariantId: "landscape",
-      artSize: { width: 100, height: 100 },
+      variantId: "landscape",
       viewportSize: { width: 100, height: 100 },
       visibleRect: { x: 0, y: 0, width: 100, height: 100 },
       worldOffset: { x: 0, y: 0 },
       focusRectInViewport: { x: 10, y: 10, width: 80, height: 80 },
-      reels: {},
+      main: mainSnapshot(),
     });
   });
 
@@ -365,7 +377,7 @@ describe("LayoutPreview", () => {
     preview.setPageSize({ width: 800, height: 600 });
     preview.setZoom(1.5);
     preview.setGuideVisibility({ showFocus: false, showReels: true });
-    expect(state.runtime.init).toHaveBeenCalledTimes(1);
+    expect(state.packageRuntime.init).toHaveBeenCalledTimes(1);
     expect(state.resize).toHaveBeenCalled();
     expect(state.runtime.applyViewport).toHaveBeenLastCalledWith({
       width: 1600,
@@ -373,12 +385,12 @@ describe("LayoutPreview", () => {
     });
     expect(state.resize).toHaveBeenLastCalledWith(1600, 1000);
     expect(state.canvas.style.marginTop).not.toBe("0px");
-    expect(diagnostics.textContent).toContain("variant=default");
+    expect(diagnostics.textContent).toContain("variant=landscape");
     expect(diagnostics.textContent).toContain("logical=1600×1000");
     preview.clear();
     expect(diagnostics.textContent).toContain("暂停");
     preview.destroy();
-    expect(state.runtime.destroy).toHaveBeenCalled();
+    expect(state.packageRuntime.destroy).toHaveBeenCalled();
     expect(state.appDestroy).toHaveBeenCalled();
   });
 
@@ -388,7 +400,7 @@ describe("LayoutPreview", () => {
     document.body.append(host, diagnostics);
     const preview = new LayoutPreview(host, diagnostics);
     await preview.init();
-    state.runtime.init.mockRejectedValueOnce(new Error("bad player"));
+    state.packageRuntime.init.mockRejectedValueOnce(new Error("bad player"));
     await expect(preview.setLayout(imageManifest, assetBytes)).rejects.toThrow(
       /bad player/,
     );
@@ -406,7 +418,7 @@ describe("LayoutPreview", () => {
     state.runtime.applyViewport.mockReturnValue({
       ...gridSnapshot(),
       variantId: "portrait",
-      orientationVariantId: "portrait",
+      main: { ...mainSnapshot(), variantId: "portrait" },
     });
     await preview.setLayout(imageManifest, assetBytes);
 
@@ -628,6 +640,7 @@ describe("LayoutPreview", () => {
         modes: [
           {
             id: "BaseGame",
+            backgroundNodes: { default: "bg" },
             nodeStates: {},
             symbolPackage: "symbols-fixture",
           },
@@ -686,7 +699,7 @@ describe("LayoutPreview", () => {
     preview.destroy();
   });
 
-  it("samples reel windows, renders runtime geometry and preserves the scene across relayout", async () => {
+  it("samples reel windows and leaves rendering to the combined runtime", async () => {
     state.runtime.applyViewport.mockReturnValue(gridSnapshot());
     const randomSource = {
       nextUint32: vi.fn().mockReturnValueOnce(1).mockReturnValueOnce(0),
@@ -705,17 +718,8 @@ describe("LayoutPreview", () => {
       ["B", "A"],
       ["B", "A"],
     ]);
-    expect(catalog.createSymbolPlayer).toHaveBeenCalledTimes(4);
-    expect(renderSymbols[0].position.set).toHaveBeenCalledWith(10, 10);
-    expect(renderSymbols[1].position.set).toHaveBeenCalledWith(35, 10);
-    expect(renderSymbols[2].position.set).toHaveBeenCalledWith(10, 33);
-    expect(state.containerInstances[0]?.position.set).toHaveBeenCalledWith(
-      7,
-      11,
-    );
-    expect(renderSymbols[2].scale.set).toHaveBeenCalledWith(1.5);
-    expect(renderSymbols[2].setPresentationValue).toHaveBeenCalledWith(25);
-    expect(renderSymbols[2].zIndex).toBe(10);
+    expect(catalog.createSymbolPlayer).not.toHaveBeenCalled();
+    expect(renderSymbols).toEqual([]);
     preview.setPageSize({ width: 800, height: 600 });
     preview.setGuideVisibility({ showFocus: false, showReels: false });
     expect(preview.getSymbolPreviewSnapshot()?.scene).toBe(sampled.scene);
@@ -740,19 +744,21 @@ describe("LayoutPreview", () => {
       rows: 2,
     });
 
-    preview.applyGeometryManifest({
-      ...imageManifest,
-      nodes: [
-        {
-          ...imageManifest.nodes[0],
-          placements: { default: { x: 4, y: 6, scale: 1 } },
-        },
-      ],
-    });
+    preview.applyGeometryManifest(
+      upgradeSceneLayoutManifestToLatest({
+        ...imageManifest,
+        nodes: [
+          {
+            ...imageManifest.nodes[0],
+            placements: { default: { x: 4, y: 6, scale: 1 } },
+          },
+        ],
+      }),
+    );
     preview.setSelectedLayer("bg");
 
     expect(state.runtime.applyGeometryManifest).toHaveBeenCalledOnce();
-    expect(catalog.createSymbolPlayer).toHaveBeenCalledTimes(4);
+    expect(catalog.createSymbolPlayer).not.toHaveBeenCalled();
     expect(state.graphicsRect).toHaveBeenCalledWith(12, 14, 30, 40);
     expect(state.graphicsStroke).toHaveBeenCalledWith({
       alpha: 1,
@@ -910,7 +916,7 @@ describe("LayoutPreview", () => {
     resolveStale(stalePackage);
     await stale;
     expect(stalePackage.destroy).toHaveBeenCalledTimes(1);
-    expect(state.runtime.init).toHaveBeenCalledTimes(1);
+    expect(state.packageRuntime.init).toHaveBeenCalledTimes(1);
     preview.destroy();
   });
 

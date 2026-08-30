@@ -8,10 +8,6 @@ export function setNodeOrder(
 ): void {
   const node = project.nodes.find((candidate) => candidate.id === nodeId);
   if (!node) throw new Error(`未知图层：${nodeId}`);
-  if (isBackgroundNode(project, nodeId))
-    throw new Error(
-      "背景 order 由主状态背景层级自动管理，不能在普通图层 Inspector 修改。",
-    );
   assertSafeOrder(order, `图层 ${nodeId}`);
   assertUnusedOrder(project, order, { kind: "node", id: nodeId });
   assertPopupsAboveArt(project, { nodeId, order });
@@ -127,10 +123,4 @@ function assertUnusedOrder(
 function assertSafeOrder(order: number, label: string): void {
   if (!Number.isSafeInteger(order))
     throw new Error(`${label} order 必须是安全整数。`);
-}
-
-function isBackgroundNode(project: EditorProject, nodeId: string): boolean {
-  return project.gameModes.modes.some((mode) =>
-    Object.values(mode.backgroundNodes).includes(nodeId),
-  );
 }

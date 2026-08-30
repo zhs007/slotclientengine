@@ -8,8 +8,8 @@
 
 当前接口只支持 `RenderGridCellReelSet` 类型的 main reel：
 
-- 不局限于 `game002v2`，任何采用 grid-cell main reel 的游戏均可使用。
-- 当前 `game003v2` 使用 standard reel，不能直接使用这些接口。
+- 任何采用 grid-cell main reel 的游戏均可使用。
+- standard reel 不能直接使用这些接口。
 - standard reel 若需要相同能力，应为 `RenderReelSet` 增加对应的 occurrence ownership 和 transfer 实现，而不是把游戏业务硬编码进 rendercore。
 
 这里的 occurrence 指盘面上一次实际出现的完整 symbol renderer identity，不是复制出来的 texture 或 Sprite。

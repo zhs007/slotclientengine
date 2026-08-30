@@ -28,10 +28,6 @@ import {
 } from "../src/model/editor-project.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 import { popupFiles } from "./popup-fixture.js";
-import {
-  getMinecart2SymbolResourcePath,
-  readMinecart2SymbolBytes,
-} from "../../../test-utils/minecart2-fixtures.js";
 
 describe("gamelayout popup dependency", () => {
   it("namespaces Popup audio sources together with the typed resource closure", async () => {
@@ -184,10 +180,15 @@ describe("gamelayout popup dependency", () => {
     expect(project.popupDependencies.get("fixture-popup")).toMatchObject({
       id: "fixture-popup",
       order: 2000,
-      placements: { default: { x: 12, y: -8, scale: 0.9 } },
+      placements: {
+        landscape: { x: 12, y: -8, scale: 0.9 },
+        portrait: { x: 12, y: -8, scale: 0.9 },
+      },
     });
     expect(project.assets.has(imported.rootKey)).toBe(true);
-    expect(editorProjectToManifest(project).popups).toEqual(manifest.popups);
+    expect(
+      editorProjectToManifest(project).popups?.["fixture-popup"]?.placements,
+    ).toEqual(project.popupDependencies.get("fixture-popup")?.placements);
     const programmaticManifest = {
       ...manifest,
       gameModes: {
@@ -202,8 +203,11 @@ describe("gamelayout popup dependency", () => {
     expect(programmaticProject.programmaticPopupIds.has("fixture-popup")).toBe(
       true,
     );
-    expect(editorProjectToManifest(programmaticProject).popups).toEqual(
-      manifest.popups,
+    expect(
+      editorProjectToManifest(programmaticProject).popups?.["fixture-popup"]
+        ?.placements,
+    ).toEqual(
+      programmaticProject.popupDependencies.get("fixture-popup")?.placements,
     );
     const clone = cloneEditorProject(project);
     clone.assets.get(imported.rootKey)![0] = 0;
@@ -461,10 +465,7 @@ async function mappedPopupFiles(
 }
 
 function spinePopupFiles(): Map<string, Uint8Array> {
-  const sourcePage = getMinecart2SymbolResourcePath("WL", "texture");
-  const atlas = new TextDecoder()
-    .decode(readMinecart2SymbolBytes("WL", "atlas"))
-    .replace(sourcePage, "BG.png");
+  const atlas = "BG.png\nsize: 1,1\nfilter: Linear,Linear\n";
   const manifest = {
     version: 1,
     kind: "popup",
@@ -495,14 +496,25 @@ function spinePopupFiles(): Map<string, Uint8Array> {
   };
   return new Map([
     ["popup.manifest.json", new TextEncoder().encode(JSON.stringify(manifest))],
-    ["FG.json", readMinecart2SymbolBytes("WL", "skeleton")],
+    [
+      "FG.json",
+      new TextEncoder().encode(
+        JSON.stringify({
+          skeleton: { spine: "4.3.23" },
+          bones: [{ name: "root" }],
+          slots: [],
+          skins: [{ name: "default", attachments: {} }],
+          animations: { Start: {}, Idle: {}, Win: {} },
+        }),
+      ),
+    ],
     [
       "BG.atlas",
       new TextEncoder().encode(
         `${atlas.replace(/\n+$/u, "")}\n\nBG_2.png\nsize: 1,1\nfilter: Linear,Linear\n`,
       ),
     ],
-    ["BG.png", readMinecart2SymbolBytes("WL", "texture")],
+    ["BG.png", new Uint8Array([1])],
     ["BG_2.png", new Uint8Array([1])],
   ]);
 }

@@ -13,11 +13,11 @@ import {
   createSceneLayoutFramePolicy,
   inspectSceneLayoutPackageZipBytes,
   loadSceneLayoutPackageFromZipBytes,
-  materializeInitialSceneLayoutManifest,
   parseSlotTemplatePresentationProfile,
   validateInspectedSlotTemplateCompatibility,
   validateSlotTemplateCompatibility,
   type SceneLayoutManifest,
+  type SceneLayoutManifestLatest,
   type SlotTemplateCompatibilitySnapshot,
   type SlotTemplatePresentationProfileV1,
 } from "@slotclientengine/rendercore/scene-layout/editor";
@@ -311,17 +311,24 @@ function parseBetOption(value: unknown, path: string): SlotGameBetOption {
   };
 }
 
-function resolveInitialDesignSize(manifest: SceneLayoutManifest): {
+function resolveInitialDesignSize(manifest: SceneLayoutManifestLatest): {
   readonly width: number;
   readonly height: number;
 } {
-  const effective =
-    manifest.version !== 1
-      ? materializeInitialSceneLayoutManifest(manifest)
-      : manifest;
-  return effective.adaptation.mode === "maximized-focus"
-    ? effective.adaptation.artSize
-    : effective.adaptation.variants.landscape.artSize;
+  const mode = manifest.gameModes.modes.find(
+    (candidate) => candidate.id === manifest.gameModes.initialMode,
+  )!;
+  const variant = mode.main.variants.landscape;
+  return {
+    width:
+      variant.focusRect.width +
+      (variant.minFocusMargin?.left ?? 0) +
+      (variant.minFocusMargin?.right ?? 0),
+    height:
+      variant.focusRect.height +
+      (variant.minFocusMargin?.top ?? 0) +
+      (variant.minFocusMargin?.bottom ?? 0),
+  };
 }
 
 function createCapabilityWarnings(

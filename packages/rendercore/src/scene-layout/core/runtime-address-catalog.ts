@@ -134,7 +134,7 @@ export function compileGameLayoutRuntimeEventCatalog(
       });
   }
 
-  const mainReel = source.manifest.reels.main;
+  const mainReel = source.manifest.main;
   const legacySymbolBindingId = source.manifest.symbolPackage?.manifest
     .split("/")
     .at(-2);

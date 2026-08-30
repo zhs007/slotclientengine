@@ -2,7 +2,6 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const PACKAGE_ROOT = resolve(__dirname, "..");
-const REPO_ROOT = resolve(PACKAGE_ROOT, "../..");
 
 describe("gameframeworks UI factory source boundary", () => {
   it("keeps test-branch frameworks, event continuations, and global stores out of source", () => {
@@ -50,24 +49,6 @@ describe("gameframeworks UI factory source boundary", () => {
     expect(source).not.toContain("createSpinePopupPlayer");
     expect(source).not.toContain("SpinePopupPlayer");
     expect(source).not.toContain("SpinePopupSnapshot");
-  });
-
-  it("does not add lower-level dependencies to game002v2 or game003v2", () => {
-    for (const appName of ["game002v2", "game003v2"]) {
-      const pkg = JSON.parse(
-        readFileSync(join(REPO_ROOT, "apps", appName, "package.json"), "utf8"),
-      ) as { dependencies?: Record<string, string> };
-      expect(pkg.dependencies).toHaveProperty(
-        "@slotclientengine/gameframeworks",
-      );
-      expect(pkg.dependencies).not.toHaveProperty(
-        "@slotclientengine/uiframeworks",
-      );
-      expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/netcore");
-      expect(pkg.dependencies).not.toHaveProperty(
-        "@slotclientengine/logiccore",
-      );
-    }
   });
 });
 

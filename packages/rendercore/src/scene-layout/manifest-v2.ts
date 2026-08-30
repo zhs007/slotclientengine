@@ -7,6 +7,7 @@ import type {
   SceneLayoutAdaptation,
   SceneLayoutGameModeV2,
   SceneLayoutManifest,
+  SceneLayoutManifestLegacyModern,
   SceneLayoutManifestModern,
   SceneLayoutManifestV1,
   SceneLayoutManifestV2,
@@ -154,10 +155,17 @@ export function upgradeSceneLayoutManifestToV2(
   if (raw.version === 2) return parseSceneLayoutManifestV2(normalized);
   const source = parseSceneLayoutManifestV1(normalized);
   const fallbackBackgrounds = adaptationBackgrounds(source.adaptation);
+  const initialNodeStates = Object.fromEntries(
+    source.nodes.flatMap((node) =>
+      node.resource.kind === "spine" && "stateMachine" in node.resource
+        ? [[node.id, node.resource.stateMachine.initialState]]
+        : [],
+    ),
+  );
   const sourceModes = source.gameModes?.modes ?? [
     {
       id: "BaseGame",
-      nodeStates: {},
+      nodeStates: initialNodeStates,
       ...(source.symbolPackage ? {} : {}),
     },
   ];
@@ -218,7 +226,7 @@ export function upgradeSceneLayoutManifestToV2(
 }
 
 export function materializeInitialSceneLayoutManifest(
-  manifest: SceneLayoutManifestModern,
+  manifest: SceneLayoutManifestLegacyModern,
 ): SceneLayoutManifestV1 {
   return materializeSceneLayoutManifestForMode(
     manifest,
@@ -231,6 +239,10 @@ export function materializeSceneLayoutManifestForMode(
   modeId?: string,
 ): SceneLayoutManifestV1 {
   if (manifest.version === 1) return parseSceneLayoutManifestV1(manifest);
+  if (manifest.version === 7)
+    fail(
+      "Scene Layout v7 must be consumed directly and cannot be materialized as legacy art space.",
+    );
   const parsed = parseSceneLayoutManifestModernWithoutMaterialization(manifest);
   const selected = modeId ?? parsed.gameModes.initialMode;
   const materialized = materializeModeDraft(parsed, selected);
@@ -240,8 +252,8 @@ export function materializeSceneLayoutManifestForMode(
 }
 
 function parseSceneLayoutManifestModernWithoutMaterialization(
-  value: SceneLayoutManifestModern,
-): SceneLayoutManifestModern {
+  value: SceneLayoutManifestLegacyModern,
+): SceneLayoutManifestLegacyModern {
   const mode = value.gameModes.modes.find(
     (candidate) => candidate.id === value.gameModes.initialMode,
   );
@@ -250,7 +262,7 @@ function parseSceneLayoutManifestModernWithoutMaterialization(
 }
 
 function materializeModeDraft(
-  manifest: SceneLayoutManifestModern,
+  manifest: SceneLayoutManifestLegacyModern,
   modeId: string,
 ): SceneLayoutManifestV1 {
   const mode = manifest.gameModes.modes.find(
