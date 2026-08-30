@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clampOceanPixelRatio,
   getOceanCameraProfile,
+  getUnderwaterBufferSize,
 } from "../src/ocean-config.js";
 
 describe("ocean camera profile", () => {
@@ -23,5 +24,20 @@ describe("ocean pixel ratio", () => {
     expect(clampOceanPixelRatio(3)).toBe(1.5);
     expect(clampOceanPixelRatio(1.25)).toBe(1.25);
     expect(clampOceanPixelRatio(Number.NaN)).toBe(1);
+  });
+});
+
+describe("underwater render target", () => {
+  it("uses a bounded sub-resolution buffer", () => {
+    expect(getUnderwaterBufferSize(1500, 2400)).toEqual({
+      width: 1080,
+      height: 1728,
+    });
+  });
+
+  it("rejects invalid drawing buffer dimensions", () => {
+    expect(() => getUnderwaterBufferSize(0, 100)).toThrow(
+      /Invalid underwater drawing buffer size/,
+    );
   });
 });

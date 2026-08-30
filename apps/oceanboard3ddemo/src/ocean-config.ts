@@ -17,3 +17,29 @@ export function clampOceanPixelRatio(pixelRatio: number): number {
   if (!Number.isFinite(pixelRatio) || pixelRatio <= 0) return 1;
   return Math.min(pixelRatio, 1.5);
 }
+
+export interface UnderwaterBufferSize {
+  readonly width: number;
+  readonly height: number;
+}
+
+export function getUnderwaterBufferSize(
+  drawingBufferWidth: number,
+  drawingBufferHeight: number,
+): UnderwaterBufferSize {
+  if (
+    !Number.isFinite(drawingBufferWidth) ||
+    !Number.isFinite(drawingBufferHeight) ||
+    drawingBufferWidth <= 0 ||
+    drawingBufferHeight <= 0
+  ) {
+    throw new RangeError(
+      `Invalid underwater drawing buffer size: ${String(drawingBufferWidth)}x${String(drawingBufferHeight)}.`,
+    );
+  }
+  const scale = 0.72;
+  return {
+    width: Math.max(1, Math.floor(drawingBufferWidth * scale)),
+    height: Math.max(1, Math.floor(drawingBufferHeight * scale)),
+  };
+}
