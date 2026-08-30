@@ -11,59 +11,105 @@ void main() {
 export const skyFragmentShader = /* glsl */ `
 uniform float uTime;
 uniform vec3 uSunDirection;
+uniform sampler2D uCloudTexture;
+uniform float uCloudTextureMix;
+uniform sampler2D uSmallCloudTexture;
+uniform float uSmallCloudTextureMix;
+uniform sampler2D uSkySunlight;
+uniform float uSkySunlightMix;
+uniform vec2 uResolution;
 varying vec3 vDirection;
 
-float hash21(vec2 point) {
-  point = fract(point * vec2(123.34, 345.45));
-  point += dot(point, point + 34.345);
-  return fract(point.x * point.y);
-}
-
-float valueNoise(vec2 point) {
-  vec2 cell = floor(point);
-  vec2 local = fract(point);
-  local = local * local * (3.0 - 2.0 * local);
-  float a = hash21(cell);
-  float b = hash21(cell + vec2(1.0, 0.0));
-  float c = hash21(cell + vec2(0.0, 1.0));
-  float d = hash21(cell + vec2(1.0, 1.0));
-  return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
-}
-
-float fbm(vec2 point) {
-  float value = 0.0;
-  float amplitude = 0.54;
-  for (int octave = 0; octave < 4; octave += 1) {
-    value += valueNoise(point) * amplitude;
-    point = point * 2.07 + vec2(7.1, 3.7);
-    amplitude *= 0.48;
-  }
-  return value;
+float sampleSunlightLayer(vec2 uv, float rotation, float scale) {
+  vec2 pivot = vec2(0.5, 0.015);
+  vec2 localUv = uv - pivot;
+  localUv /= scale;
+  float sine = sin(rotation);
+  float cosine = cos(rotation);
+  localUv = mat2(cosine, -sine, sine, cosine) * localUv;
+  vec2 layerUv = clamp(localUv + pivot, vec2(0.002), vec2(0.998));
+  return texture2D(uSkySunlight, layerUv).r;
 }
 
 void main() {
   vec3 direction = normalize(vDirection);
   float altitude = clamp(direction.y, 0.0, 1.0);
-  float skyMix = pow(altitude, 0.55);
-  vec3 horizon = vec3(0.035, 0.36, 0.67);
-  vec3 zenith = vec3(0.003, 0.105, 0.43);
+  float skyMix = pow(altitude, 0.32);
+  vec3 horizon = vec3(0.008, 0.34, 0.69);
+  vec3 zenith = vec3(0.001, 0.045, 0.31);
   vec3 color = mix(horizon, zenith, skyMix);
+  float horizonHaze = 1.0 - smoothstep(0.0, 0.115, altitude);
+  color = mix(color, vec3(0.1, 0.61, 0.82), horizonHaze * 0.42);
 
   float sunAlignment = max(dot(direction, uSunDirection), 0.0);
-  float sunGlow = pow(sunAlignment, 22.0);
-  float sunCore = pow(sunAlignment, 1300.0);
-  color += vec3(0.64, 0.9, 1.0) * sunGlow * 0.2;
-  color += vec3(1.0, 0.98, 0.82) * sunCore * 1.15;
+  float sunHaze = pow(sunAlignment, 10.0);
+  color += vec3(0.25, 0.72, 1.0) * sunHaze * 0.12;
 
-  float longitude = atan(direction.x, -direction.z) / 6.2831853 + 0.5;
-  vec2 cloudUv = vec2(longitude * 9.0, direction.y * 19.0);
-  float cloudField = fbm(cloudUv + vec2(uTime * 0.003, 0.0));
-  float cloudBand = smoothstep(0.012, 0.055, direction.y) *
-    (1.0 - smoothstep(0.12, 0.29, direction.y));
-  float clouds = smoothstep(0.59, 0.77, cloudField) * cloudBand;
-  float cloudShade = smoothstep(0.58, 0.84, fbm(cloudUv * 1.4 + 8.3));
-  vec3 cloudColor = mix(vec3(0.68, 0.84, 0.9), vec3(1.0), cloudShade);
-  color = mix(color, cloudColor, clouds * 0.32);
+  vec2 screenUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
+  float topCoordinate = 1.0 - screenUv.y;
+  vec2 sunlightUv = vec2(screenUv.x, clamp(topCoordinate / 0.205, 0.0, 1.0));
+  float skyRegion = 1.0 - smoothstep(0.195, 0.215, topCoordinate);
+  float layerARotation = sin(uTime * 0.45) * 0.12;
+  float layerBRotation = sin(uTime * 0.32 + 2.1) * -0.16;
+  float layerAScale = 1.055 + sin(uTime * 0.24 + 0.7) * 0.035;
+  float layerBScale = 0.955 + cos(uTime * 0.18 + 1.8) * 0.028;
+  float sunlightBase = pow(sampleSunlightLayer(sunlightUv, 0.0, 1.0), 1.12);
+  float sunlightLayerA = pow(
+    sampleSunlightLayer(sunlightUv, layerARotation, layerAScale),
+    1.28
+  );
+  float sunlightLayerB = pow(
+    sampleSunlightLayer(sunlightUv, layerBRotation, layerBScale),
+    1.38
+  );
+  float skySunlight = clamp(
+    sunlightBase * 0.46 + sunlightLayerA * 0.38 + sunlightLayerB * 0.3,
+    0.0,
+    1.08
+  ) * uSkySunlightMix * skyRegion;
+  float sunlightBreath = 0.975 + sin(uTime * 0.3) * 0.025;
+  color += vec3(0.86, 0.97, 1.0) * skySunlight * sunlightBreath * 0.82;
+
+  float cloudAzimuth = atan(direction.x, -direction.z);
+  float cloudElevation = asin(clamp(direction.y, -1.0, 1.0));
+  vec2 cloudUv = vec2(
+    cloudAzimuth / 0.64 + 0.5,
+    0.79 - cloudElevation / 0.32
+  );
+  vec4 cloudSample = texture2D(uCloudTexture, cloudUv);
+  float cloudFrame =
+    smoothstep(0.015, 0.055, cloudUv.x) *
+    (1.0 - smoothstep(0.945, 0.985, cloudUv.x));
+  float cloudAltitudeMask =
+    smoothstep(0.005, 0.035, direction.y) *
+    (1.0 - smoothstep(0.34, 0.5, direction.y));
+  float cloudAlpha =
+    cloudSample.a * cloudFrame * cloudAltitudeMask * uCloudTextureMix;
+  vec3 cloudColor = cloudSample.rgb;
+  cloudColor += vec3(0.16, 0.11, 0.025) * sunHaze * cloudAlpha;
+  color = mix(color, cloudColor, cloudAlpha);
+
+  float smallCloudDrift = sin(uTime * 0.025) * 0.075;
+  vec2 smallCloudUv = vec2(
+    cloudAzimuth / 0.64 + 0.5 + smallCloudDrift,
+    0.92 - cloudElevation / 0.32
+  );
+  vec4 smallCloudSample = texture2D(uSmallCloudTexture, smallCloudUv);
+  float smallCloudFrame =
+    smoothstep(0.025, 0.075, smallCloudUv.x) *
+    (1.0 - smoothstep(0.925, 0.975, smallCloudUv.x));
+  float smallCloudAltitudeMask =
+    smoothstep(0.012, 0.04, direction.y) *
+    (1.0 - smoothstep(0.31, 0.44, direction.y));
+  float smallCloudAlpha =
+    smallCloudSample.a *
+    smallCloudFrame *
+    smallCloudAltitudeMask *
+    uSmallCloudTextureMix *
+    0.78;
+  vec3 smallCloudColor = smallCloudSample.rgb;
+  smallCloudColor += vec3(0.13, 0.085, 0.018) * sunHaze * smallCloudAlpha;
+  color = mix(color, smallCloudColor, smallCloudAlpha);
 
   gl_FragColor = vec4(color, 1.0);
   #include <tonemapping_fragment>
@@ -140,8 +186,8 @@ float smootherStep(float edge0, float edge1, float value) {
 
 vec3 sampleSky(vec3 direction) {
   float altitude = clamp(direction.y * 0.5 + 0.5, 0.0, 1.0);
-  vec3 horizon = vec3(0.22, 0.69, 0.88);
-  vec3 zenith = vec3(0.008, 0.22, 0.58);
+  vec3 horizon = vec3(0.065, 0.61, 0.86);
+  vec3 zenith = vec3(0.004, 0.15, 0.52);
   return mix(horizon, zenith, pow(altitude, 0.72));
 }
 
@@ -149,9 +195,9 @@ void main() {
   vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
   float distanceToCamera = length(cameraPosition - vWorldPosition);
   vec2 screenUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
-  float detailFade = 1.0 - smoothstep(360.0, 650.0, distanceToCamera);
+  float detailFade = 1.0 - smoothstep(520.0, 980.0, distanceToCamera);
   float screenDetail = smootherStep(0.24, 0.78, screenUv.y);
-  float farDetailFade = 1.0 - smoothstep(520.0, 680.0, distanceToCamera);
+  float farDetailFade = 1.0 - smoothstep(760.0, 1050.0, distanceToCamera);
 
   vec2 point = vWorldPosition.xz;
   mat2 rotateA = mat2(0.94, -0.34, 0.34, 0.94);
@@ -215,19 +261,35 @@ void main() {
   color += vec3(0.08, 0.48, 0.62) * crest * 0.2;
 
   float sunAlignment = max(dot(reflectionDirection, uSunDirection), 0.0);
-  float broadGlint = pow(sunAlignment, 34.0);
+  float broadGlint = pow(sunAlignment, 19.0);
   vec2 glitterUv = heightUvB * 1.71 + vec2(uTime * 0.018, -uTime * 0.011);
   float glitterField = texture2D(uWaterHeight, glitterUv).r;
+  float lineGlint = pow(sunAlignment, 68.0);
+  float glitterDetail = texture2D(
+    uWaterHeight,
+    heightUvA * 2.73 + vec2(-uTime * 0.023, uTime * 0.015)
+  ).r;
   float sharpGlint = pow(sunAlignment, mix(125.0, 480.0, glitterField));
-  float fragmentedGlitter = smoothstep(0.58, 0.88, glitterField);
+  float fragmentedGlitter = smoothstep(0.56, 0.82, glitterField);
+  float sparseGlitter = fragmentedGlitter * smoothstep(0.58, 0.86, glitterDetail);
   float glintDistance = smootherStep(0.34, 0.76, screenUv.y) *
-    (1.0 - smoothstep(540.0, 680.0, distanceToCamera));
+    (1.0 - smoothstep(690.0, 980.0, distanceToCamera));
   vec3 sunColor = vec3(1.0, 0.94, 0.7);
   color += sunColor * glintDistance *
-    (broadGlint * 0.14 + sharpGlint * (0.18 + fragmentedGlitter * 0.82) * 1.08);
+    (broadGlint * 0.13 +
+      lineGlint * fragmentedGlitter * 0.24 +
+      sharpGlint * sparseGlitter * 1.12);
 
-  float horizonFade = smoothstep(390.0, 610.0, distanceToCamera);
-  color = mix(color, vec3(0.045, 0.4, 0.59), horizonFade * 0.46);
+  float farWaveShape =
+    sin(point.x * 0.012 + uTime * 0.14) * 0.58 +
+    sin(point.x * 0.027 - uTime * 0.09 + 1.7) * 0.42;
+  float horizonFade = smoothstep(
+    340.0 + farWaveShape * 34.0,
+    900.0 + farWaveShape * 18.0,
+    distanceToCamera
+  );
+  color = mix(color, vec3(0.115, 0.525, 0.655), horizonFade * 0.78);
+
   float microVariation = hash21(gl_FragCoord.xy + floor(uTime * 10.0)) - 0.5;
   color += microVariation * 0.008;
 
