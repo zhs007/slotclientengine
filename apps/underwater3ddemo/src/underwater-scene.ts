@@ -21,6 +21,7 @@ import {
   type Material,
 } from "three";
 import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
+import { BubbleField } from "./bubble-field.js";
 import { UnderwaterPass } from "./underwater-pass.js";
 
 const densityFlowTextureUrl = new URL(
@@ -263,6 +264,7 @@ export class UnderwaterRenderer {
   readonly #underwaterPass = new UnderwaterPass();
   readonly #animatedMaterials: ShaderMaterial[] = [];
   readonly #depthHazeLayers: DepthHazeLayer[] = [];
+  readonly #bubbleField = new BubbleField();
   readonly #ktx2Loader: KTX2Loader;
   #densityFlowTexture = new Texture();
   #surfaceCausticTexture = new Texture();
@@ -296,6 +298,8 @@ export class UnderwaterRenderer {
     this.#createSurfaceLightField();
     this.#createPrimaryVolumeLight();
     this.#createDepthHaze();
+    this.#bubbleField.mesh.renderOrder = 20;
+    this.#root.add(this.#bubbleField.mesh);
 
     this.#camera.position.set(0, 0.35, 18.8);
     this.#camera.lookAt(0, -0.2, -5.2);
@@ -365,6 +369,7 @@ export class UnderwaterRenderer {
       layer.mesh.position.y =
         layer.baseY + Math.cos(time * layer.drift * 0.73 + layer.phase) * 0.1;
     }
+    this.#bubbleField.update(time, this.#camera);
 
     this.#underwaterPass.render(
       this.#renderer,
