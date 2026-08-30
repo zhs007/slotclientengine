@@ -10,11 +10,11 @@ import {
 } from "../src/model/project.js";
 import { importPopupZip } from "../src/io/popup-zip.js";
 import {
-  getMinecart2SymbolResourcePath,
-  readMinecart2LogicalBytes,
-  readMinecart2LogicalJson,
-  readMinecart2SymbolBytes,
-} from "../../../test-utils/minecart2-fixtures.js";
+  getPopupSpinePath,
+  readPopupArtifactBytes,
+  readPopupArtifactJson,
+  readPopupSpineBytes,
+} from "./artifact-fixtures.js";
 
 describe("popup flat resource discovery", () => {
   it("discovers validated package font files", async () => {
@@ -35,14 +35,14 @@ describe("popup flat resource discovery", () => {
   });
 
   it("rejects loose VNI projects and requires an exported ZIP", async () => {
-    const projectBytes = readMinecart2LogicalBytes("big_win0721.json");
+    const projectBytes = readPopupArtifactBytes("big_win0721.json");
     const project = JSON.parse(new TextDecoder().decode(projectBytes)) as {
       assets: readonly { path: string }[];
     };
     const files = [
       sourceFile("bigwin.json", projectBytes),
       ...project.assets.map(({ path }) =>
-        sourceFile(path, readMinecart2LogicalBytes(path)),
+        sourceFile(path, readPopupArtifactBytes(path)),
       ),
     ];
     await expect(discoverPopupResources(files)).rejects.toThrow(
@@ -83,7 +83,7 @@ describe("popup flat resource discovery", () => {
       ),
     ];
     for (const name of projectNames) {
-      const project = structuredClone(readMinecart2LogicalJson(name)) as {
+      const project = structuredClone(readPopupArtifactJson(name)) as {
         assets: { path: string }[];
       };
       for (const child of project.assets) {
@@ -99,7 +99,7 @@ describe("popup flat resource discovery", () => {
       );
     }
     for (const [path, originalPath] of [...assetPaths].sort())
-      files.push(sourceFile(path, readMinecart2LogicalBytes(originalPath)));
+      files.push(sourceFile(path, readPopupArtifactBytes(originalPath)));
     await expect(discoverPopupResources(files)).rejects.toThrow(/散装 VNI/);
     await expect(
       discoverPopupResources([
@@ -110,7 +110,7 @@ describe("popup flat resource discovery", () => {
   });
 
   it("defaults to the only runtime and requires selection only for multiple runtimes", async () => {
-    const source = readMinecart2LogicalJson("big_win0721.json") as {
+    const source = readPopupArtifactJson("big_win0721.json") as {
       exportProfile: { id: string; purpose: string; assetScale: number };
       assets: readonly { path: string }[];
     };
@@ -171,7 +171,7 @@ describe("popup flat resource discovery", () => {
       for (const child of source.assets)
         entries.set(
           `${directory}/${child.path}`,
-          readMinecart2LogicalBytes(child.path),
+          readPopupArtifactBytes(child.path),
         );
     const zip = createDeterministicZip(entries);
     expect(inspectVniBundleProfiles(zip)?.map(({ id }) => id)).toEqual([
@@ -234,7 +234,7 @@ describe("popup flat resource discovery", () => {
 
   it("imports a runtime VNI bundle that contains a JPEG asset", async () => {
     const project = structuredClone(
-      readMinecart2LogicalJson("big_win0721.json"),
+      readPopupArtifactJson("big_win0721.json"),
     ) as {
       exportProfile: { id: string; purpose: string; assetScale: number };
       assets: { path: string }[];
@@ -272,7 +272,7 @@ describe("popup flat resource discovery", () => {
     for (const child of project.assets)
       entries.set(
         `runtime_100/${child.path}`,
-        child === jpegAsset ? jpeg() : readMinecart2LogicalBytes(child.path),
+        child === jpegAsset ? jpeg() : readPopupArtifactBytes(child.path),
       );
 
     const review = await discoverPopupResources([
@@ -293,20 +293,20 @@ describe("popup flat resource discovery", () => {
     });
   });
 
-  it("rewrites and validates an official Spine 4.3 closure", async () => {
-    const skeleton = getMinecart2SymbolResourcePath("WL", "skeleton");
-    const atlas = getMinecart2SymbolResourcePath("WL", "atlas");
-    const texture = getMinecart2SymbolResourcePath("WL", "texture");
-    const importedTexture = texture.replace(/\.png$/u, ".webp");
+  it("discovers and validates a Spine 4.3 closure", async () => {
+    const skeleton = getPopupSpinePath("skeleton");
+    const atlas = getPopupSpinePath("atlas");
+    const texture = getPopupSpinePath("texture");
+    const importedTexture = texture;
     const importedAtlas = new TextEncoder().encode(
       new TextDecoder()
-        .decode(readMinecart2SymbolBytes("WL", "atlas"))
+        .decode(readPopupSpineBytes("atlas"))
         .replace(texture, importedTexture),
     );
     const review = await discoverPopupResources([
-      sourceFile(skeleton, readMinecart2SymbolBytes("WL", "skeleton")),
+      sourceFile(skeleton, readPopupSpineBytes("skeleton")),
       sourceFile(atlas, importedAtlas),
-      sourceFile(importedTexture, readMinecart2SymbolBytes("WL", "texture")),
+      sourceFile(importedTexture, readPopupSpineBytes("texture")),
     ]);
     expect(review[0]).toMatchObject({ kind: "spine", rootKey: skeleton });
     expect(review[0]!.summary).toMatch(/animations/);

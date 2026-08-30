@@ -26,10 +26,7 @@ import {
 } from "../src/model/editor-project.js";
 import { SymbolEditorStore } from "../src/model/editor-store.js";
 import { readCraveFixtureJson } from "./crave-fixture.js";
-import {
-  readMinecart2LogicalJson,
-  readMinecart2SymbolFixtureBytes,
-} from "../../../test-utils/minecart2-fixtures.js";
+import { readSymbolArtifactFixtureBytes } from "./artifact-fixtures.js";
 
 const gameConfig = {
   paytable: {
@@ -39,7 +36,7 @@ const gameConfig = {
   symbolCodes: { B: 2, A: 1 },
   reels: { main: [[1, 2]] },
 };
-const imageBytes = () => readMinecart2SymbolFixtureBytes("H1.png");
+const imageBytes = () => readSymbolArtifactFixtureBytes("H1.png");
 const vniProjectBytes = () =>
   new TextEncoder().encode(
     JSON.stringify({
@@ -60,6 +57,22 @@ const vniProjectBytes = () =>
       particles: [],
     }),
   );
+
+function createStaticSymbolManifest(rawGameConfig: unknown) {
+  const paytable = (
+    rawGameConfig as { paytable: Record<string, { symbol: string }> }
+  ).paytable;
+  return {
+    version: 1,
+    states: [],
+    symbols: Object.fromEntries(
+      Object.values(paytable).map(({ symbol }) => [
+        symbol,
+        { normal: `./${symbol}.png`, scale: 1 },
+      ]),
+    ),
+  };
+}
 
 describe("symbol editor typed project", () => {
   it("loads legacy v1 completion behavior and exports canonical v2 definitions", () => {
@@ -474,7 +487,7 @@ describe("symbol editor typed project", () => {
     expect(parseSymbolStateTextureManifest(raw).symbols.B.states).toEqual({});
   });
 
-  it("round-trips the production game002 and game003 manifests through typed drafts", () => {
+  it("round-trips the retained game configs through typed drafts", () => {
     for (const fixture of [
       {
         id: "game002",
@@ -483,22 +496,17 @@ describe("symbol editor typed project", () => {
       },
       {
         id: "game003",
-        config: null,
-        manifest: "minecart2",
+        config: "../../../assets/gamecfg003/gameconfig.json",
+        manifest: null,
       },
     ]) {
-      const rawGameConfig = fixture.config
-        ? JSON.parse(
-            readFileSync(new URL(fixture.config, import.meta.url), "utf8"),
-          )
-        : readMinecart2LogicalJson("gameconfig.json");
-      const rawManifest = fixture.manifest
-        ? fixture.manifest === "minecart2"
-          ? readMinecart2LogicalJson("symbol-state-textures.manifest.json")
-          : JSON.parse(
-              readFileSync(new URL(fixture.manifest, import.meta.url), "utf8"),
-            )
-        : readCraveFixtureJson("symbol-state-textures.manifest.json");
+      const rawGameConfig = JSON.parse(
+        readFileSync(new URL(fixture.config, import.meta.url), "utf8"),
+      );
+      const rawManifest =
+        fixture.id === "game002"
+          ? readCraveFixtureJson("symbol-state-textures.manifest.json")
+          : createStaticSymbolManifest(rawGameConfig);
       const project = createFromImportedPackage({
         packageManifest: {
           version: 1,

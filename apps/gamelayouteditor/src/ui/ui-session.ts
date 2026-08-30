@@ -1,8 +1,5 @@
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout/data";
-import {
-  activeVariantIds,
-  type EditorProject,
-} from "../model/editor-project.js";
+import type { EditorProject } from "../model/editor-project.js";
 import type { SymbolOtherScenePreviewBinding } from "../preview/other-scene-preview.js";
 
 export type WorkspaceTab =
@@ -14,17 +11,11 @@ export type WorkspaceTab =
   | "project";
 
 export type LayoutSelection =
-  | { readonly kind: "background"; readonly variant: SceneLayoutVariantId }
   | { readonly kind: "reel"; readonly reelId: "main" }
   | { readonly kind: "layer"; readonly nodeId: string };
 
 export type LayoutResourceBindingContext =
   | { readonly kind: "add-layer" }
-  | {
-      readonly kind: "assign-background";
-      readonly modeId: string;
-      readonly variant: SceneLayoutVariantId;
-    }
   | { readonly kind: "rebind-layer"; readonly nodeId: string };
 
 export interface ResourcePickerState {
@@ -35,10 +26,6 @@ export interface ResourcePickerState {
   nodeId: string;
   variants: SceneLayoutVariantId[];
   defaultAnimation: string;
-  backgroundArtSize: {
-    width: number;
-    height: number;
-  };
 }
 
 export interface EditorUiSession {
@@ -118,13 +105,8 @@ export function createEditorUiSession(): EditorUiSession {
 }
 
 export function defaultLayoutSelection(
-  project: EditorProject,
+  _project: EditorProject,
 ): LayoutSelection {
-  for (const variant of activeVariantIds(project)) {
-    if (project.variants[variant].backgroundNode) {
-      return { kind: "background", variant };
-    }
-  }
   return { kind: "reel", reelId: "main" };
 }
 
@@ -134,20 +116,11 @@ export function normalizeLayoutSelection(
 ): LayoutSelection {
   if (!selection) return defaultLayoutSelection(project);
   if (selection.kind === "reel") return selection;
-  if (selection.kind === "background") {
-    return activeVariantIds(project).includes(selection.variant)
-      ? selection
-      : defaultLayoutSelection(project);
-  }
   const node = project.nodes.find((item) => item.id === selection.nodeId);
-  const background = project.gameModes.modes.some((mode) =>
-    Object.values(mode.backgroundNodes).includes(selection.nodeId),
-  );
-  return node && !background ? selection : defaultLayoutSelection(project);
+  return node ? selection : defaultLayoutSelection(project);
 }
 
 export function selectionKey(selection: LayoutSelection): string {
-  if (selection.kind === "background") return `background:${selection.variant}`;
   if (selection.kind === "layer") return `layer:${selection.nodeId}`;
   return "reel:main";
 }

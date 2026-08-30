@@ -5,18 +5,13 @@ import {
   activeVariantIds,
   activateEditorGameMode,
   createEditorGameModeDraft,
-  resetVariantGeometry,
-  updateVariantFocusOffsetsFromRect,
+  updateVariantFocusFromReel,
   validateEditorTransitionEvent,
   type EditorGameModeTransitionDraft,
   type EditorGameModeDraft,
   type EditorProject,
-  type EditorMode,
 } from "./editor-project.js";
-import {
-  editorResourceArtSize,
-  editorResourcePaths,
-} from "./editor-resource.js";
+import { editorResourcePaths } from "./editor-resource.js";
 import {
   nextAvailablePopupOrder,
   setPopupOrder as setEditorPopupOrder,
@@ -24,15 +19,11 @@ import {
 
 const MODE_ID = /^[A-Za-z][A-Za-z0-9_-]*$/u;
 
-export function addGameMode(
-  project: EditorProject,
-  id: string,
-  adaptationMode: EditorMode,
-): void {
+export function addGameMode(project: EditorProject, id: string): void {
   assertModeId(id);
   if (project.gameModes.modes.some((mode) => mode.id === id))
     throw new Error(`游戏模式已存在：${id}`);
-  project.gameModes.modes.push(createEditorGameModeDraft(id, adaptationMode));
+  project.gameModes.modes.push(createEditorGameModeDraft(id));
 }
 
 export function renameGameMode(
@@ -48,8 +39,15 @@ export function renameGameMode(
   )
     throw new Error(`游戏模式已存在：${nextId}`);
   mode.id = nextId;
-  for (const node of project.nodes)
+  for (const node of project.nodes) {
     if (node.gameMode === currentId) node.gameMode = nextId;
+    if (!node.scope || !(currentId in node.scope)) continue;
+    const scope = { ...node.scope };
+    const variants = scope[currentId]!;
+    delete scope[currentId];
+    scope[nextId] = variants;
+    node.scope = scope;
+  }
   for (const transition of project.gameModes.transitions) {
     if (transition.fromModeId === currentId) transition.fromModeId = nextId;
     if (transition.toModeId === currentId) transition.toModeId = nextId;
@@ -87,7 +85,7 @@ export function deleteGameMode(project: EditorProject, id: string): void {
       `游戏模式 ${id} 仍被 primary action 引用：${actionReferences.join(", ")}`,
     );
   const layerReferences = project.nodes
-    .filter((node) => node.gameMode === id)
+    .filter((node) => node.gameMode === id || Boolean(node.scope?.[id]))
     .map((node) => node.id);
   if (layerReferences.length)
     throw new Error(
@@ -95,21 +93,7 @@ export function deleteGameMode(project: EditorProject, id: string): void {
     );
   const index = project.gameModes.modes.findIndex((mode) => mode.id === id);
   if (index < 0) throw new Error(`未知游戏模式：${id}`);
-  const removedBackgrounds = new Set(
-    Object.values(project.gameModes.modes[index]!.backgroundNodes).filter(
-      Boolean,
-    ),
-  );
   project.gameModes.modes.splice(index, 1);
-  const retainedBackgrounds = new Set(
-    project.gameModes.modes.flatMap((mode) =>
-      Object.values(mode.backgroundNodes).filter(Boolean),
-    ),
-  );
-  project.nodes = project.nodes.filter(
-    (node) =>
-      !removedBackgrounds.has(node.id) || retainedBackgrounds.has(node.id),
-  );
   normalizeGameModeNodeOrders(project);
 }
 
@@ -130,80 +114,22 @@ export function setGameModeReelEnabled(
       `主状态 ${id} 已绑定 Symbols，关闭主转轮前必须先解除绑定。`,
     );
   const activeModeId = project.gameModes.activeModeId;
-  mode.reelEnabled = enabled;
+  mode.mainEnabled = enabled;
   activateEditorGameMode(project, id);
   for (const variant of activeVariantIds(mode))
-    updateVariantFocusOffsetsFromRect(project, variant);
+    updateVariantFocusFromReel(project, variant);
   activateEditorGameMode(project, activeModeId);
 }
 
-export function bindGameModeBackground(
-  project: EditorProject,
-  modeId: string,
-  variant: SceneLayoutVariantId,
-  nodeId: string,
-): void {
-  const mode = requireMode(project, modeId);
-  if (!activeVariantIds(mode).includes(variant))
-    throw new Error(`游戏模式 ${modeId} 不使用 ${variant} variant。`);
-  const node = project.nodes.find((candidate) => candidate.id === nodeId);
-  if (!node) throw new Error(`未知背景节点：${nodeId}`);
-  if (node.gameMode !== undefined)
-    throw new Error(
-      `背景节点 ${nodeId} 不能绑定普通图层状态 ${node.gameMode}；请先设为所有状态有效。`,
-    );
-  const resource = project.resources.get(node.resourceId);
-  if (
-    !resource ||
-    resource.kind === "image-string" ||
-    resource.kind === "vni" ||
-    resource.kind === "video"
-  )
-    throw new Error(`背景节点不能使用 ${resource?.kind ?? "未知"}：${nodeId}`);
-  if (!node.placements[variant])
-    throw new Error(`背景节点 ${nodeId} 缺少 ${variant} placement。`);
-  mode.backgroundNodes[variant] = nodeId;
-  mode.variants[variant].backgroundNode = nodeId;
-  const artSize = editorResourceArtSize(resource);
-  if (
-    artSize &&
-    (!(mode.variants[variant].artSize.width > 0) ||
-      !(mode.variants[variant].artSize.height > 0))
-  ) {
-    const activeModeId = project.gameModes.activeModeId;
-    activateEditorGameMode(project, modeId);
-    resetVariantGeometry(project, variant, artSize);
-    activateEditorGameMode(project, activeModeId);
-  }
-  normalizeGameModeNodeOrders(project);
-}
-
 export function normalizeGameModeNodeOrders(project: EditorProject): void {
-  const initialMode = project.gameModes.modes.find(
-    (mode) => mode.id === project.gameModes.initialMode,
-  );
-  const initialBackgrounds = new Set(
-    Object.values(initialMode?.backgroundNodes ?? {}).filter(Boolean),
-  );
-  const allBackgrounds = new Set(
-    project.gameModes.modes
-      .flatMap((mode) => Object.values(mode.backgroundNodes))
-      .filter(Boolean),
-  );
-  if (hasValidAuthoredOrders(project, initialBackgrounds, allBackgrounds)) {
+  if (hasValidAuthoredOrders(project)) {
     project.nodes.sort((left, right) => left.order - right.order);
     return;
   }
   const nodes = project.nodes
     .map((node, index) => ({ node, index }))
     .sort((left, right) => {
-      const group = (nodeId: string): number =>
-        initialBackgrounds.has(nodeId) ? 0 : allBackgrounds.has(nodeId) ? 1 : 2;
-      return (
-        group(left.node.id) - group(right.node.id) ||
-        left.node.order - right.node.order ||
-        left.index - right.index
-      );
+      return left.node.order - right.node.order || left.index - right.index;
     });
   const reelOrder = project.reel.order;
   if (reelOrder === null || !Number.isSafeInteger(reelOrder)) {
@@ -232,11 +158,7 @@ export function normalizeGameModeNodeOrders(project: EditorProject): void {
   }));
 }
 
-function hasValidAuthoredOrders(
-  project: EditorProject,
-  initialBackgrounds: ReadonlySet<string>,
-  allBackgrounds: ReadonlySet<string>,
-): boolean {
+function hasValidAuthoredOrders(project: EditorProject): boolean {
   const orders = project.nodes.map((node) => node.order);
   if (orders.some((order) => !Number.isSafeInteger(order))) return false;
   if (new Set(orders).size !== orders.length) return false;
@@ -246,32 +168,6 @@ function hasValidAuthoredOrders(
       orders.includes(project.reel.order))
   )
     return false;
-  const variants = new Set(
-    project.gameModes.modes.flatMap((mode) => [...activeVariantIds(mode)]),
-  );
-  for (const variant of variants) {
-    const visible = project.nodes.filter((node) => node.placements[variant]);
-    const minimum = Math.min(
-      ...visible.map((node) => node.order),
-      Number.POSITIVE_INFINITY,
-    );
-    const initialBackground = visible.find((node) =>
-      initialBackgrounds.has(node.id),
-    );
-    if (initialBackground && initialBackground.order !== minimum) return false;
-    const firstOrdinary = Math.min(
-      ...visible
-        .filter((node) => !allBackgrounds.has(node.id))
-        .map((node) => node.order),
-      Number.POSITIVE_INFINITY,
-    );
-    if (
-      visible.some(
-        (node) => allBackgrounds.has(node.id) && node.order >= firstOrdinary,
-      )
-    )
-      return false;
-  }
   return true;
 }
 
@@ -469,7 +365,7 @@ export function setGameModeTransitionPlacement(
   placement: { readonly x: number; readonly y: number; readonly scale: number },
 ): void {
   if (transition.kind !== "spine")
-    throw new Error("video 转场没有 art-space placement。");
+    throw new Error("video 转场没有中心坐标 placement。");
   if (!activeVariantIds(project).includes(variant))
     throw new Error(`当前项目不使用 ${variant} variant。`);
   if (
@@ -492,7 +388,7 @@ export function bindGameModeSymbols(
   } | null,
 ): void {
   const mode = requireMode(project, modeId);
-  if (binding && !mode.reelEnabled)
+  if (binding && !mode.mainEnabled)
     throw new Error(`主状态 ${modeId} 未启用主转轮，不能绑定 Symbols。`);
   if (binding && !project.symbolDependencies.has(binding.packageId))
     throw new Error(`未知 Symbols dependency：${binding.packageId}`);

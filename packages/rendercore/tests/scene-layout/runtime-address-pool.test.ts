@@ -90,7 +90,7 @@ describe("Game Layout runtime address pools", () => {
     };
     const manifest = {
       nodes: [],
-      reels: { main: { columns: 1, rows: 1 } },
+      main: { columns: 1, rows: 1 },
       symbolPackages: {
         base: { reel: "main", reelSet: "base", renderMode: "standard" },
       },

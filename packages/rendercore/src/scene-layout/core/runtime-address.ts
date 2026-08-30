@@ -507,7 +507,8 @@ export function createGameLayoutRuntimeAddresses(
       );
     }
   }
-  for (const reelId of Object.keys(manifest.reels).sort()) {
+  const reelIds = ["main"] as const;
+  for (const reelId of reelIds) {
     const owner = ["reel", reelId];
     add(owner, "reel", null, "borrowed", (descriptor) =>
       Object.freeze({

@@ -138,6 +138,10 @@ export interface SceneLayoutNode {
   readonly order: number;
   /** Missing means the ordinary node is visible in every game mode. */
   readonly gameMode?: string;
+  /** Canonical v7 exact mode/orientation visibility. Missing means global. */
+  readonly scope?: Readonly<
+    Record<string, readonly SceneLayoutOrientationVariantId[]>
+  >;
   readonly resource: SceneLayoutNodeResourceSpec;
   readonly placements: Readonly<
     Partial<Record<SceneLayoutVariantId, SceneLayoutNodePlacement>>
@@ -388,6 +392,13 @@ export interface SceneLayoutRuntimeAllocationV2 extends Omit<
   readonly version: 2;
 }
 
+export interface SceneLayoutRuntimeAllocationV3 extends Omit<
+  SceneLayoutRuntimeAllocationV1,
+  "version"
+> {
+  readonly version: 3;
+}
+
 export interface SceneLayoutManifestV3 extends Omit<
   SceneLayoutManifestV2,
   "version"
@@ -433,16 +444,78 @@ export interface SceneLayoutManifestV6 extends Omit<
   readonly runtimeAllocation: SceneLayoutRuntimeAllocationV2;
 }
 
+export interface SceneLayoutMainDefinition {
+  readonly order?: number;
+  readonly columns: number;
+  readonly rows: number;
+  readonly cellSize: RenderViewportSize;
+  readonly gap: { readonly x: number; readonly y: number };
+}
+
+export interface SceneLayoutMainVariant {
+  /** Center of the main reel rectangle in the authored center coordinate plane. */
+  readonly x: number;
+  readonly y: number;
+  readonly focusRect: RenderViewportRect;
+  readonly minFocusMargin?: RenderViewportMargin;
+}
+
+export interface SceneLayoutGameModeV7 {
+  readonly id: string;
+  readonly main: {
+    readonly enabled: boolean;
+    readonly variants: Readonly<
+      Record<SceneLayoutOrientationVariantId, SceneLayoutMainVariant>
+    >;
+  };
+  readonly nodeStates: Readonly<Record<string, string>>;
+  readonly symbolPackage?: string;
+  readonly awardCelebrationPopup?: string;
+  readonly primaryAction?: SceneLayoutPrimaryAction;
+  readonly bgm?: string;
+}
+
+export interface SceneLayoutGameModesV7 {
+  readonly initialMode: string;
+  readonly modes: readonly SceneLayoutGameModeV7[];
+  readonly transitions?: readonly SceneLayoutGameModeTransition[];
+}
+
+export interface SceneLayoutManifestV7 {
+  readonly version: 7;
+  readonly kind: "scene-layout";
+  readonly id: string;
+  readonly main: SceneLayoutMainDefinition;
+  readonly nodes: readonly SceneLayoutNode[];
+  readonly symbolPackage?: SceneLayoutSymbolPackageBinding;
+  readonly symbolPackages?: Readonly<
+    Record<string, SceneLayoutSymbolPackageBinding>
+  >;
+  readonly popups?: Readonly<Record<string, SceneLayoutPopupBinding>>;
+  readonly runtimeResources?: Readonly<
+    Record<string, SceneLayoutRuntimeResourceSpec>
+  >;
+  readonly gameModes: SceneLayoutGameModesV7;
+  readonly audio: import("@slotclientengine/audiocore/data").AudioCatalogManifestV1;
+  readonly eventAudio: SceneLayoutEventAudioV1;
+  readonly runtimeAllocation: SceneLayoutRuntimeAllocationV3;
+}
+
 export type SceneLayoutManifestModern =
   | SceneLayoutManifestV2
   | SceneLayoutManifestV3
   | SceneLayoutManifestV4
   | SceneLayoutManifestV5
-  | SceneLayoutManifestV6;
+  | SceneLayoutManifestV6
+  | SceneLayoutManifestV7;
+export type SceneLayoutManifestLegacyModern = Exclude<
+  SceneLayoutManifestModern,
+  SceneLayoutManifestV7
+>;
 export type SceneLayoutManifest =
   | SceneLayoutManifestV1
   | SceneLayoutManifestModern;
-export type SceneLayoutManifestLatest = SceneLayoutManifestV6;
+export type SceneLayoutManifestLatest = SceneLayoutManifestV7;
 
 export type SceneLayoutRuntimeResource =
   | {
@@ -477,7 +550,8 @@ interface OfficialSpineRuntimeResource {
 }
 
 export interface SceneLayoutResource {
-  readonly manifest: SceneLayoutManifestV1;
+  /** Source manifests may be legacy; runtime construction normalizes them to v7. */
+  readonly manifest: SceneLayoutManifest;
   readonly imageUrls: Readonly<Record<string, string>>;
   readonly spineResources: Readonly<
     Record<
@@ -507,8 +581,8 @@ export interface SceneLayoutResource {
 }
 
 export interface SceneLayoutPackageResource {
-  /** Initial-mode v1-compatible view preserved for existing host inspection. */
-  readonly manifest: SceneLayoutManifestV1;
+  /** Canonical center-coordinate layout document. */
+  readonly manifest: SceneLayoutManifestLatest;
   /** Canonical latest document used by package runtime allocation and activation. */
   readonly runtimeManifest: SceneLayoutManifestLatest;
   readonly layout: SceneLayoutResource;
@@ -573,7 +647,7 @@ export interface SceneLayoutPoint {
 
 export type SceneLayoutPointSelector =
   | { readonly kind: "origin" }
-  | { readonly kind: "art"; readonly align: RenderAlignment }
+  | { readonly kind: "main"; readonly align: RenderAlignment }
   | { readonly kind: "viewport"; readonly align: RenderAlignment };
 
 interface SceneLayoutRenderObjectBase {
@@ -710,7 +784,31 @@ export interface ResolvedSceneLayoutReelGrid {
   readonly artRect: RenderViewportRect;
 }
 
-export interface SceneLayoutSnapshot extends FocusedArtViewport {
+export interface ResolvedSceneLayoutMainGrid {
+  readonly id: "main";
+  readonly variantId: SceneLayoutOrientationVariantId;
+  readonly columns: number;
+  readonly rows: number;
+  readonly cellSize: RenderViewportSize;
+  readonly gap: { readonly x: number; readonly y: number };
+  readonly stride: RenderViewportSize;
+  /** Main rectangle in the authored center-coordinate layout plane. */
+  readonly layoutRect: RenderViewportRect;
+}
+
+export interface SceneLayoutSnapshotV7 {
+  readonly viewportSize: RenderViewportSize;
+  readonly visibleRect: RenderViewportRect;
+  readonly worldOffset: { readonly x: number; readonly y: number };
+  readonly focusRectInViewport: RenderViewportRect;
+  readonly variantId: SceneLayoutOrientationVariantId;
+  readonly main: ResolvedSceneLayoutMainGrid & {
+    readonly enabled: boolean;
+    readonly viewportRect: RenderViewportRect;
+  };
+}
+
+export interface SceneLayoutLegacySnapshot extends FocusedArtViewport {
   /** Geometry/background/reel variant selected by the active adaptation. */
   readonly variantId: SceneLayoutVariantId;
   /** Raw-page orientation used by ordinary scene-node placements. */
@@ -724,6 +822,8 @@ export interface SceneLayoutSnapshot extends FocusedArtViewport {
     >
   >;
 }
+
+export type SceneLayoutSnapshot = SceneLayoutSnapshotV7;
 
 export interface SceneLayoutFrameViewport {
   readonly pageSize: RenderViewportSize;
@@ -766,11 +866,6 @@ export interface SceneLayoutRuntime {
   readonly container: Container;
   init(): Promise<void>;
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot;
-  /**
-   * Applies a maximized-focus layout in its complete authored art space.
-   * This is for hosts that already own the outer viewport/focus transform.
-   */
-  applyArtSpace(): SceneLayoutSnapshot;
   applyGeometryManifest(
     manifest: SceneLayoutManifest,
   ): SceneLayoutSnapshot | null;
@@ -799,7 +894,7 @@ export interface SceneLayoutRuntime {
   getRenderObject(nodeId: string): SceneLayoutRenderObject | null;
   attachChild(options: AttachChildOptions): () => void;
   attachRelative(options: AttachRelativeOptions): () => void;
-  getReelGrid(id: string): ResolvedSceneLayoutReelGrid;
+  getReelGrid(id: "main"): ResolvedSceneLayoutMainGrid;
   getImageStringNodeNames(): readonly string[];
   setImageStringText(nodeId: string, text: string): void;
   getImageStringText(nodeId: string): string;

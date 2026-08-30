@@ -24,6 +24,10 @@ import {
   parseSceneLayoutManifestV6,
   upgradeSceneLayoutManifestV5ToV6,
 } from "./manifest-v6.js";
+import {
+  parseSceneLayoutManifestV7,
+  upgradeSceneLayoutManifestV6ToV7,
+} from "./manifest-v7.js";
 
 export function parseSceneLayoutManifestV3(
   value: unknown,
@@ -51,6 +55,16 @@ export function parseSceneLayoutManifestV3(
 export function upgradeSceneLayoutManifestToLatest(
   value: unknown,
 ): SceneLayoutManifestLatest {
+  const root = record(value, "scene layout manifest");
+  if (root.version === 7) return parseSceneLayoutManifestV7(value);
+  return upgradeSceneLayoutManifestV6ToV7(
+    upgradeSceneLayoutManifestToV6(value),
+  );
+}
+
+export function upgradeSceneLayoutManifestToV6(
+  value: unknown,
+): import("./types.js").SceneLayoutManifestV6 {
   const root = record(value, "scene layout manifest");
   if (root.version === 6) return parseSceneLayoutManifestV6(value);
   if (root.version === 5)

@@ -7,7 +7,7 @@ payload；image-string、Popup、Symbols、Scene Layout 的 ZIP、Blob 与 URL l
 resource，不要求内层第二份 map。无 map 的合法 legacy direct path 继续加载，但 map/direct
 不得混用，也不提供 basename、404 或 glob fallback。
 
-`rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
+`rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。调试 app 的业务展示逻辑不放进核心库。
 
 Game Layout production runtime 的统一对象定位、资源 factory 与事件订阅使用
 `SceneLayoutPackageRuntime.addresses`。完整地址表、ownership 和示例见
@@ -60,7 +60,7 @@ RenderCore相关游戏API按“渲染对象与原子动作 / 安全组合 / 玩�
 ## Operation 渲染第一层 API
 
 任务 202 增量提供 `SymbolMutationArea`、Reel/Cell active spin session，以及一次 await 的 occurrence transfer/drop。
-`CellSpin` 是后续新游戏的主实现；Crave/game002v2 仍使用 grid-cell 时，grid-cell 同步提供相同基础 mutation/transfer/drop
+`CellSpin` 是后续新游戏的主实现；legacy grid-cell 消费方仍使用 grid-cell 时，grid-cell 同步提供相同基础 mutation/transfer/drop
 能力，但不继续发展独有的高级接口。RenderCore 的所有 symbol area 与 spin 模型都约定 `-1` 是唯一空图标标记；其它 symbol code 必须为非负整数，
 `-1` 不进入 registry、轮带或 SymbolPlayer pool。`getSymbol(pos)` 对空位返回内置轻量 `SymbolHandle`（`code: -1`、`kind: "empty"`）：它不创建贴图或动画资源，但保留位置、anchor 和节点挂载能力；state、文字和非 null value 等依赖真实 symbol 资源的操作会显式失败。
 
@@ -76,7 +76,7 @@ await cellSpin.dropOccurrences({ movements, values });
 ```
 
 `replaceSymbols()`、`SymbolGroup.setValues()/setStates()` 均先完整 preflight。session 中的 `overlay` 是稳定 cell/reel
-attachment；land Promise resolve 后统一通过 `getSymbol()` 取得 exact symbol（包括 `-1` Empty SymbolHandle）。现有 game002v2 plan/drain/polling API
+attachment；land Promise resolve 后统一通过 `getSymbol()` 取得 exact symbol（包括 `-1` Empty SymbolHandle）。现有 legacy plan/drain/polling API
 保持兼容；新能力不继续扩展 plan surface。
 
 `SymbolArea.getSymbol({x,y})` 是 standard reel、legacy grid-cell 与新 `CellSpin`
@@ -117,7 +117,7 @@ phase；当前可见 code/value 在边界保持不变，后续滚动只读取该
 安全整数，不接收 random function、服务器 scene 或业务规则；跨格无重复抽样由上层使用共享 helper 完成。
 `getCell(pos)` 允许在目标落地前附加稳定 cell-space `RenderObject`。full、selective、hold、refill、
 stagger 和 anticipation 由 operation handler 用普通 `async/await`、frame delay 与 `Promise.all()`
-组合，不增加 `CellSpinPlan`。现有 `GridCellReelSpinPlan` 仅作为 game002v2 legacy compatibility
+组合，不增加 `CellSpinPlan`。现有 `GridCellReelSpinPlan` 仅作为 grid-cell legacy compatibility
 surface 保留，新游戏使用 `CellSpin`；logiccore 继续拥有权威 operation plan。
 
 Standard `RenderReelSet` 同时实现无 public plan 的逐列 `ReelSpin`：`roll(x,target)` 直接滚动一列，

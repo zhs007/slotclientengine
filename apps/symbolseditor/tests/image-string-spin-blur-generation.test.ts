@@ -1,5 +1,5 @@
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
-import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
+import { readSymbolArtifactFixtureBytes } from "./artifact-fixtures.js";
 import { Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import { importImageStringDependencyZip } from "../src/io/image-string-dependency.js";
@@ -249,5 +249,5 @@ function createZip(): Uint8Array {
 }
 
 function imageBytes(name = "H1.png"): Uint8Array {
-  return readMinecart2SymbolFixtureBytes(name);
+  return readSymbolArtifactFixtureBytes(name);
 }

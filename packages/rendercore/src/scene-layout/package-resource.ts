@@ -61,8 +61,12 @@ import {
   parseSceneLayoutManifestDocument,
 } from "./manifest.js";
 import { materializeInitialSceneLayoutManifest } from "./manifest-v2.js";
-import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
+import {
+  upgradeSceneLayoutManifestToLatest,
+  upgradeSceneLayoutManifestToV6,
+} from "./manifest-v3.js";
 import { createSceneLayoutResource } from "./resource.js";
+import { createSceneLayoutRuntimeAllocation } from "./runtime-allocation.js";
 import type {
   SceneLayoutManifest,
   SceneLayoutManifestV1,
@@ -313,8 +317,8 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     options.manifest ??
     parseJsonBytes(requireBytes(options.files, ROOT_MANIFEST), ROOT_MANIFEST);
   const sourceDocument = parseSceneLayoutManifestDocument(sourceManifestValue);
-  const manifest = upgradeSceneLayoutManifestToLatest(sourceDocument);
   const files = options.files;
+  const manifest = upgradeSceneLayoutManifestToLatest(sourceDocument);
   if (!options.lazyRuntimeResources)
     collectSceneLayoutPackagePaths({ manifest, files });
   const mapped = isMappedSceneLayoutManifest(manifest);
@@ -771,16 +775,16 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       }
     }
 
-    const materializedLayout =
-      sourceDocument.version === 1
-        ? sourceDocument
-        : materializeInitialSceneLayoutManifest(manifest);
     const layoutManifest = options.lazyRuntimeResources
-      ? parseSceneLayoutManifest({
-          ...materializedLayout,
+      ? upgradeSceneLayoutManifestToLatest({
+          ...manifest,
           runtimeResources: undefined,
+          runtimeAllocation: createSceneLayoutRuntimeAllocation({
+            ...manifest,
+            runtimeResources: undefined,
+          }),
         })
-      : materializedLayout;
+      : manifest;
     const layout = createSceneLayoutResource({
       manifest: layoutManifest,
       allowOrientationPlacements: sourceDocument.version !== 1,
@@ -803,7 +807,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     const lazyImageStrings: ImageStringResource[] = [];
     let destroyed = false;
     return Object.freeze({
-      manifest: layoutManifest,
+      manifest,
       runtimeManifest: manifest,
       layout,
       imageStrings: Object.freeze({ ...imageStrings }),
@@ -1356,7 +1360,7 @@ function validateBinding(
   binding: NonNullable<SceneLayoutManifestV1["symbolPackage"]>,
   resource: SymbolPackageResource,
 ): void {
-  const reel = manifest.reels.main;
+  const reel = manifest.version === 7 ? manifest.main : manifest.reels.main;
   if (!reel) return;
   const prefix = `Scene layout "${manifest.id}" symbol binding to package "${resource.packageManifest.id}"`;
   if (
@@ -1486,12 +1490,23 @@ function resolveRuntimeMappedSceneLayoutPackageFiles(options: {
     if (bytes) virtual.set(key, bytes.slice());
   }
   const effectiveManifest = options.allowMissingRuntimeResources
-    ? parseSceneLayoutManifest({
-        ...(options.manifest.version === 1
-          ? options.manifest
-          : materializeInitialSceneLayoutManifest(options.manifest)),
-        runtimeResources: undefined,
-      })
+    ? options.manifest.version === 7
+      ? upgradeSceneLayoutManifestToLatest({
+          ...options.manifest,
+          runtimeResources: undefined,
+          runtimeAllocation: createSceneLayoutRuntimeAllocation({
+            ...options.manifest,
+            runtimeResources: undefined,
+          }),
+        })
+      : parseSceneLayoutManifest({
+          ...(options.manifest.version === 1
+            ? options.manifest
+            : materializeInitialSceneLayoutManifest(
+                upgradeSceneLayoutManifestToV6(options.manifest),
+              )),
+          runtimeResources: undefined,
+        })
     : options.manifest;
   const paths = collectSceneLayoutPackagePaths({
     manifest: effectiveManifest,

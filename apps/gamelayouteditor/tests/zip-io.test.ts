@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
 import { parsePopupManifest } from "@slotclientengine/rendercore/popup/editor";
 import { parseSymbolPackageManifest } from "@slotclientengine/rendercore/symbol/data";
-import { materializeInitialSceneLayoutManifest } from "@slotclientengine/rendercore/scene-layout/core";
 import {
   exportLayoutZip,
   materializeLayoutOwnedAssets,
@@ -256,8 +255,8 @@ describe("layout zip IO", () => {
       ).toEqual(["background", "jackpot-title"]);
       expect(packedManifest.nodes[0].resource.path).toBe(canonicalKey);
       expect(packedManifest.nodes[1].placements.landscape).toEqual({
-        x: 10,
-        y: 10,
+        x: -39.5,
+        y: -39.5,
         scale: 1,
         rotation: -90,
         center: { x: 0.25, y: 0.75 },
@@ -275,8 +274,8 @@ describe("layout zip IO", () => {
         "jackpot-title",
       ]);
       expect(project.nodes[1].placements.landscape).toEqual({
-        x: 10,
-        y: 10,
+        x: -39.5,
+        y: -39.5,
         scale: 1,
         rotation: -90,
         center: { x: 0.25, y: 0.75 },
@@ -449,13 +448,11 @@ describe("layout zip IO", () => {
     const canonicalManifest = JSON.parse(
       new TextDecoder().decode(secondEntries.get("layout.manifest.json")),
     );
-    expect(canonicalManifest.coordinateOrigin).toBe("top-left");
-    expect(
-      canonicalManifest.gameModes.modes[0].reelPlacements.main.default,
-    ).toEqual({
-      x: 20,
-      y: 20,
-    });
+    expect(canonicalManifest.version).toBe(7);
+    expect(canonicalManifest).not.toHaveProperty("coordinateOrigin");
+    expect(canonicalManifest.gameModes.modes[0]).not.toHaveProperty(
+      "reelPlacements",
+    );
     const importedOverlay =
       imported.manifest.gameModes!.transitions![0]!.overlay;
     if (
@@ -515,7 +512,9 @@ describe("layout zip IO", () => {
         resource: transitionResource,
         animation,
         switchEvent,
-        placements: { default: { x: 50, y: 60, scale: 1 } },
+        placements: {
+          default: { x: 50, y: 60, scale: 1 },
+        },
       },
     });
     const manifest = {
@@ -564,7 +563,10 @@ describe("layout zip IO", () => {
         toModeId: "FreeGame",
         animation: "BG_FG",
         switchEvent: "SwitchScene",
-        placements: { default: { x: 50, y: 60, scale: 1 } },
+        placements: {
+          landscape: { x: 0, y: 10, scale: 1 },
+          portrait: { x: 0, y: 10, scale: 1 },
+        },
       },
       {
         fromModeId: "FreeGame",
@@ -714,7 +716,8 @@ describe("layout zip IO", () => {
           .sort(),
       );
       expect(project.popupDependencies.get("free-popup")?.placements).toEqual({
-        default: { x: -3, y: 4, scale: 0.8 },
+        landscape: { x: -3, y: 4, scale: 0.8 },
+        portrait: { x: -3, y: 4, scale: 0.8 },
       });
       imported.destroy();
     } finally {
@@ -915,13 +918,11 @@ describe("layout zip IO", () => {
       ]);
       const imported = await importLayoutZip(first.bytes, { decodeImage });
       expect(imported.manifest).toMatchObject({
-        version: 6,
+        version: 7,
         id: fixture.manifest.id,
         symbolPackages: fixture.manifest.symbolPackages,
       });
-      expect(
-        materializeInitialSceneLayoutManifest(imported.manifest).adaptation,
-      ).toEqual(fixture.manifest.adaptation);
+      expect(imported.manifest).not.toHaveProperty("adaptation");
       const project = manifestToEditorProject(
         imported.manifest,
         imported.assets,
@@ -945,7 +946,6 @@ describe("layout zip IO", () => {
         modes: [
           {
             id: "BaseGame",
-            backgroundNodes: { default: "bg" },
             nodeStates: {},
             symbolPackage: "demo-symbols",
           },
@@ -1208,9 +1208,8 @@ describe("layout zip IO", () => {
         decodeImage,
         loadSymbolTextures: false,
       });
-      expect(
-        materializeInitialSceneLayoutManifest(imported.manifest).adaptation,
-      ).toEqual(fixture.manifest.adaptation);
+      expect(imported.manifest.version).toBe(7);
+      expect(imported.manifest).not.toHaveProperty("adaptation");
       expect(imported.manifest.symbolPackages).toEqual(
         fixture.manifest.symbolPackages,
       );
@@ -1260,12 +1259,10 @@ describe("layout zip IO", () => {
     expect(first.bytes).toEqual(second.bytes);
     const imported = await importLayoutZip(first.bytes, { decodeImage });
     expect(imported.manifest).toMatchObject({
-      version: 6,
+      version: 7,
       id: imageManifest.id,
     });
-    expect(
-      materializeInitialSceneLayoutManifest(imported.manifest).adaptation,
-    ).toEqual(imageManifest.adaptation);
+    expect(imported.manifest).not.toHaveProperty("adaptation");
     const importedImage = imported.manifest.nodes[0]!.resource;
     expect(importedImage.kind).toBe("image");
     if (importedImage.kind !== "image") throw new Error("expected image");

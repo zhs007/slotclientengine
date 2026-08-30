@@ -1,9 +1,13 @@
+/* eslint-disable no-redeclare -- Public TypeScript overload signatures are intentional. */
+
 import { SceneLayoutError } from "./errors.js";
 import type {
   SceneLayoutManifestModern,
   SceneLayoutManifestV6,
+  SceneLayoutManifestV7,
   SceneLayoutRuntimeAllocationV1,
   SceneLayoutRuntimeAllocationV2,
+  SceneLayoutRuntimeAllocationV3,
   SceneLayoutVariantId,
 } from "./types.js";
 
@@ -14,21 +18,88 @@ export function sceneLayoutTransitionOwnerId(from: string, to: string): string {
 }
 
 export function createSceneLayoutRuntimeAllocation(
+  manifest: SceneLayoutManifestV7,
+): SceneLayoutRuntimeAllocationV3;
+export function createSceneLayoutRuntimeAllocation(
   manifest: SceneLayoutManifestV6,
 ): SceneLayoutRuntimeAllocationV2;
 export function createSceneLayoutRuntimeAllocation(
-  manifest: Exclude<SceneLayoutManifestModern, SceneLayoutManifestV6>,
+  manifest: Exclude<
+    SceneLayoutManifestModern,
+    SceneLayoutManifestV6 | SceneLayoutManifestV7
+  >,
 ): SceneLayoutRuntimeAllocationV1;
 export function createSceneLayoutRuntimeAllocation(
   manifest: SceneLayoutManifestModern,
-): SceneLayoutRuntimeAllocationV1 | SceneLayoutRuntimeAllocationV2 {
+):
+  | SceneLayoutRuntimeAllocationV1
+  | SceneLayoutRuntimeAllocationV2
+  | SceneLayoutRuntimeAllocationV3 {
+  if (manifest.version === 7)
+    return createSceneLayoutRuntimeAllocationV3(manifest);
   return manifest.version === 6
     ? createSceneLayoutRuntimeAllocationV2(manifest)
     : createSceneLayoutRuntimeAllocationV1(manifest);
 }
 
+function createSceneLayoutRuntimeAllocationV3(
+  manifest: SceneLayoutManifestV7,
+): SceneLayoutRuntimeAllocationV3 {
+  const orderedNodes = [...manifest.nodes].sort(
+    (left, right) => left.order - right.order,
+  );
+  return deepFreeze({
+    version: 3,
+    package: {
+      nodes: orderedNodes.map((node) => node.id),
+      symbolPackages: manifest.symbolPackage
+        ? [LEGACY_SCENE_LAYOUT_SYMBOL_PACKAGE_OWNER]
+        : Object.keys(manifest.symbolPackages ?? {}).sort(compareText),
+      popups: Object.keys(manifest.popups ?? {}).sort(compareText),
+    },
+    onDemand: {
+      transitions: (manifest.gameModes.transitions ?? [])
+        .map((transition) =>
+          sceneLayoutTransitionOwnerId(transition.from, transition.to),
+        )
+        .sort(compareText),
+      runtimeResources: Object.keys(manifest.runtimeResources ?? {}).sort(
+        compareText,
+      ),
+    },
+    modes: Object.fromEntries(
+      manifest.gameModes.modes.map((mode) => [
+        mode.id,
+        {
+          variants: Object.fromEntries(
+            (["landscape", "portrait"] as const).map((variant) => [
+              variant,
+              {
+                activeNodes: orderedNodes.flatMap((node) => {
+                  if (!node.placements[variant]) return [];
+                  if (!node.scope) return [node.id];
+                  return node.scope[mode.id]?.includes(variant)
+                    ? [node.id]
+                    : [];
+                }),
+              },
+            ]),
+          ),
+          symbolPackage: manifest.symbolPackage
+            ? LEGACY_SCENE_LAYOUT_SYMBOL_PACKAGE_OWNER
+            : (mode.symbolPackage ?? null),
+          awardCelebrationPopup: mode.awardCelebrationPopup ?? null,
+        },
+      ]),
+    ),
+  });
+}
+
 export function createSceneLayoutRuntimeAllocationV1(
-  manifest: SceneLayoutManifestModern,
+  manifest: Exclude<
+    SceneLayoutManifestModern,
+    SceneLayoutManifestV6 | SceneLayoutManifestV7
+  >,
 ): SceneLayoutRuntimeAllocationV1 {
   const backgroundNodes = new Set(
     manifest.gameModes.modes.flatMap((mode) =>
@@ -109,7 +180,7 @@ export function createSceneLayoutRuntimeAllocationV1(
 }
 
 function createSceneLayoutRuntimeAllocationV2(
-  manifest: SceneLayoutManifestModern,
+  manifest: SceneLayoutManifestV6,
 ): SceneLayoutRuntimeAllocationV2 {
   const backgroundNodes = new Set(
     manifest.gameModes.modes.flatMap((mode) =>
@@ -178,20 +249,32 @@ function createSceneLayoutRuntimeAllocationV2(
 
 export function parseSceneLayoutRuntimeAllocation(
   value: unknown,
+  manifest: SceneLayoutManifestV7,
+): SceneLayoutRuntimeAllocationV3;
+export function parseSceneLayoutRuntimeAllocation(
+  value: unknown,
   manifest: SceneLayoutManifestV6,
 ): SceneLayoutRuntimeAllocationV2;
 export function parseSceneLayoutRuntimeAllocation(
   value: unknown,
-  manifest: Exclude<SceneLayoutManifestModern, SceneLayoutManifestV6>,
+  manifest: Exclude<
+    SceneLayoutManifestModern,
+    SceneLayoutManifestV6 | SceneLayoutManifestV7
+  >,
 ): SceneLayoutRuntimeAllocationV1;
 export function parseSceneLayoutRuntimeAllocation(
   value: unknown,
   manifest: SceneLayoutManifestModern,
-): SceneLayoutRuntimeAllocationV1 | SceneLayoutRuntimeAllocationV2 {
+):
+  | SceneLayoutRuntimeAllocationV1
+  | SceneLayoutRuntimeAllocationV2
+  | SceneLayoutRuntimeAllocationV3 {
   const expected =
-    manifest.version === 6
-      ? createSceneLayoutRuntimeAllocationV2(manifest)
-      : createSceneLayoutRuntimeAllocationV1(manifest);
+    manifest.version === 7
+      ? createSceneLayoutRuntimeAllocationV3(manifest)
+      : manifest.version === 6
+        ? createSceneLayoutRuntimeAllocationV2(manifest)
+        : createSceneLayoutRuntimeAllocationV1(manifest);
   assertExact(value, expected, "scene layout runtimeAllocation");
   return expected;
 }

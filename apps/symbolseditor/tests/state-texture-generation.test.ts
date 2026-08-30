@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
+import { readSymbolArtifactFixtureBytes } from "./artifact-fixtures.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   createFromGameConfig,
@@ -35,7 +35,7 @@ function createProject() {
 }
 
 function imageBytes(name = "H1.png"): Uint8Array {
-  return readMinecart2SymbolFixtureBytes(name);
+  return readSymbolArtifactFixtureBytes(name);
 }
 
 describe("symbols editor state texture generation", () => {

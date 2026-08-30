@@ -48,7 +48,7 @@ const symbolPackage = {
 const resource = {
   manifest: {
     id: "layout",
-    reels: { main: { columns: 1, rows: 1 } },
+    main: { columns: 1, rows: 1 },
     symbolPackage: { reelSet: "main", renderMode: "standard" },
   },
   symbolPackage,
@@ -339,13 +339,13 @@ describe("local scene readiness", () => {
   it("rejects invalid package bindings and symbol capabilities", async () => {
     mocks.resource = {
       ...resource,
-      manifest: { ...resource.manifest, reels: {} },
+      manifest: { ...resource.manifest, main: undefined },
     };
     await expect(
       inspectSceneOtherSceneFlowPackage({
         layoutZipBytes: new Uint8Array([1]),
       }),
-    ).rejects.toThrow(/reels.main/);
+    ).rejects.toThrow(/main/);
 
     mocks.resource = {
       ...resource,

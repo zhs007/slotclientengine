@@ -68,7 +68,7 @@ describe("Leo game UI source boundary", () => {
     expect(assets.join("\n")).not.toMatch(/loading|wildsheep|modal|buy/i);
   });
 
-  it("preserves dependency direction and keeps game003v2/loading packages React-free", () => {
+  it("preserves dependency direction and keeps loading packages React-free", () => {
     const frameworkPackage = readFileSync(
       join(REPO_ROOT, "packages/gameframeworks/package.json"),
       "utf8",
@@ -78,7 +78,6 @@ describe("Leo game UI source boundary", () => {
       "packages/gameloading/package.json",
       "packages/gameloading-ui-leo/package.json",
       "packages/gameloading-ui-simple/package.json",
-      "apps/game003v2/package.json",
     ]) {
       const content = readFileSync(join(REPO_ROOT, relative), "utf8");
       expect(content, relative).not.toMatch(/game-ui-leo|react(?:-dom)?/);

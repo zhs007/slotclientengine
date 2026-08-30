@@ -131,6 +131,7 @@ vi.mock("../../src/scene-layout/local-scene-authoring.js", () => ({
 vi.mock("../../src/scene-layout/production-zip.js", () => ({
   loadSceneLayoutPackageFromZipBytes: vi.fn(async () => ({
     manifest: {},
+    runtimeManifest: {},
     layout: { manifest: {} },
     destroy: mocks.resourceDestroy,
   })),

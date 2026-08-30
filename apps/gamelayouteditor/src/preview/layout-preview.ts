@@ -7,6 +7,7 @@ import {
   type SceneLayoutFrameViewport,
   type SceneLayoutInitialReelScene,
   type SceneLayoutManifest,
+  type SceneLayoutManifestLatest,
   type SceneLayoutRuntime,
   type SceneLayoutPackageRuntime,
   type SceneLayoutPopupOpenRequest,
@@ -93,7 +94,7 @@ export class LayoutPreview {
   #runtime: SceneLayoutRuntime | null = null;
   #packageRuntime: SceneLayoutPackageRuntime | null = null;
   #packageRuntimeInspector: SceneLayoutPackageRuntimeInspector | null = null;
-  #manifest: SceneLayoutManifest | null = null;
+  #manifest: SceneLayoutManifestLatest | null = null;
   #lastLayoutSnapshot: SceneLayoutSnapshot | null = null;
   #frameViewport: SceneLayoutFrameViewport | null = null;
   #laidOutDisplayedMode: string | null = null;
@@ -178,20 +179,21 @@ export class LayoutPreview {
   }
 
   async setLayout(
-    manifest: SceneLayoutManifest,
+    manifestValue: SceneLayoutManifest,
     assets: ReadonlyMap<string, Uint8Array>,
   ): Promise<void> {
     this.assertReady();
     const request = ++this.#layoutRequest;
-    const initialBinding = resolveModeSymbolBinding(
-      manifest,
-      manifest.gameModes?.initialMode ?? null,
-    );
-    const nextPackage = await validateLayoutAssets(manifest, assets);
+    const nextPackage = await validateLayoutAssets(manifestValue, assets);
     if (request !== this.#layoutRequest || this.#destroyed) {
       nextPackage.destroy();
       return;
     }
+    const manifest = nextPackage.manifest;
+    const initialBinding = resolveModeSymbolBinding(
+      manifest,
+      manifest.gameModes.initialMode,
+    );
     const packageScenes = new Map<string, RandomReelSceneSnapshot>();
     const bindings = manifest.symbolPackage
       ? [
@@ -216,8 +218,8 @@ export class LayoutPreview {
           gameConfig: resource.gameConfig,
           displaySymbols: resource.displaySymbols,
           reelSetName: binding.reelSet,
-          columns: manifest.reels.main!.columns,
-          rows: manifest.reels.main!.rows,
+          columns: manifest.main.columns,
+          rows: manifest.main.rows,
           randomSource: this.getRandomSource(),
         }),
       );
@@ -322,7 +324,7 @@ export class LayoutPreview {
     await this.preparePrimaryGameModeAction();
   }
 
-  applyGeometryManifest(manifest: SceneLayoutManifest): void {
+  applyGeometryManifest(manifest: SceneLayoutManifestLatest): void {
     this.assertReady();
     const runtime = this.#runtime;
     if (!runtime) throw new Error("布局 preview 尚未初始化。");
@@ -430,7 +432,7 @@ export class LayoutPreview {
   }
 
   getCurrentVariantId(): SceneLayoutVariantId | null {
-    return this.#lastLayoutSnapshot?.orientationVariantId ?? null;
+    return this.#lastLayoutSnapshot?.variantId ?? null;
   }
 
   async selectAuthoringGameMode(modeId: string): Promise<void> {
@@ -445,12 +447,7 @@ export class LayoutPreview {
   }
 
   async preparePrimaryGameModeAction(): Promise<void> {
-    if (
-      !this.#packageRuntime ||
-      !this.#manifest ||
-      this.#manifest.version === 1
-    )
-      return;
+    if (!this.#packageRuntime || !this.#manifest) return;
     const current = this.#packageRuntime.getStableGameMode();
     const mode = this.#manifest.gameModes.modes.find(
       (candidate) => candidate.id === current,
@@ -467,7 +464,7 @@ export class LayoutPreview {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
     let transition: Promise<void>;
-    if (!this.#manifest || this.#manifest.version === 1) {
+    if (!this.#manifest) {
       transition = this.#packageRuntime.requestPrimaryGameModeAction();
     } else {
       const current = this.#packageRuntime.getStableGameMode();
@@ -772,9 +769,7 @@ export class LayoutPreview {
     if (!runtime || !manifest || !snapshot) return Object.freeze([]);
     return Object.freeze(
       manifest.nodes.flatMap((node) => {
-        const variantId = node.placements.default
-          ? snapshot.variantId
-          : snapshot.orientationVariantId;
+        const variantId = snapshot.variantId;
         if (
           node.resource.kind !== "spine" ||
           !("stateMachine" in node.resource) ||
@@ -974,7 +969,7 @@ export class LayoutPreview {
       ...(displayedMode ? { modeId: displayedMode } : {}),
       ...(this.#lastLayoutSnapshot
         ? {
-            previousVariantId: this.#lastLayoutSnapshot.orientationVariantId,
+            previousVariantId: this.#lastLayoutSnapshot.variantId,
           }
         : {}),
     });
@@ -986,8 +981,8 @@ export class LayoutPreview {
     );
     const snapshot = runtime.applyViewport(frameViewport.frameDesignSize);
     this.#lastLayoutSnapshot = snapshot;
-    const reel = snapshot.reels.main;
-    if (reel) this.setSymbolGrid({ columns: reel.columns, rows: reel.rows });
+    const reel = snapshot.main;
+    this.setSymbolGrid({ columns: reel.columns, rows: reel.rows });
     this.layoutSymbolOverlay(snapshot);
     drawPreviewGuides({
       graphics: this.#guides,
@@ -995,20 +990,18 @@ export class LayoutPreview {
       showFocus: this.#showFocus,
       showReels:
         this.#showReels &&
-        (manifest.version === 1 ||
-          Boolean(
-            manifest.gameModes.modes.find(
-              (mode) =>
-                mode.id ===
-                this.#packageRuntimeInspector?.getGameModeSnapshot()
-                  .displayedMode,
-            )?.reelEnabled,
-          )),
+        Boolean(
+          manifest.gameModes.modes.find(
+            (mode) =>
+              mode.id ===
+              this.#packageRuntimeInspector?.getGameModeSnapshot()
+                .displayedMode,
+          )?.main.enabled,
+        ),
     });
     this.drawSelectedLayerOutline();
     this.#diagnostics.textContent = [
       `variant=${snapshot.variantId}`,
-      `orientation=${snapshot.orientationVariantId}`,
       `page=${round(this.#pageSize.width)}×${round(this.#pageSize.height)}`,
       `logical=${round(frameViewport.frameDesignSize.width)}×${round(frameViewport.frameDesignSize.height)}`,
       `css=${round(frameViewport.cssSize.width)}×${round(frameViewport.cssSize.height)}`,
@@ -1066,7 +1059,7 @@ export class LayoutPreview {
     const catalog = this.#symbolCatalog;
     const preview = this.#symbolPreview;
     const scene = preview?.scene;
-    const reel = snapshot.reels.main;
+    const reel = snapshot.main;
     if (this.#packageRuntime) {
       this.clearSymbolPlayers();
       this.#symbolDiagnostic = preview?.scene
@@ -1178,9 +1171,7 @@ export class LayoutPreview {
     const snapshot = this.#lastLayoutSnapshot;
     if (!nodeId || !runtime || !manifest || !snapshot) return;
     const spec = manifest.nodes.find((node) => node.id === nodeId);
-    const variantId = spec?.placements.default
-      ? snapshot.variantId
-      : snapshot.orientationVariantId;
+    const variantId = snapshot.variantId;
     if (!spec?.placements[variantId]) return;
     try {
       const bounds = runtime.getNode(nodeId).getBounds();

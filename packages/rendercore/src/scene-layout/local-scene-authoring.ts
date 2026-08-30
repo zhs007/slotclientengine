@@ -492,8 +492,8 @@ function createPackageSummary(
   resource: SceneLayoutPackageResource,
   sha256: string,
 ): SceneOtherSceneFlowPackageSummary {
-  const geometry = resource.manifest.reels.main;
-  if (!geometry) fail("Scene layout must declare reels.main.");
+  const geometry = resource.manifest.main;
+  if (!geometry) fail("Scene Layout package has no main geometry.");
   const { binding, id, symbolResource } = resolveInitialSymbolBinding(resource);
   const reels = symbolResource.gameConfig.getReels(binding.reelSet);
   if (reels.getReelCount() !== geometry.columns)

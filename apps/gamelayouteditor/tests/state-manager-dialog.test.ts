@@ -15,8 +15,7 @@ describe("state manager dialog", () => {
       resourceId: "background",
       placements: { default: { x: 0, y: 0, scale: 1 } },
     });
-    project.gameModes.modes[0]!.backgroundNodes.default = "base-background";
-    addGameMode(project, "FreeGame", project.mode);
+    addGameMode(project, "FreeGame");
     const host = document.createElement("div");
     host.innerHTML = stateManagerDialogMarkup({
       project,
@@ -34,7 +33,7 @@ describe("state manager dialog", () => {
     expect(options[0]!.textContent).toContain("initial");
     expect(options[0]!.textContent).toContain("ready");
     expect(options[1]!.getAttribute("aria-selected")).toBe("true");
-    expect(options[1]!.textContent).toContain("incomplete");
+    expect(options[1]!.textContent).toContain("ready");
     expect(
       (host.querySelector("[data-delete-game-mode]") as HTMLButtonElement)
         .disabled,
@@ -58,7 +57,7 @@ describe("state manager dialog", () => {
         .disabled,
     ).toBe(true);
 
-    addGameMode(project, "FreeGame", project.mode);
+    addGameMode(project, "FreeGame");
     host.innerHTML = stateManagerDialogMarkup({
       project,
       selectedModeId: "BaseGame",

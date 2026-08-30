@@ -9,7 +9,7 @@ import type {
 
 const state = vi.hoisted(() => ({
   runtime: null as any,
-  variant: "default" as "default" | "portrait",
+  variant: "landscape" as "landscape" | "portrait",
 }));
 
 vi.mock("../../src/scene-layout/runtime.js", () => ({
@@ -132,6 +132,28 @@ class FakeSpinePopupRuntime implements SpinePopupRuntime {
   }
 }
 
+function modeVariants() {
+  return {
+    landscape: {
+      x: 0,
+      y: 0,
+      focusRect: { x: -400, y: -240, width: 800, height: 480 },
+    },
+    portrait: {
+      x: 0,
+      y: 0,
+      focusRect: { x: -400, y: -240, width: 800, height: 480 },
+    },
+  };
+}
+
+function allocationVariants(activeNodes: readonly string[]) {
+  return {
+    landscape: { activeNodes },
+    portrait: { activeNodes },
+  };
+}
+
 function packageResource(
   withEdge = true,
   withPrelude = false,
@@ -154,49 +176,103 @@ function packageResource(
             animation: "BG_FG",
             switchEvent: "SwitchScene",
             placements: {
-              default: { x: 100, y: 200, scale: 1 },
+              landscape: { x: 100, y: 200, scale: 1 },
               portrait: { x: 30, y: 40, scale: 0.5 },
             },
           },
   };
-  return {
-    manifest: {
-      nodes: [
-        { id: "base-bg", order: 0 },
-        { id: "free-bg", order: 1 },
-        { id: "shared", order: 2 },
-        { id: "free-only", order: 3, gameMode: "FreeGame" },
-      ],
-      reels: {},
-      gameModes: {
-        initialMode: "BaseGame",
-        modes: [
-          {
-            id: "BaseGame",
-            backgroundNodes: { default: "base-bg" },
-            nodeStates: {},
-          },
-          {
-            id: "FreeGame",
-            backgroundNodes: { default: "free-bg" },
-            nodeStates: {},
-          },
-        ],
-        transitions: withEdge ? [transition] : [],
+  const manifest = {
+    version: 7,
+    kind: "scene-layout",
+    id: "package-runtime-mode-test",
+    main: {
+      columns: 5,
+      rows: 3,
+      cellSize: { width: 160, height: 160 },
+      gap: { x: 0, y: 0 },
+    },
+    nodes: [
+      {
+        id: "base-bg",
+        order: 0,
+        placements: { landscape: {}, portrait: {} },
+        scope: { BaseGame: ["landscape", "portrait"] },
       },
-      ...(withPrelude
-        ? {
-            popups: {
-              "free-entry": {
-                type: "spine",
-                manifest: "free-entry-popup.manifest.json",
-                order: 2000,
-                placements: { default: { x: 0, y: 0, scale: 1 } },
+      {
+        id: "free-bg",
+        order: 1,
+        placements: { landscape: {}, portrait: {} },
+        scope: { FreeGame: ["landscape", "portrait"] },
+      },
+      { id: "shared", order: 2, placements: { landscape: {}, portrait: {} } },
+      {
+        id: "free-only",
+        order: 3,
+        placements: { landscape: {}, portrait: {} },
+        scope: { FreeGame: ["landscape", "portrait"] },
+      },
+    ],
+    gameModes: {
+      initialMode: "BaseGame",
+      modes: [
+        {
+          id: "BaseGame",
+          main: { enabled: true, variants: modeVariants() },
+          nodeStates: {},
+        },
+        {
+          id: "FreeGame",
+          main: { enabled: true, variants: modeVariants() },
+          nodeStates: {},
+        },
+      ],
+      transitions: withEdge ? [transition] : [],
+    },
+    ...(withPrelude
+      ? {
+          popups: {
+            "free-entry": {
+              type: "spine",
+              manifest: "free-entry-popup.manifest.json",
+              order: 2000,
+              placements: {
+                landscape: { x: 0, y: 0, scale: 1 },
+                portrait: { x: 0, y: 0, scale: 1 },
               },
             },
-          }
-        : {}),
+          },
+        }
+      : {}),
+    audio: { version: 1, effects: [], music: [], programmaticEffects: [] },
+    eventAudio: { version: 1, ignoreLegacyAudio: false, bindings: [] },
+    runtimeAllocation: {
+      version: 3,
+      package: {
+        nodes: ["base-bg", "free-bg", "shared", "free-only"],
+        symbolPackages: [],
+        popups: withPrelude ? ["free-entry"] : [],
+      },
+      onDemand: {
+        transitions: withEdge ? ["BaseGame=>FreeGame"] : [],
+        runtimeResources: [],
+      },
+      modes: {
+        BaseGame: {
+          variants: allocationVariants(["base-bg", "shared"]),
+          symbolPackage: null,
+          awardCelebrationPopup: null,
+        },
+        FreeGame: {
+          variants: allocationVariants(["free-bg", "shared", "free-only"]),
+          symbolPackage: null,
+          awardCelebrationPopup: null,
+        },
+      },
     },
+  };
+  return {
+    manifest,
+    runtimeManifest: manifest,
     layout: {
       spineResources: {
         [transitionResourceKey("BaseGame", "FreeGame")]: {
@@ -240,7 +316,7 @@ function createRuntime(
 
 describe("scene layout package event-driven game-mode transition", () => {
   beforeEach(() => {
-    state.variant = "default";
+    state.variant = "landscape";
     const container = new Container();
     state.runtime = {
       container,
@@ -248,6 +324,7 @@ describe("scene layout package event-driven game-mode transition", () => {
       prepareNodes: vi.fn(async () => undefined),
       applyViewport: vi.fn(() => snapshot()),
       commitPreparedGeometryManifest: vi.fn(() => null),
+      commitGameMode: vi.fn(() => null),
       update: vi.fn(),
       getSnapshot: vi.fn(() => snapshot()),
       getNode: vi.fn(),
@@ -343,7 +420,7 @@ describe("scene layout package event-driven game-mode transition", () => {
       stableMode: "BaseGame",
       displayedMode: "FreeGame",
       transitionPhase: "after-switch",
-      activeBackgroundNodes: ["free-bg"],
+      activeBackgroundNodes: [],
     });
     expect(occurrences).toEqual([
       { sequence: expect.any(Number), displayedMode: "FreeGame" },

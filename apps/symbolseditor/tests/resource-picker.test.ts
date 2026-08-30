@@ -13,7 +13,7 @@ import {
   getResourcePickerCandidates,
   resolveSpineAtlasBinding,
 } from "../src/ui/resource-picker.js";
-import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
+import { readSymbolArtifactFixtureBytes } from "./artifact-fixtures.js";
 
 const gameConfig = {
   paytable: { "1": { code: 1, symbol: "A", pays: [1] } },
@@ -22,7 +22,7 @@ const gameConfig = {
 };
 
 const fixture = (path: string) =>
-  readMinecart2SymbolFixtureBytes(path.split("/").at(-1)!);
+  readSymbolArtifactFixtureBytes(path.split("/").at(-1)!);
 
 function createProject() {
   const project = createFromGameConfig({

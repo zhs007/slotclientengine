@@ -1,9 +1,7 @@
 export {
   addLayerFromResource,
-  assignBackgroundResource,
   bindModeBgm,
   bindProgrammaticAudioEffect,
-  clearBackground,
   deleteLayoutResource,
   describeResource,
   getLayoutResourceReferences,

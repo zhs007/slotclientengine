@@ -15,10 +15,11 @@ import { createRenderObject } from "../../src/presentation/index.js";
 import { getRenderObjectAdapter } from "../../src/presentation/render-object.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
+  createSceneLayoutRuntimeAllocation,
   createSceneLayoutPackageResource,
   createSceneLayoutPackageRuntime,
   upgradeSceneLayoutManifestToLatest,
-  type SceneLayoutManifestV1,
+  type SceneLayoutManifestLatest,
 } from "../../src/scene-layout/index.js";
 import { formatGameLayoutRuntimeAddress } from "../../src/scene-layout/data/runtime-address.js";
 import { createSceneLayoutPackageRuntimeInspector } from "../../src/scene-layout/editor.js";
@@ -128,7 +129,10 @@ function transitionSpec(from: string, to: string) {
       },
       animation: `${from}_${to}`,
       switchEvent: "SwitchScene",
-      placements: { default: { x: 0, y: 0, scale: 1 } },
+      placements: {
+        landscape: { x: 0, y: 0, scale: 1 },
+        portrait: { x: 0, y: 0, scale: 1 },
+      },
     },
   };
 }
@@ -140,14 +144,18 @@ function createRuntimeWithTransitions(
     new CompletingTransitionPlayer(),
 ) {
   const transitions = pairs.map(([from, to]) => transitionSpec(from, to));
-  const layoutManifest: SceneLayoutManifestV1 = {
-    ...resource.layout.manifest,
+  const draft = {
+    ...resource.manifest,
     gameModes: {
-      ...resource.layout.manifest.gameModes!,
+      ...resource.manifest.gameModes,
       transitions,
     },
   };
-  const manifest = upgradeSceneLayoutManifestToLatest(layoutManifest);
+  const layoutManifest: SceneLayoutManifestLatest = {
+    ...draft,
+    runtimeAllocation: createSceneLayoutRuntimeAllocation(draft),
+  };
+  const manifest = layoutManifest;
   const spineResources = { ...resource.layout.spineResources };
   for (const [from, to] of pairs) {
     spineResources[transitionResourceKey(from, to)] = {
@@ -608,10 +616,16 @@ describe("scene layout package runtime", () => {
       });
       runtime.applyViewport({ width: 1300, height: 1900 });
       expect(events).toHaveLength(1);
-      expect(() => runtime.applyViewport({ width: 1000, height: 900 })).toThrow(
-        /cannot contain focusRect/,
-      );
-      expect(events).toHaveLength(1);
+      expect(
+        runtime.applyViewport({ width: 1000, height: 900 }).variantId,
+      ).toBe("landscape");
+      expect(events).toHaveLength(2);
+      expect(events[1]).toMatchObject({
+        detail: {
+          previousVariantId: "portrait",
+          variantId: "landscape",
+        },
+      });
 
       dispose();
       runtime.destroy();
@@ -681,7 +695,7 @@ describe("scene layout package runtime", () => {
         lazyRuntimeResources: true,
         decodeImage: async () => ({ width: 1, height: 1 }),
       });
-      expect(resource.runtimeManifest.version).toBe(6);
+      expect(resource.runtimeManifest.version).toBe(7);
       expect(resource.layout.manifest.runtimeResources).toBeUndefined();
       const runtime = createSceneLayoutPackageRuntime({
         resource,
@@ -902,26 +916,28 @@ describe("scene layout package runtime", () => {
             ? reel instanceof RenderReelSet
             : reel instanceof RenderGridCellReelSet,
         ).toBe(true);
-        expect(reel.parent).toBe(runtime.container.children[0]);
+        expect(reel.parent?.parent?.label).toBe("scene-layout-camera-root");
         expect(reel.parent!.getChildIndex(reel)).toBe(1);
         const snapshot = runtime.applyViewport({ width: 1920, height: 1080 });
-        expect(snapshot.reels.main.artRect).toEqual({
-          x: 640,
-          y: 337,
+        expect(snapshot.main.layoutRect).toEqual({
+          x: -360,
+          y: -663,
           width: 4,
           height: 5,
         });
-        expect(reel.position).toMatchObject({ x: 640, y: 337 });
+        expect(reel.position).toMatchObject({ x: -360, y: -663 });
         const movedManifest = structuredClone(
-          layoutManifest(renderMode),
+          upgradeSceneLayoutManifestToLatest(layoutManifest(renderMode)),
         ) as any;
-        movedManifest.reels.main.placements.default = { x: 650, y: 345 };
+        for (const mode of movedManifest.gameModes.modes)
+          for (const variant of ["landscape", "portrait"])
+            Object.assign(mode.main.variants[variant], { x: 10, y: -115 });
         const movedSnapshot = runtime.applyGeometryManifest(movedManifest);
-        expect(movedSnapshot?.reels.main).toMatchObject({
-          artRect: { x: 650, y: 345, width: 4, height: 5 },
+        expect(movedSnapshot?.main).toMatchObject({
+          layoutRect: { x: 8, y: -117.5, width: 4, height: 5 },
         });
         expect(runtime.getReelPresentation("main")).toBe(reel);
-        expect(reel.position).toMatchObject({ x: 650, y: 345 });
+        expect(reel.position).toMatchObject({ x: 8, y: -117.5 });
         expect(
           runtime.getMainReelSymbolGeometrySnapshots([{ x: 0, y: 0 }]),
         ).toMatchObject([{ x: 0, y: 0 }]);
@@ -1512,7 +1528,7 @@ describe("scene layout package runtime", () => {
     }
   });
 
-  it("keeps the main reel aligned with guide geometry across mode art-size switches", async () => {
+  it("keeps the main reel aligned with guide geometry across mode focus-rect switches", async () => {
     const load = vi
       .spyOn(Assets, "load")
       .mockResolvedValue(Texture.WHITE as never);
@@ -1522,23 +1538,19 @@ describe("scene layout package runtime", () => {
       const manifest = structuredClone(
         upgradeSceneLayoutManifestToLatest(fixture.manifest),
       ) as any;
-      manifest.coordinateOrigin = "center";
       for (const mode of manifest.gameModes.modes) {
         const square = mode.id === "BaseGame" || mode.id === "BonusGame";
-        mode.adaptation = {
-          mode: "maximized-focus",
-          artSize: {
-            width: 2000,
-            height: square ? 2000 : 1125,
-          },
-          focusRect: {
+        for (const variant of ["landscape", "portrait"])
+          mode.main.variants[variant] = {
             x: 0,
             y: 0,
-            width: 2000,
-            height: square ? 2000 : 1125,
-          },
-        };
-        mode.reelPlacements.main.default = { x: 0, y: 0 };
+            focusRect: {
+              x: -1000,
+              y: square ? -1000 : -562.5,
+              width: 2000,
+              height: square ? 2000 : 1125,
+            },
+          };
       }
       const resource = await createSceneLayoutPackageResource({
         manifest,
@@ -1559,7 +1571,7 @@ describe("scene layout package runtime", () => {
         height: number;
       }) => {
         const snapshot = runtime.applyViewport(viewportSize);
-        const guideRect = snapshot.reels.main.viewportRect;
+        const guideRect = snapshot.main.viewportRect;
         const reel = runtime.getReelPresentation("main");
         expect({
           x: reel.position.x + reel.parent!.position.x,
@@ -1805,7 +1817,7 @@ describe("scene layout package runtime", () => {
         stableSymbolPackage: null,
         displayedSymbolPackage: null,
         targetSymbolPackage: null,
-        activeBackgroundNodes: ["bg"],
+        activeBackgroundNodes: [],
       });
       await expect(
         runtime.requestGameMode("BaseGame"),
@@ -1859,8 +1871,8 @@ describe("scene layout package runtime", () => {
       });
       const runtime = createSceneLayoutPackageRuntime({ resource });
       await runtime.init();
-      expect(resource.manifest.version).toBe(1);
-      expect(resource.runtimeManifest.version).toBe(6);
+      expect(resource.manifest.version).toBe(7);
+      expect(resource.runtimeManifest.version).toBe(7);
       expect(runtime.getGameModeIds()).toEqual(["BaseGame"]);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
         stableMode: "BaseGame",

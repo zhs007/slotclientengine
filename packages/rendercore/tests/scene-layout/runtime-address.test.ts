@@ -147,7 +147,7 @@ describe("Game Layout runtime address", () => {
       {
         manifest: {
           nodes: [],
-          reels: { main: { columns: 3, rows: 2 } },
+          main: { columns: 3, rows: 2 },
           symbolPackages: {
             base: { reel: "main", reelSet: "base", renderMode: "standard" },
           },
@@ -228,7 +228,7 @@ describe("Game Layout runtime address", () => {
           },
         },
       ],
-      reels: { main: { columns: 2, rows: 1 } },
+      main: { columns: 2, rows: 1 },
       symbolPackages: {
         base: { reel: "main", reelSet: "main", renderMode: "standard" },
       },

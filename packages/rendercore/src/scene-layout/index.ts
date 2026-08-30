@@ -4,6 +4,7 @@ export * from "./manifest.js";
 export * from "./manifest-v2.js";
 export * from "./manifest-v3.js";
 export * from "./manifest-v6.js";
+export * from "./manifest-v7.js";
 export * from "./runtime-allocation.js";
 export * from "./geometry.js";
 export * from "./resource.js";

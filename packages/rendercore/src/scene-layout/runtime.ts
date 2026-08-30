@@ -20,27 +20,22 @@ import {
 } from "../image-string/core/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
-import {
-  assertSceneLayoutGeometryCompatible,
-  parseSceneLayoutManifest,
-} from "./manifest.js";
-import {
-  resolveSceneLayoutArtSpace,
-  resolveSceneLayoutReelGrid,
-  resolveSceneLayoutViewport,
-} from "./geometry.js";
+import { parseSceneLayoutManifestDocument } from "./manifest.js";
+import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
+import { resolveSceneLayoutViewportV7 } from "./geometry.js";
 import type {
   AttachChildOptions,
   AttachRelativeOptions,
-  ResolvedSceneLayoutReelGrid,
+  ResolvedSceneLayoutMainGrid,
   SceneLayoutNode,
   SceneLayoutManifest,
+  SceneLayoutManifestLatest,
   SceneLayoutNodePlacement,
   SceneLayoutResource,
   SceneLayoutRuntime,
   SceneLayoutSnapshot,
   SceneLayoutNodeStateSnapshot,
-  SceneLayoutVariantId,
+  SceneLayoutOrientationVariantId,
   SceneLayoutNodeRenderLayerPlacement,
   SceneLayoutPoint,
   SceneLayoutPointSelector,
@@ -215,7 +210,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #initialNodeIds: readonly string[] | null;
   readonly #nodes: readonly RuntimeNode[];
   readonly #nodesById: ReadonlyMap<string, RuntimeNode>;
-  readonly #artMask = new Graphics();
+  readonly #viewportMask = new Graphics();
   readonly #rootRenderLayerContainer = new Container();
   readonly #rootRenderLayerController: RenderObjectLayerController;
   readonly #nodeRenderLayerControllers = new Map<
@@ -242,9 +237,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     >
   >();
   readonly #renderObjectMotionRuntime: RenderObjectMotionRuntime;
-  #manifest: SceneLayoutResource["manifest"];
+  #manifest: SceneLayoutManifestLatest;
   #snapshot: SceneLayoutSnapshot | null = null;
-  #artSpaceApplied = false;
+  #modeId: string;
   #initializing = false;
   #initialized = false;
   #destroyed = false;
@@ -254,7 +249,10 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       createError: (message) => new SceneLayoutError(message),
     });
     this.#resource = options.resource;
-    this.#manifest = options.resource.manifest;
+    this.#manifest = upgradeSceneLayoutManifestToLatest(
+      options.resource.manifest,
+    );
+    this.#modeId = this.#manifest.gameModes.initialMode;
     this.#loadTexture = options.loadTexture ?? loadSceneLayoutTexture;
     this.#unloadTexture =
       options.unloadTexture ??
@@ -285,9 +283,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.#initialNodeIds = options.initialNodeIds
       ? Object.freeze([...options.initialNodeIds])
       : null;
-    this.container.label = `scene-layout:${options.resource.manifest.id}`;
+    this.container.label = `scene-layout:${this.#manifest.id}`;
     this.container.sortableChildren = false;
-    const nodes = options.resource.manifest.nodes.map((spec) => {
+    const nodes = this.#manifest.nodes.map((spec) => {
       const slot = new Container();
       const before = new Container();
       const named = new Container();
@@ -357,13 +355,13 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       this.#rootRenderLayerContainer,
       "scene layout root render layer",
     );
-    this.#artMask.label = "scene-layout-art-mask";
-    this.#artMask.visible = true;
-    this.#artMask.renderable = true;
-    this.#artMask.includeInBuild = false;
-    this.#artMask.measurable = false;
-    this.container.addChild(this.#rootRenderLayerContainer, this.#artMask);
-    this.container.mask = this.#artMask;
+    this.#viewportMask.label = "scene-layout-viewport-mask";
+    this.#viewportMask.visible = true;
+    this.#viewportMask.renderable = true;
+    this.#viewportMask.includeInBuild = false;
+    this.#viewportMask.measurable = false;
+    this.container.addChild(this.#rootRenderLayerContainer, this.#viewportMask);
+    this.container.mask = this.#viewportMask;
   }
 
   async init(): Promise<void> {
@@ -396,63 +394,52 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
 
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot {
     this.assertReady();
-    this.#artSpaceApplied = false;
     return this.applySnapshot(
-      resolveSceneLayoutViewport({
+      resolveSceneLayoutViewportV7({
         manifest: this.#manifest,
         viewportSize,
+        modeId: this.#modeId,
         ...(this.#snapshot
           ? {
               previousVariantId: this.#snapshot.variantId,
-              previousOrientationVariantId: this.#snapshot.orientationVariantId,
             }
           : {}),
       }),
     );
   }
 
-  applyArtSpace(): SceneLayoutSnapshot {
-    this.assertReady();
-    this.#artSpaceApplied = true;
-    return this.applySnapshot(
-      resolveSceneLayoutArtSpace(
-        this.#manifest,
-        this.#snapshot?.orientationVariantId,
-      ),
-    );
-  }
-
   private applySnapshot(snapshot: SceneLayoutSnapshot): SceneLayoutSnapshot {
     const variantChanged =
       this.#snapshot !== null &&
-      (this.#snapshot.variantId !== snapshot.variantId ||
-        this.#snapshot.orientationVariantId !== snapshot.orientationVariantId);
+      this.#snapshot.variantId !== snapshot.variantId;
     if (variantChanged)
       this.resetAllNodeMotions("Scene layout variant was replaced.");
     this.#snapshot = snapshot;
     this.container.position.set(snapshot.worldOffset.x, snapshot.worldOffset.y);
-    this.#artMask.clear();
-    this.#artMask
-      .rect(0, 0, snapshot.artSize.width, snapshot.artSize.height)
+    this.#viewportMask.clear();
+    this.#viewportMask
+      .rect(
+        snapshot.visibleRect.x,
+        snapshot.visibleRect.y,
+        snapshot.visibleRect.width,
+        snapshot.visibleRect.height,
+      )
       .fill({ color: 0xffffff, alpha: 1 });
     for (const node of this.#nodes) {
       const spec = this.requireCurrentNode(node.spec.id);
-      const placementVariantId = this.nodePlacementVariant(spec.id, snapshot);
-      const placement = spec.placements[placementVariantId];
+      const placement = spec.placements[snapshot.variantId];
+      const modeActive =
+        !spec.scope ||
+        spec.scope[this.#modeId]?.includes(snapshot.variantId) === true;
       const active =
         node.prepared &&
+        modeActive &&
         this.#authoredNodeActive.get(node.spec.id) !== false &&
         this.#programNodeVisible.get(node.spec.id) !== false;
       node.slot.visible = Boolean(placement) && active;
       node.slot.renderable = Boolean(placement) && active;
       if (placement && node.prepared) {
-        applyNodePlacementTransform(
-          node,
-          this.#resource,
-          this.#manifest,
-          placementVariantId,
-          placement,
-        );
+        applyNodePlacementTransform(node, this.#resource, placement);
       }
     }
     return snapshot;
@@ -462,52 +449,65 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     manifestValue: SceneLayoutManifest,
   ): SceneLayoutSnapshot | null {
     this.assertReady();
-    const manifest = parseSceneLayoutManifest(manifestValue);
-    assertSceneLayoutGeometryCompatible(this.#manifest, manifest);
+    const manifest = upgradeSceneLayoutManifestToLatest(
+      parseSceneLayoutManifestDocument(manifestValue),
+    );
     return this.commitGeometryManifest(manifest);
   }
 
   commitPreparedGeometryManifest(
-    manifest: SceneLayoutResource["manifest"],
+    manifest: SceneLayoutManifestLatest,
   ): SceneLayoutSnapshot | null {
     this.assertReady();
     return this.commitGeometryManifest(manifest);
   }
 
   private commitGeometryManifest(
-    manifest: SceneLayoutResource["manifest"],
+    manifest: SceneLayoutManifestLatest,
   ): SceneLayoutSnapshot | null {
+    assertCompatibleSceneLayoutNodes(this.#manifest, manifest);
+    if (!manifest.gameModes.modes.some((mode) => mode.id === this.#modeId))
+      this.#modeId = manifest.gameModes.initialMode;
     const nextSnapshot = this.#snapshot
-      ? this.#artSpaceApplied
-        ? resolveSceneLayoutArtSpace(
-            manifest,
-            this.#snapshot.orientationVariantId,
-          )
-        : resolveSceneLayoutViewport({
-            manifest,
-            viewportSize: this.#snapshot.viewportSize,
-            previousVariantId: this.#snapshot.variantId,
-            previousOrientationVariantId: this.#snapshot.orientationVariantId,
-          })
+      ? resolveSceneLayoutViewportV7({
+          manifest,
+          viewportSize: this.#snapshot.viewportSize,
+          modeId: this.#modeId,
+          previousVariantId: this.#snapshot.variantId,
+        })
       : null;
     this.resetAllNodeMotions("Scene layout geometry was replaced.");
     this.#manifest = manifest;
     for (const [index, spec] of manifest.nodes.entries())
       this.container.setChildIndex(this.requireNode(spec.id).slot, index);
     for (const node of this.#nodes)
-      if (node.imageSprite)
-        node.imageSprite.anchor.set(
-          (manifest.coordinateOrigin ?? "top-left") === "center" ? 0.5 : 0,
-        );
+      if (node.imageSprite) node.imageSprite.anchor.set(0.5);
       else if (node.vniPlayer)
         applyVniOrigin(
           node.vniPlayer,
           this.#resource.vniResources[
             node.spec.resource.kind === "vni" ? node.spec.resource.project : ""
           ],
-          manifest.coordinateOrigin ?? "top-left",
+          "center",
         );
     return nextSnapshot ? this.applySnapshot(nextSnapshot) : null;
+  }
+
+  /** @internal Package runtimes commit the already validated active mode atomically. */
+  commitGameMode(modeId: string): SceneLayoutSnapshot | null {
+    if (!this.#manifest.gameModes.modes.some((mode) => mode.id === modeId))
+      throw new SceneLayoutError(`Unknown scene layout game mode "${modeId}".`);
+    this.#modeId = modeId;
+    return this.#snapshot
+      ? this.applySnapshot(
+          resolveSceneLayoutViewportV7({
+            manifest: this.#manifest,
+            viewportSize: this.#snapshot.viewportSize,
+            modeId,
+            previousVariantId: this.#snapshot.variantId,
+          }),
+        )
+      : null;
   }
 
   update(deltaSeconds: number): void {
@@ -549,20 +549,16 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     if (!selector || typeof selector !== "object")
       throw new SceneLayoutError("Scene layout point selector is invalid.");
     let artPoint: SceneLayoutPoint;
-    if (selector.kind === "origin")
-      artPoint = this.authoredToArt({ x: 0, y: 0 });
-    else if (selector.kind === "art")
-      artPoint = alignedPoint(
-        { x: 0, y: 0, ...snapshot.artSize },
-        selector.align,
-      );
+    if (selector.kind === "origin") artPoint = { x: 0, y: 0 };
+    else if (selector.kind === "main")
+      artPoint = alignedPoint(snapshot.main.layoutRect, selector.align);
     else if (selector.kind === "viewport")
       artPoint = alignedPoint(snapshot.visibleRect, selector.align);
     else
       throw new SceneLayoutError(
         `Unknown scene layout point selector "${String((selector as { kind?: unknown }).kind)}".`,
       );
-    return this.artToAuthored(artPoint);
+    return Object.freeze(artPoint);
   }
 
   getLayoutAnchor(point: SceneLayoutPoint) {
@@ -836,10 +832,18 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     return createDisposer(parent, options.object);
   }
 
-  getReelGrid(id: string): ResolvedSceneLayoutReelGrid {
+  getReelGrid(id: "main"): ResolvedSceneLayoutMainGrid {
     this.assertReady();
-    const variantId = this.#snapshot?.variantId ?? this.defaultVariantId();
-    return resolveSceneLayoutReelGrid(this.#manifest, id, variantId);
+    if (id !== "main")
+      throw new SceneLayoutError(`Unknown scene layout main area "${id}".`);
+    return (
+      this.#snapshot ??
+      resolveSceneLayoutViewportV7({
+        manifest: this.#manifest,
+        viewportSize: { width: 1, height: 1 },
+        modeId: this.#modeId,
+      })
+    ).main;
   }
 
   getImageStringNodeNames(): readonly string[] {
@@ -893,7 +897,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         controller.detachAll();
     this.releaseNodeResources();
     this.#renderObjectMotionRuntime.destroy();
-    this.#artMask.destroy();
+    this.#viewportMask.destroy();
     this.#rootRenderLayerContainer.destroy({ children: false });
     for (const node of this.#nodes) {
       node.before.removeChildren();
@@ -906,7 +910,6 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.#resource.destroy();
     this.#snapshot = null;
     this.#renderObjects.clear();
-    this.#artSpaceApplied = false;
     this.#initialized = false;
   }
 
@@ -936,9 +939,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       }
       node.texture = texture;
       const sprite = new Sprite(texture);
-      sprite.anchor.set(
-        (this.#manifest.coordinateOrigin ?? "top-left") === "center" ? 0.5 : 0,
-      );
+      sprite.anchor.set(0.5);
       node.imageSprite = sprite;
       sprite.label = `scene-layout-image:${node.spec.id}`;
       node.named.addChild(sprite);
@@ -980,11 +981,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       node.vniPlayer = player;
       await player.init();
       this.assertAlive();
-      applyVniOrigin(
-        player,
-        resource,
-        this.#manifest.coordinateOrigin ?? "top-left",
-      );
+      applyVniOrigin(player, resource, "center");
       player.setLoop(node.spec.resource.loop);
       player.play();
       return;
@@ -1034,19 +1031,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       if (this.#snapshot) {
         for (const node of pending) {
           const spec = this.requireCurrentNode(node.spec.id);
-          const placementVariantId = this.nodePlacementVariant(
-            spec.id,
-            this.#snapshot,
-          );
-          const placement = spec.placements[placementVariantId];
+          const placement = spec.placements[this.#snapshot.variantId];
           if (placement)
-            applyNodePlacementTransform(
-              node,
-              this.#resource,
-              this.#manifest,
-              placementVariantId,
-              placement,
-            );
+            applyNodePlacementTransform(node, this.#resource, placement);
           this.refreshNodeVisibility(node);
         }
       }
@@ -1632,7 +1619,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   private refreshNodeVisibility(node: RuntimeNode): void {
     const spec = this.requireCurrentNode(node.spec.id);
     const placement = this.#snapshot
-      ? spec.placements[this.nodePlacementVariant(spec.id, this.#snapshot)]
+      ? spec.placements[this.#snapshot.variantId]
       : undefined;
     const visible =
       Boolean(placement) &&
@@ -1643,48 +1630,16 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     node.slot.renderable = visible;
   }
 
-  private nodePlacementVariant(
-    nodeId: string,
-    snapshot: SceneLayoutSnapshot,
-  ): SceneLayoutVariantId {
-    const backgrounds =
-      this.#manifest.adaptation.mode === "maximized-focus"
-        ? [this.#manifest.adaptation.backgroundNode]
-        : [
-            this.#manifest.adaptation.variants.landscape.backgroundNode,
-            this.#manifest.adaptation.variants.portrait.backgroundNode,
-          ];
-    if (backgrounds.includes(nodeId)) return snapshot.variantId;
-    const node = this.requireCurrentNode(nodeId);
-    return node.placements.default ? "default" : snapshot.orientationVariantId;
-  }
-
   private authoredToArt(point: SceneLayoutPoint): SceneLayoutPoint {
     assertFiniteSceneLayoutPoint(point, "authored point");
-    const snapshot = this.getSnapshot();
-    if ((this.#manifest.coordinateOrigin ?? "top-left") === "top-left")
-      return Object.freeze({ x: point.x, y: point.y });
-    return Object.freeze({
-      x: point.x + snapshot.artSize.width / 2,
-      y: point.y + snapshot.artSize.height / 2,
-    });
+    this.getSnapshot();
+    return Object.freeze({ x: point.x, y: point.y });
   }
 
   private artToAuthored(point: SceneLayoutPoint): SceneLayoutPoint {
     assertFiniteSceneLayoutPoint(point, "art point");
-    const snapshot = this.getSnapshot();
-    if ((this.#manifest.coordinateOrigin ?? "top-left") === "top-left")
-      return Object.freeze({ x: point.x, y: point.y });
-    return Object.freeze({
-      x: point.x - snapshot.artSize.width / 2,
-      y: point.y - snapshot.artSize.height / 2,
-    });
-  }
-
-  private defaultVariantId(): SceneLayoutVariantId {
-    return this.#manifest.adaptation.mode === "maximized-focus"
-      ? "default"
-      : "landscape";
+    this.getSnapshot();
+    return Object.freeze({ x: point.x, y: point.y });
   }
 
   private requireCurrentNode(id: string): SceneLayoutNode {
@@ -1772,17 +1727,10 @@ function assertFiniteSceneLayoutPoint(
 function applyNodePlacementTransform(
   node: RuntimeNode,
   resource: SceneLayoutResource,
-  manifest: SceneLayoutResource["manifest"],
-  variantId: SceneLayoutVariantId,
   placement: SceneLayoutNodePlacement,
 ): void {
-  const base = resolveNodePlacementPosition(manifest, variantId, placement);
-  const pivot = resolveNodePlacementPivot(
-    node,
-    resource,
-    manifest.coordinateOrigin ?? "top-left",
-    placement,
-  );
+  const base = placement;
+  const pivot = resolveNodePlacementPivot(node, resource, placement);
   node.slot.pivot.set(pivot.x, pivot.y);
   node.homeX = base.x + pivot.x * placement.scale;
   node.homeY = base.y + pivot.y * placement.scale;
@@ -1816,7 +1764,6 @@ function createNeutralNodeMotionState(): RenderObjectMotionState {
 function resolveNodePlacementPivot(
   node: RuntimeNode,
   sceneResource: SceneLayoutResource,
-  coordinateOrigin: "top-left" | "center",
   placement: SceneLayoutNodePlacement,
 ): { readonly x: number; readonly y: number } {
   const rotation = placement.rotation ?? 0;
@@ -1824,10 +1771,9 @@ function resolveNodePlacementPivot(
   const center = placement.center ?? { x: 0.5, y: 0.5 };
   const resource = node.spec.resource;
   if (resource.kind === "image") {
-    const origin = coordinateOrigin === "center" ? 0.5 : 0;
     return {
-      x: (center.x - origin) * resource.size.width,
-      y: (center.y - origin) * resource.size.height,
+      x: (center.x - 0.5) * resource.size.width,
+      y: (center.y - 0.5) * resource.size.height,
     };
   }
   if (resource.kind === "vni") {
@@ -1836,10 +1782,9 @@ function resolveNodePlacementPivot(
       throw new SceneLayoutError(
         `Scene layout VNI resource is missing for node "${node.spec.id}".`,
       );
-    const origin = coordinateOrigin === "center" ? 0.5 : 0;
     return {
-      x: (center.x - origin) * vni.project.stage.width,
-      y: (center.y - origin) * vni.project.stage.height,
+      x: (center.x - 0.5) * vni.project.stage.width,
+      y: (center.y - 0.5) * vni.project.stage.height,
     };
   }
   if (resource.kind === "image-string") {
@@ -1878,22 +1823,31 @@ function validNodePivot(
   return pivot;
 }
 
-function resolveNodePlacementPosition(
-  manifest: SceneLayoutResource["manifest"],
-  variantId: SceneLayoutVariantId,
-  placement: { readonly x: number; readonly y: number },
-): { readonly x: number; readonly y: number } {
-  if ((manifest.coordinateOrigin ?? "top-left") === "top-left")
-    return placement;
-  const artSize =
-    manifest.adaptation.mode === "maximized-focus"
-      ? manifest.adaptation.artSize
-      : manifest.adaptation.variants[variantId as "landscape" | "portrait"]
-          .artSize;
-  return {
-    x: artSize.width / 2 + placement.x,
-    y: artSize.height / 2 + placement.y,
-  };
+function assertCompatibleSceneLayoutNodes(
+  current: SceneLayoutManifestLatest,
+  next: SceneLayoutManifestLatest,
+): void {
+  const structure = (manifest: SceneLayoutManifestLatest) => ({
+    id: manifest.id,
+    main: manifest.main,
+    nodes: manifest.nodes.map(
+      ({ placements: _placements, scope: _scope, ...node }) => node,
+    ),
+    symbolPackage: manifest.symbolPackage,
+    symbolPackages: manifest.symbolPackages,
+    popups: manifest.popups
+      ? Object.fromEntries(
+          Object.entries(manifest.popups).map(
+            ([id, { placements: _placements, ...popup }]) => [id, popup],
+          ),
+        )
+      : undefined,
+    runtimeResources: manifest.runtimeResources,
+  });
+  if (JSON.stringify(structure(current)) !== JSON.stringify(structure(next)))
+    throw new SceneLayoutError(
+      "scene layout geometry update changed immutable structure.",
+    );
 }
 
 async function loadSceneLayoutTexture(url: string): Promise<Texture> {

@@ -14,16 +14,96 @@ import {
   parseSceneLayoutRuntimeManifestV1,
 } from "./manifest.js";
 import { materializeSceneLayoutManifestForMode } from "./manifest-v2.js";
+import { parseSceneLayoutManifestV7 } from "./manifest-v7.js";
 import type {
   ResolvedSceneLayoutReelGrid,
   SceneLayoutFramePolicy,
   SceneLayoutFrameViewport,
   SceneLayoutManifestV1,
+  SceneLayoutManifestV7,
   SceneLayoutManifest,
   SceneLayoutOrientationVariantId,
-  SceneLayoutSnapshot,
+  SceneLayoutLegacySnapshot,
+  SceneLayoutSnapshotV7,
   SceneLayoutVariantId,
 } from "./types.js";
+
+export function resolveSceneLayoutViewportV7(options: {
+  readonly manifest: SceneLayoutManifestV7;
+  readonly viewportSize: RenderViewportSize;
+  readonly modeId?: string;
+  readonly previousVariantId?: SceneLayoutOrientationVariantId;
+}): SceneLayoutSnapshotV7 {
+  const pageSize = validateViewportSize(options.viewportSize);
+  const variantId = resolveSceneLayoutOrientationVariant(
+    pageSize,
+    options.previousVariantId,
+  );
+  const modeId = options.modeId ?? options.manifest.gameModes.initialMode;
+  const mode = options.manifest.gameModes.modes.find(
+    (candidate) => candidate.id === modeId,
+  );
+  if (!mode)
+    throw new SceneLayoutError(`Unknown scene layout game mode "${modeId}".`);
+  const variant = mode.main.variants[variantId];
+  const margin = variant.minFocusMargin;
+  const expandedFocus = Object.freeze({
+    x: variant.focusRect.x - (margin?.left ?? 0),
+    y: variant.focusRect.y - (margin?.top ?? 0),
+    width: variant.focusRect.width + (margin?.left ?? 0) + (margin?.right ?? 0),
+    height:
+      variant.focusRect.height + (margin?.top ?? 0) + (margin?.bottom ?? 0),
+  });
+  const projected = calculateUnboundedMaximizedFocusedViewport({
+    pageSize,
+    focusRect: expandedFocus,
+  });
+  const main = options.manifest.main;
+  const width =
+    main.columns * main.cellSize.width +
+    Math.max(0, main.columns - 1) * main.gap.x;
+  const height =
+    main.rows * main.cellSize.height + Math.max(0, main.rows - 1) * main.gap.y;
+  const layoutRect = Object.freeze({
+    x: variant.x - width / 2,
+    y: variant.y - height / 2,
+    width,
+    height,
+  });
+  const resolvedMain = Object.freeze({
+    id: "main" as const,
+    variantId,
+    columns: main.columns,
+    rows: main.rows,
+    cellSize: main.cellSize,
+    gap: main.gap,
+    stride: Object.freeze({
+      width: main.cellSize.width + main.gap.x,
+      height: main.cellSize.height + main.gap.y,
+    }),
+    layoutRect,
+    enabled: mode.main.enabled,
+    viewportRect: Object.freeze({
+      x: layoutRect.x - projected.visibleRect.x,
+      y: layoutRect.y - projected.visibleRect.y,
+      width,
+      height,
+    }),
+  });
+  return Object.freeze({
+    viewportSize: projected.viewportSize,
+    visibleRect: projected.visibleRect,
+    worldOffset: projected.worldOffset,
+    focusRectInViewport: Object.freeze({
+      x: variant.focusRect.x - projected.visibleRect.x,
+      y: variant.focusRect.y - projected.visibleRect.y,
+      width: variant.focusRect.width,
+      height: variant.focusRect.height,
+    }),
+    variantId,
+    main: resolvedMain,
+  });
+}
 
 export function resolveSceneLayoutFrameViewport(options: {
   readonly manifest: SceneLayoutManifest;
@@ -31,27 +111,39 @@ export function resolveSceneLayoutFrameViewport(options: {
   readonly modeId?: string;
   readonly previousVariantId?: SceneLayoutVariantId;
 }): SceneLayoutFrameViewport {
-  const manifest = materializeSceneLayoutManifestForMode(
-    options.manifest,
-    options.modeId,
-  );
   const pageSize = validatePageSize(options.pageSize);
   const frameDesignSize =
-    manifest.adaptation.mode === "maximized-focus"
-      ? calculateUnboundedMaximizedFocusedViewport({
-          pageSize,
-          focusRect: manifest.adaptation.focusRect,
-        }).viewportSize
-      : calculateMaximizedResponsiveArtViewport({
-          pageSize,
-          variants: createOrientationViewportVariants(
-            manifest.adaptation.variants,
-          ),
+    options.manifest.version === 7
+      ? resolveSceneLayoutViewportV7({
+          manifest: parseSceneLayoutManifestV7(options.manifest),
+          viewportSize: pageSize,
+          ...(options.modeId ? { modeId: options.modeId } : {}),
           ...(options.previousVariantId === "landscape" ||
           options.previousVariantId === "portrait"
-            ? { squareVariant: options.previousVariantId }
+            ? { previousVariantId: options.previousVariantId }
             : {}),
-        }).viewportSize;
+        }).viewportSize
+      : (() => {
+          const manifest = materializeSceneLayoutManifestForMode(
+            options.manifest,
+            options.modeId,
+          );
+          return manifest.adaptation.mode === "maximized-focus"
+            ? calculateUnboundedMaximizedFocusedViewport({
+                pageSize,
+                focusRect: manifest.adaptation.focusRect,
+              }).viewportSize
+            : calculateMaximizedResponsiveArtViewport({
+                pageSize,
+                variants: createOrientationViewportVariants(
+                  manifest.adaptation.variants,
+                ),
+                ...(options.previousVariantId === "landscape" ||
+                options.previousVariantId === "portrait"
+                  ? { squareVariant: options.previousVariantId }
+                  : {}),
+              }).viewportSize;
+        })();
   const scale = Math.min(
     pageSize.width / frameDesignSize.width,
     pageSize.height / frameDesignSize.height,
@@ -73,6 +165,18 @@ export function resolveSceneLayoutFrameViewport(options: {
 export function createSceneLayoutFramePolicy(
   manifestValue: SceneLayoutManifest,
 ): SceneLayoutFramePolicy {
+  if (manifestValue.version === 7) {
+    const manifest = parseSceneLayoutManifestV7(manifestValue);
+    return Object.freeze({
+      mode: "maximized-focus" as const,
+      resolveViewportSize(pageSize: RenderViewportSize): RenderViewportSize {
+        return resolveSceneLayoutViewportV7({
+          manifest,
+          viewportSize: pageSize,
+        }).viewportSize;
+      },
+    });
+  }
   const manifest = parseSceneLayoutManifest(manifestValue);
   if (manifest.adaptation.mode === "maximized-focus") {
     const focusRect = Object.freeze({ ...manifest.adaptation.focusRect });
@@ -96,7 +200,7 @@ export function resolveSceneLayoutViewport(options: {
   readonly viewportSize: RenderViewportSize;
   readonly previousVariantId?: SceneLayoutVariantId;
   readonly previousOrientationVariantId?: SceneLayoutOrientationVariantId;
-}): SceneLayoutSnapshot {
+}): SceneLayoutLegacySnapshot {
   const manifest = parseSceneLayoutRuntimeManifestV1(options.manifest);
   const orientationVariantId = resolveSceneLayoutOrientationVariant(
     options.viewportSize,
@@ -153,7 +257,7 @@ export function resolveSceneLayoutViewport(options: {
 export function resolveSceneLayoutArtSpace(
   manifestValue: SceneLayoutManifestV1,
   orientationVariantId: SceneLayoutOrientationVariantId = "landscape",
-): SceneLayoutSnapshot {
+): SceneLayoutLegacySnapshot {
   const manifest = parseSceneLayoutRuntimeManifestV1(manifestValue);
   if (manifest.adaptation.mode !== "maximized-focus") {
     throw new SceneLayoutError(

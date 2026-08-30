@@ -54,7 +54,6 @@ describe("scene layout RenderObject layers", () => {
       unloadTexture: async () => undefined,
     });
     await runtime.init();
-    runtime.applyArtSpace();
 
     const child = renderObject();
     const before = renderObject();
@@ -103,7 +102,6 @@ describe("scene layout RenderObject layers", () => {
     });
     const surface = createSceneLayoutPresentationSurface({ resource });
     await surface.init();
-    surface.applyArtSpace();
     const layout = renderObject();
     const transition = renderObject();
     const popup = renderObject();

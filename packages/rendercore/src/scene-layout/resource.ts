@@ -15,11 +15,10 @@ import {
 } from "./data/json-data.js";
 import {
   collectSceneLayoutAssetPaths,
-  parseSceneLayoutManifest,
-  parseSceneLayoutRuntimeManifestV1,
+  parseSceneLayoutManifestDocument,
 } from "./manifest.js";
+import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
 import type {
-  SceneLayoutManifestV1,
   SceneLayoutResource,
   SceneLayoutRuntimeResource,
 } from "./types.js";
@@ -50,9 +49,9 @@ export interface CreateSceneLayoutResourceOptions {
 export function createSceneLayoutResource(
   options: CreateSceneLayoutResourceOptions,
 ): SceneLayoutResource {
-  const manifest = options.allowOrientationPlacements
-    ? parseSceneLayoutRuntimeManifestV1(options.manifest)
-    : parseSceneLayoutManifest(options.manifest);
+  const manifest = upgradeSceneLayoutManifestToLatest(
+    parseSceneLayoutManifestDocument(options.manifest),
+  );
   const imageModules = normalizeMap(options.imageModules);
   const skeletonModules = normalizeMap(options.skeletonModules);
   const atlasModules = normalizeMap(options.atlasModules);
@@ -478,7 +477,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       `Scene layout manifest JSON is invalid: ${formatError(error)}`,
     );
   }
-  const manifest = parseSceneLayoutManifest(rawManifest);
+  const manifest = parseSceneLayoutManifestDocument(rawManifest);
   const imageModules: Record<string, string> = {};
   const skeletonModules: Record<string, unknown> = {};
   const atlasModules: Record<string, string> = {};

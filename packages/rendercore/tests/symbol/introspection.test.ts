@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  getMinecart2SymbolManifestPath,
-  getMinecart2SymbolResourcePath,
-  readMinecart2LogicalJson,
-  readMinecart2LogicalText,
-} from "../../../../test-utils/minecart2-fixtures.js";
+  createTestSpineAtlas,
+  createTestSpineSkeleton,
+  createTestVniProject,
+} from "../fixtures/artifact-fixtures.js";
 import {
   inspectSymbolSpineAtlas,
   inspectSymbolSpineBundle,
@@ -14,10 +13,7 @@ import {
 
 describe("symbol editor resource introspection", () => {
   it("strictly reports VNI duration, stage and indirect assets", () => {
-    const projectPath = (
-      readMinecart2LogicalJson(getMinecart2SymbolManifestPath()) as any
-    ).symbols.L1.animations.win.project as string;
-    const project = readMinecart2LogicalJson(projectPath);
+    const project = createTestVniProject("symbol-win", 1);
     expect(inspectSymbolVniProject(project)).toMatchObject({
       schemaVersion: "VNI_0.087",
       durationSeconds: 1,
@@ -27,13 +23,9 @@ describe("symbol editor resource introspection", () => {
   });
 
   it("lists exact Spine animations, slots and atlas pages and validates the bundle", () => {
-    const skeleton = readMinecart2LogicalJson(
-      getMinecart2SymbolResourcePath("WL", "skeleton"),
-    );
-    const atlasText = readMinecart2LogicalText(
-      getMinecart2SymbolResourcePath("WL", "atlas"),
-    );
-    const texture = getMinecart2SymbolResourcePath("WL", "texture");
+    const skeleton = createTestSpineSkeleton();
+    const texture = "Symbol.png";
+    const atlasText = createTestSpineAtlas(texture);
     const metadata = inspectSymbolSpineSkeleton(skeleton);
     expect(metadata.version).toBe("4.3.23");
     expect(metadata.animationNames).toContain("Idle");

@@ -12,25 +12,20 @@
 
 ## Mode、variant 与稳定节点
 
-- Scene Layout v5 沿用 v4 音频目录并新增 `eventAudio`；v6 将普通 scene node 的 canonical placement 统一为可独立缺失的 `landscape` / `portrait`，并以 runtime allocation v2 表达两侧 active node。RenderCore 直接接受 v1–v6，旧单背景 ordinary `default` 深复制到两侧、旧双背景方向数据保持，统一规范化为 v6；共享 upgrader 不伪造 Splash、BGM 或 event binding。Editor 可导入 v1–v6，但只预览和导出 canonical v6。
+- Scene Layout latest 为 v7：root 只保留 typed `main` grid；每个 mode 直接声明 `main.enabled` 与 `main.variants.landscape/portrait`，每侧保存 main center `x/y`、absolute `focusRect` 和可选 `minFocusMargin`。v7 不含 `coordinateOrigin`、`artSize`、adaptation type、`backgroundNodes`、`reelPlacements` 或 `frameFocusRect`。RenderCore 与 Editor 读取合法 v1–v7并统一规范化为 v7；Editor 只预览和导出 canonical v7。
 - 每个 mode 可选择零或一首 loop BGM；Splash 通常留空但 schema 不强制。成功 mode commit 后才以显式 fade-out/fade-in 切歌，相同 BGM 不重启；失败或 rollback 保留原 BGM。
 - Game Layout Editor 中 root 音频先作为统一 filename-key asset 导入，不因文件名自动绑定用途；BGM 只在 exact mode 上选择，程序音效只通过 strict local name 进入 `audio.effects` 与 `programmaticEffects`，event 音乐音效对话框也只选择已上传 audio，不负责导入 bytes。未绑定音频保留在 authoring workspace，但不进入 production closure；audio 不得伪装成 scene node 或通用 `runtimeResources`。
 - event audio 的 `music` / `effect` 是玩家可独立控制的音量总线，不是互斥播放策略。once track 可独立降低 BGM，并在 `same-audio` / `all` 中至多选择一种音效范围；target gain 为 `0..1`，默认 authoring 值为 `0.5`。衰减由每个 active voice 的 owner-scoped lease 持有，owner 自身不被降低，重叠 lease 取最小 gain，结束、停止、失败和 destroy 必须恢复。loop track 不配置 focus，开始 event 在解锁前保留播放意图，once event 在解锁前丢弃。
 - `ignoreLegacyAudio` 默认 false；true 只禁止 runtime 自动 mode BGM、Popup cue 与 Symbol cue，不删除旧配置/资源，也不改变显式程序 `playEffect` / `stopEffect` API。初始 mode 的 displayed/stable entered occurrence 必须在 init 成功后发出，使 event audio 与其它 event consumer 看到一致的首次状态。
-- 每个v2 mode显式声明reelEnabled；关闭时不得绑定Symbols或导出mode reel placement，focus相对art边缘，开启时focus由reel区域与四边外扩派生。runtime不得按mode id猜测开关。
+- 每个 v7 mode 显式声明 `main.enabled`；关闭时不得绑定 Symbols，但横竖 main/focus 几何仍必填并用于 viewport。runtime 不得按 mode id 猜测开关。
 - orientation variant只由宿主原始page width/height决定；正方形保持当前variant，首次正方形为landscape，focus和派生frame尺寸不得反馈成方向输入。
-- 单背景/双背景只决定 geometry、背景、reel、Popup 与 transition 使用 `default` 还是方向 variant；普通 scene node 始终按原始 page orientation 使用 `landscape` / `portrait` placement。runtime snapshot 必须分别保留 geometry variant 与 orientation variant，方向 resize 只更新普通图层 placement/visibility，不重建稳定 player。
-- orientation variant选定后必须把该variant的actual focusRect（及显式margin）按contain最大化；无margin时focus映射到CSS page后至少一轴与page相等。Scene Layout的frameDesignSize、visibleRect、worldOffset和focusRectInViewport只由page aspect、所选actual focus及显式margin决定，artSize只描述背景覆盖和authored坐标，不参与缩放、逻辑viewport尺寸、居中或边界钳制。Scene Layout不得让legacy frameFocusRect的最大设计尺寸/最低容纳规则覆盖actual focus，也不得在Editor、app或CSS复制第二套公式。
+- main、普通 scene node、Popup 与 transition 都按当前 `landscape` / `portrait` variant 解析；方向 resize 只更新 placement/visibility，不重建稳定 player。
+- orientation variant选定后必须把该variant的actual focusRect（及显式margin）按contain最大化；无margin时focus映射到CSS page后至少一轴与page相等。frameDesignSize、visibleRect、worldOffset和focusRectInViewport只由page aspect、所选actual focus及显式margin决定，不依赖美术边界或背景。
 - primary action只引用同source的显式direct transition target；runtime复用既有prepare/commit/rollback和trusted gesture边界，不按mode名称推断点击行为。
-- editor 拥有通用 game mode draft，以及 mode 到独立 per-variant background、symbols package 和 award popup 的显式 binding；普通 Spine popup 可绑定到一条有向 Spine transition 或独立显式注册，不伪装成 mode award binding。
-- 新 mode 的 background 默认未绑定；每个 variant 明确选择，不继承另一 mode 的 editable node。
-- background node id 按 mode/variant 稳定生成，不从资源名产生 `-2/-3` identity。
-- 相同 logical resource 跨 mode 仍使用独立 node/placement；图片复用已加载 texture，稳定 Spine player 在 mode 切换时保留，不释放/重建。
-- stable Spine background 只使用显式 single loop。未来稳定背景 kind 也遵守 exact-resource 和 stable-node 合同。
-- 普通 scene node 可使用 official Spine 或 runtime VNI：Spine 显式选择 animation/loop，VNI 播放完整 timeline 并显式选择 loop；每个 node 保持独立 player/playhead。新建普通 Spine node 的骨架原点放在各 variant art center（`top-left` 坐标写入 `artSize / 2`，`center` 坐标写入 `0,0`），不得要求或使用 skeleton bounds/atlas texture 尺寸；Spine background 仍要求显式完整 art size。VNI 不得作为 background 或 transition。
-- VNI scene node 的 `project.stage` 是 100% art-space 尺寸；top-left 原点对齐 stage 左上角，center 原点对齐 stage 中心。runtime 使用宿主 ticker 手动 update，并跳过不可渲染节点。
-- 普通 scene node 和 main reel 的 order 可由用户显式编辑并保留稀疏值；canonical v6 中 node、main reel、Popup root 的 order 全局唯一。历史 v1–v3 冲突只由 RenderCore 默认 parser/latest upgrader 确定性重排并同步重建 runtimeAllocation；显式 v4–v6 parser 执行 strict canonical 校验。Popup root 默认从 `2000` 分配且必须高于全部 node/main reel。
-- 普通 scene node 的 optional `gameMode` 表示 exact 单一 mode 作用域；字段缺失表示全局并兼容旧 v1 数据。background node 禁止声明该字段。最终可见性是 mode 作用域匹配与当前 variant placement 的 AND；不可见不删除 node、不改变全局 order。mode rename 必须改写引用，仍有 scoped node 引用时禁止删除。
+- editor 拥有无类型的通用 game mode draft、main 横竖配置、Symbols package 与 award popup binding；背景只是零至多个普通 node，不存在背景专属 selector、readiness 或隐式默认值。
+- 普通 scene node 可使用 image、official Spine、image-string 或 runtime VNI。所有 v7 placement 都位于同一中心坐标平面：image 以图片中心、VNI 以项目 authored `(0,0)`、Spine 以 skeleton authored origin、image-string 以显式 anchor 对齐 `x/y`；不得读取或改写 VNI JSON 来换算坐标，也不得从 bounds 或当前帧猜中心。
+- 普通 scene node 和 main 的 order 可由用户显式编辑并保留稀疏值；canonical v7 中 node、main、Popup root 的 order 全局唯一。legacy 冲突只由共享 latest upgrader 确定性处理并同步重建 runtimeAllocation；显式 v7 parser 执行 strict canonical 校验。
+- 普通 scene node 的 optional `scope` 精确表达 mode 与方向可见性；字段缺失表示全局。最终可见性是 scope 匹配与当前 variant placement 的 AND；不可见不删除 node、不改变全局 order。mode rename 必须改写 scope，仍有 scoped node 引用时禁止删除。
 
 ## Symbols binding 与 preview
 
@@ -57,12 +52,12 @@
 - core 不创建 Application、canvas、ticker 或 RAF，不拥有 workspace/authoring session；宿主逐帧调用 `update(deltaSeconds)`。游戏热路径使用 `getStableGameMode()`、`getGameModePhase()` 等标量 query；完整 game-mode/award snapshot 只由 editor inspector 读取。
 - Scene Layout 在组合 Popup/Symbol package 时才把 local effect name 编译为 `<binding>.<local>` route；程序只能播放/停止显式 allowlist route。cue delay 使用宿主 `update(deltaSeconds)` 时钟，stop、切状态、rollback 与 destroy 必须取消未触发播放并清理 owner-scoped instance。
 - rendercore 拥有 strict gameModes、plural symbolPackages、directed transition schema、exact dependency closure 和 production API。
-- scene-layout authored coordinate origin 只允许 `top-left` / `center`；缺失按 `top-left`。原点类型只定义换算基准，不限制坐标符号；两种原点下 authored x/y 都允许任意有限负数。node、art-space Spine transition、main reel 与 `runtimeResources` image RenderObject 的 origin 映射由 rendercore 统一实现；center origin 的程序图片以自身中心对齐挂载点，游戏不得手工减半图片尺寸，focus rect 继续使用 art 左上角矩形。
-- `artSize`、`focusRect`、`frameFocusRect` 与 reel placement 不要求互相包含；parser、runtime 与 editor 不因越出 art 自动裁切或修正。reel-enabled mode 的 focus 始终由 main reel art rect 与 authored 四边外扩量派生：center origin 下 artSize 变化导致 main 的 art rect 平移时，focus 必须保持外扩量并同步平移。适配与预览必须呈现实际几何，越界、裁切、不可见或未被背景覆盖的区域由编辑者判断和调整。
-- runtime必须从current snapshot公开authored origin、art/visibleRect九宫格point及authored point↔opaque Anchor；Point/Rect是调用时快照，Anchor延迟解析。不得要求游戏为center origin手工加减半个artSize，也不得把logical visibleRect称为CSS/window/device坐标。
+- canonical v7 只有中心坐标系，原点固定为 `(0,0)`；authored x/y 允许任意有限负数。legacy `top-left` / `center` 和 `artSize` 只存在于 v1–v6 strict parser/upgrader 输入，不能泄漏到 v7 snapshot、Editor draft 或 consumer API。
+- `focusRect` 与 main rect 不要求互相包含；parser、runtime 与 editor 不因越界自动裁切或修正。Editor 可用 main 四边 offset 编辑 focus，但导出保存 absolute center-plane rect。
+- runtime必须从current snapshot公开 main/visibleRect 九宫格 point 及 authored point↔opaque Anchor；Point/Rect是调用时快照，Anchor延迟解析，不得把logical visibleRect称为CSS/window/device坐标。
 - canonical layer ref只能由一个strict parser按stable、`node:` legacy、exact area suffix、canonical node顺序解析；unknown/ambiguous/unavailable显式失败，禁止alias或node/resource同名fallback。
 - scene node placement 的 `rotation` 使用角度，normalized `center` 默认 `0.5/0.5`；旧字段缺失分别按 `0` 与默认中心规范化。rendercore 统一应用 node position/scale/pivot/rotation matrix，Spine 的默认中心精确使用 authored origin `(0,0)`。editor/app 不复制 transform，不从 skeleton bounds、atlas texture 或当前动画帧猜另一套默认中心。Popup/transition 仍只用 `x/y/scale`，main reel 仍只用 `x/y`。
-- main reel per-variant placement 只允许 `x/y`，不提供整体 scale；横竖屏适配通过背景素材、art size 和 reel placement 完成，不改写转轮或 per-symbol scale。
+- main per-variant placement 只允许 center `x/y`，不提供整体 scale；横竖屏适配通过 main/focus 与普通 node placement 完成，不改写转轮或 per-symbol scale。
 - 外部 geometry-only manifest 更新必须先校验 immutable structure，再原子提交并复用 texture、Spine player、当前 mode、reel 与 scene；
   Popup root的per-variant `x/y/scale`属于geometry，package identity、manifest与order仍属于immutable structure。资源、topology、binding
   或transition结构变化必须走完整prepare/commit。package-owned mode target已在manifest parse/transition prepare边界验证，switch commit
@@ -86,13 +81,13 @@
 - owned MP4、Spine、VNI project/assets、image、symbols 和 popup dependencies 都进入 exact closure；runtime 复用精确 bytes。
 - 不属于 scene node/transition、但由程序读取的资源必须通过根 manifest 的唯一稳定程序键声明为 typed runtime resource；各类 root 均按正向 exact closure 导出。`json` root 只承载 opaque program data，runtime 只验证 JSON object/array、返回 deep-frozen value，不解释业务 schema，也不生成 RenderObject、Object URL 或 runtime address。runtime consumer 按 canonical runtime manifest 的 key/kind 严格解析，即使 initial layout view 为 lazy prepare 而省略这些声明也不得误判 unknown；不得猜 filename 或 physical hash path。
 - production export 先从 layout 收集实际引用的 root，再按有向依赖计算 exact closure。共享 atlas/贴图可由任一被用到的 Spine JSON root 带入；同批未引用的 sibling JSON root 不得因共享 leaf 被反向导出。
-- 替换或重绑资源必须保留稳定 node identity、order、各 variant placement/visibility，并尽可能保留仍兼容的 animation、loop 与 image-string 配置。资源尺寸变化不得重置 reel placement 或 focus 四边外扩量；更新 artSize 后必须从 main reel 重新派生 focusRect，但不得以结果与新 art size 不互相包含为由失败。
+- 替换或重绑资源必须保留稳定 node identity、order、scope、各 variant placement/visibility，并尽可能保留仍兼容的 animation、loop 与 image-string 配置。资源尺寸变化不得重置 main placement 或 focus 四边外扩量。
 - 相同 symbols binding 的 mode 切换默认保留 reel、scene 和 player；只有显式 `recreateReel` 才重建。
-- v5 `runtimeAllocation` 仍只保存 typed owner id、mode/variant active node 和 package/on-demand lifetime，不保存 physical path/hash/bytes。package runtime 在 init 准备全部声明的 Symbols reel entry；首次激活需要显式 scene，之后跨 binding 返回恢复原 entry，dormant entry 不 update 且只在 package destroy 或显式 replacement 时销毁。
+- latest `runtimeAllocation` 只保存 typed owner id、mode/variant active node 和 package/on-demand lifetime，不保存 physical path/hash/bytes。package runtime 在 init 准备全部声明的 Symbols reel entry；首次激活需要显式 scene，之后跨 binding 返回恢复原 entry，dormant entry 不 update 且只在 package destroy 或显式 replacement 时销毁。
 - production full package runtime 可显式 deferred prepare main reel；首次 scene commit 前 reel 不可见且业务 API 必须失败。自定义 reel factory 采用 ownership transfer，package 仍负责 manifest order/placement 与 destroy；借用 overlay 只能通过 typed attach/dispose API 接入并位于 transition/popup 下方。
-- background visibility、target scene commit、active standard/grid-cell reel prepare/swap 和 popup lifecycle 原子完成。
+- scoped node visibility、target scene commit、active standard/grid-cell reel prepare/swap 和 popup lifecycle 原子完成。
 - 底层 named-node state machine 可供独立 consumer 使用，但不得成为 `requestGameMode()` 的隐藏入口或 fallback。
-- app/editor 不复制 event drain、official Spine player、image-string、background visibility、reel placement 或 transition state machine。
+- app/editor 不复制 event drain、official Spine player、image-string、scoped node visibility、main placement 或 transition state machine。
 - authored loop Spine 的 exact animation await/stop 与 caller-owned RenderObject exact-slot batch attachment 由 production runtime 持有；不公开 player/Container，不猜 animation/slot alias，失败、supersede、abort、child/runtime destroy 必须清理或回滚。
 - authored node、program resource与显式identity的program Popup可把exact child parent发布为owner-first runtime address；Spine slot、VNI text layer和Popup session root都复用opaque `RenderObjectLayer`。Popup queued instance可预挂但必须保持不可见，只有active instance显示；finished/cancelled/failed/destroy必须注销地址并detach caller child，不得污染缓存player的下一次session。
 - package runtime按canonical resource factory address拥有唯一RenderObject池，并从active Symbols catalog发布exact `gamelayout:/symbol-package/<binding-id>/symbol/<symbol>`工厂；二者统一支持`create({pooled})/destroy()`，symbol factory另接受在返回前严格应用的`presentationValue`且每次checkout省略时重置为`null`，其它resource kind拒绝该字段。不得让app读取manifest bytes、猜默认symbol或维护第二份资源表。image-string池每次取出重设text/anchor，不按内容分桶。
@@ -107,7 +102,7 @@
 - `apps/gamelayoutpkgcli` 只消费当前 filename-key mapped production ZIP；legacy direct-path、mixed package、坏 map、缺失 dependency 和 orphan payload 必须在优化前失败。
 - WebP 后处理必须结构化改写 layout 与 nested owner manifest/VNI 的 typed 图片引用，重新生成完整 content-addressed payload 和 `assets.map.json`，再用 production package parser 复验；不得扫描任意 JSON 字符串猜路径。
 - 资源分组从完整 typed dependency graph 推导，不硬编码 BaseGame、FreeGame、Symbols 或 BigWin 文件名。transition 归属 source mode并包含其 prelude Popup closure；initial 集合包含 shared、initial mode、其 symbols 和从 initial mode 发出的 transition。未被 mode、transition 或显式 programmatic binding 引用的 package 不得进入 production ZIP/group。
-- 全局或 legacy 普通 node 归 shared 并进入每个 mode closure；声明 exact `gameMode` 的普通 node 只归该 mode。background ownership 仍来自 mode binding，order 不参与 owner 推导。
+- 全局普通 node 归 shared 并进入每个 mode closure；声明 exact mode scope 的普通 node 只归对应 mode，order 不参与 owner 推导。legacy background binding 在 upgrader 中转换为普通 node scope。
 - 每个 runtime resource 形成独立 deferred group，不并入 initial/shared；共享 Spine atlas/texture leaf 可去重，但 leaf 不反向拥有或带入未声明的 sibling skeleton root。typed JSON data 的 group closure 只含其 exact path，优化器可改写 filename key/path，但不得解析、格式化或改写 payload 内容。
 - 每个 group 同时保存完整 `requiredAssets` 与相对 initial 的 `incrementalAssets`；完整闭包允许重叠，但全部优化资源必须至少被一个 group 覆盖。
 - `gamelayoutpkgcli --delivery-dir` 输出 versioned CDN delivery：physical owner 只允许 `initial`、manifest 顺序的 `mode:<id>` 与 `media`；同一 asset 只由一个 owner 保存。node、Symbols 与 award Popup 归其最早使用 mode；transition overlay 与 prelude Popup 归 source mode，因此 `BaseGame -> FreeGame` 属于 BaseGame、反向边属于 FreeGame。无 mode owner 的 shared/programmatic resource 归 initial；空 mode 仍输出 readiness chunk。多个 logical key 映射到同一 content-addressed metadata path 时必须先合并为同一个最早 owner，禁止把同一路径写入多个 owner ZIP；runtime manifest parser 与 chunk loader 都保持严格重复检测。
@@ -118,7 +113,7 @@
 - RenderCore delivery loader 把 initial payload 与其它 mode 的小型 metadata catalog 纳入首屏 package parse，但不提前加载非 initial atlas/WebP；initial ready 后先后台预取独立 media owner，再按 manifest 顺序预取其它 mode payload。package runtime 只初始化 initial owner，实际 mode 切换复用或抢占同一 chunk Promise，并在提交 target scene 前等待 exact mode atlas、node、Symbols 与 source-owned Popup prepare 完成。
 - transition prelude Popup 的用户确认必须锁存：点击立即正常驱动 Popup 退场和全部 frame update；若 target mode assets 未 ready，只阻塞后续 scene commit。assets ready 后自动推进，不得吞掉点击或要求二次点击；video transition 必须在该 trusted gesture 内完成 audible media unlock。
 - 不带 `--delivery-dir` 的 legacy 单 ZIP/asset-groups 模式仍可逐图片 WebP 并把 typed 音频固定输出 M4A/AAC-LC；不得与 byte-preserving delivery 模式混用。
-- `assets/fixtures/*-mapped` 只为 Editor/Viewer 和测试保存历史 mapped package，不得成为 game app `publicDir`、production fallback 或 delivery runtime 的第二资源来源。
+- Editor/Viewer 测试 fixture 归具体 package 所有，优先使用内联 JSON/atlas/最小 raster bytes，不依赖 production mapped package，也不得成为 game app `publicDir`、production fallback 或 delivery runtime 的第二资源来源。
 
 ## Popup placement
 
@@ -139,8 +134,8 @@
 - hash/size/path/orphan integrity 属于 editor/import/export/optimizer/production ZIP
   边界，必须由这些边界显式调用 `validateEditorAssetsMapPackage()`；不得把验证隐藏
   在 runtime resolver 的默认分支或依赖 game app 传 bypass policy。
-- 只需要 layout/background/popup、而 reel 由游戏业务 target 驱动时，使用 rendercore
-  presentation surface；surface 仍拥有 mode-aware background visibility、popup placement
+- 只需要 layout/node/popup、而 reel 由游戏业务 target 驱动时，使用 rendercore
+  presentation surface；surface 仍拥有 mode-aware node visibility、popup placement
   和 destroy，app 只注入业务触发并组合公开 container。业务 reel 自己持有显示对象时，
   surface 使用 package runtime 的 presentation-only 模式，分层公开
-  background/transition/popup，且不创建第二个 reel。
+  scene/transition/popup，且不创建第二个 reel。

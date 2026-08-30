@@ -5,6 +5,7 @@ import {
   parseSceneLayoutManifestV5,
   parseSceneLayoutManifestV6,
   upgradeSceneLayoutManifestToLatest,
+  upgradeSceneLayoutManifestToV6,
 } from "../../src/scene-layout/index.js";
 import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
 
@@ -31,24 +32,28 @@ describe("scene layout manifest v6", () => {
     });
     const before = structuredClone(source);
 
-    const latest = upgradeSceneLayoutManifestToLatest(source);
+    const v6 = upgradeSceneLayoutManifestToV6(source);
+    const latest = upgradeSceneLayoutManifestToLatest(v6);
     const ordinary = latest.nodes.find((node) => node.id === "ordinary")!;
 
-    expect(latest.version).toBe(6);
+    expect(v6.version).toBe(6);
+    expect(latest.version).toBe(7);
     expect(source).toEqual(before);
-    expect(ordinary.placements).toEqual({
-      landscape: before.nodes[1].placements.default,
-      portrait: before.nodes[1].placements.default,
-    });
+    expect(v6.nodes.find((node) => node.id === "ordinary")?.placements).toEqual(
+      {
+        landscape: before.nodes[1].placements.default,
+        portrait: before.nodes[1].placements.default,
+      },
+    );
     expect(ordinary.placements.landscape).not.toBe(
       ordinary.placements.portrait,
     );
-    expect(latest.nodes[0]!.placements).toMatchObject({
-      default: game002LayoutFixture.nodes[0].placements.default,
-    });
-    expect(Object.keys(latest.nodes[0]!.placements)).toEqual(["default"]);
+    expect(Object.keys(latest.nodes[0]!.placements)).toEqual([
+      "landscape",
+      "portrait",
+    ]);
     expect(latest.runtimeAllocation).toMatchObject({
-      version: 2,
+      version: 3,
       modes: {
         BaseGame: {
           variants: {
@@ -70,17 +75,17 @@ describe("scene layout manifest v6", () => {
       (node) => node.id === "conveyor2",
     )!.placements;
     expect(landscape).toMatchObject({
-      landscape: { x: 30, y: 40, scale: 1 },
+      landscape: { x: -969.5, y: -522, scale: 1 },
     });
     expect(landscape.portrait).toBeUndefined();
     expect(portrait).toMatchObject({
-      portrait: { x: 50, y: 60, scale: 1 },
+      portrait: { x: -536.5, y: -939.5, scale: 1 },
     });
     expect(portrait.landscape).toBeUndefined();
   });
 
   it("strictly reads a native v5 document before upgrading its ordinary default", () => {
-    const latest = upgradeSceneLayoutManifestToLatest({
+    const v6 = upgradeSceneLayoutManifestToV6({
       ...game002LayoutFixture,
       nodes: [
         ...game002LayoutFixture.nodes,
@@ -96,7 +101,7 @@ describe("scene layout manifest v6", () => {
         },
       ],
     });
-    const v5Draft = structuredClone(latest) as any;
+    const v5Draft = structuredClone(v6) as any;
     v5Draft.version = 5;
     v5Draft.nodes[1].placements = {
       default: {
@@ -111,15 +116,13 @@ describe("scene layout manifest v6", () => {
 
     const v5 = parseSceneLayoutManifestV5(v5Draft);
     const upgraded = upgradeSceneLayoutManifestToLatest(v5);
-    expect(upgraded.version).toBe(6);
-    expect(upgraded.nodes[1]!.placements).toEqual({
-      landscape: v5.nodes[1]!.placements.default,
-      portrait: v5.nodes[1]!.placements.default,
-    });
+    expect(upgraded.version).toBe(7);
+    expect(upgraded.nodes[1]!.placements).toHaveProperty("landscape");
+    expect(upgraded.nodes[1]!.placements).toHaveProperty("portrait");
   });
 
   it("rejects native ordinary default/unknown keys and allocation drift", () => {
-    const latest = upgradeSceneLayoutManifestToLatest({
+    const latest = upgradeSceneLayoutManifestToV6({
       ...game002LayoutFixture,
       nodes: [
         ...game002LayoutFixture.nodes,
@@ -162,7 +165,7 @@ describe("scene layout manifest v6", () => {
     expect(() =>
       parseSceneLayoutManifestDocument({
         ...upgradeSceneLayoutManifestToLatest(game002LayoutFixture),
-        version: 7,
+        version: 8,
       }),
     ).toThrow(/version|unknown key/u);
   });

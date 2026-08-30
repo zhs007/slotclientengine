@@ -3,6 +3,7 @@ export * from "../manifest.js";
 export * from "../manifest-v2.js";
 export * from "../manifest-v3.js";
 export * from "../manifest-v6.js";
+export * from "../manifest-v7.js";
 export * from "../runtime-allocation.js";
 export * from "../geometry.js";
 export * from "./package-limits.js";
@@ -55,19 +56,27 @@ export type {
   SceneLayoutRuntimeAllocationMode,
   SceneLayoutRuntimeAllocationV1,
   SceneLayoutRuntimeAllocationV2,
+  SceneLayoutRuntimeAllocationV3,
   SceneLayoutManifestV3,
   SceneLayoutManifestV4,
   SceneLayoutEventAudioBindingV1,
   SceneLayoutEventAudioV1,
   SceneLayoutManifestV5,
   SceneLayoutManifestV6,
+  SceneLayoutMainDefinition,
+  SceneLayoutMainVariant,
+  SceneLayoutGameModeV7,
+  SceneLayoutGameModesV7,
+  SceneLayoutManifestV7,
   SceneLayoutManifestModern,
   SceneLayoutManifest,
   SceneLayoutManifestLatest,
   SceneLayoutPoint,
   SceneLayoutPointSelector,
   ResolvedSceneLayoutReelGrid,
+  ResolvedSceneLayoutMainGrid,
   SceneLayoutSnapshot,
+  SceneLayoutSnapshotV7,
   SceneLayoutFrameViewport,
   SceneLayoutFramePolicy,
   RenderAlignment,

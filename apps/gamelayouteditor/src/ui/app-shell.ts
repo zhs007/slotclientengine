@@ -41,22 +41,18 @@ import {
   editorProjectToPreviewManifest,
   manifestToEditorProject,
   ordinaryLayerVariantIds,
-  setVariantArtSizeDimension,
   updateVariantFocusFromReel,
   type EditorProject,
 } from "../model/editor-project.js";
-import { convertProjectCoordinateOrigin } from "../model/coordinate-origin.js";
 import {
   EditorStore,
   type EditorStoreSnapshot,
 } from "../model/editor-store.js";
 import {
   addLayerFromResource,
-  assignBackgroundResource,
   bindModeBgm,
   bindProgrammaticAudioEffect,
   bindRuntimeResource,
-  clearBackground,
   deleteLayoutResource,
   getLayoutResourceReferences,
   moveLayer,
@@ -236,7 +232,7 @@ interface FocusSnapshot {
 
 export class GameLayoutEditorApp {
   readonly #root: HTMLElement;
-  readonly #store = new EditorStore(createNewEditorProject("maximized-focus"));
+  readonly #store = new EditorStore(createNewEditorProject());
   readonly #session = createEditorUiSession();
   readonly #thumbnailUrls = new ObjectUrlRegistry();
   readonly #thumbnailEntries = new Map<
@@ -270,7 +266,6 @@ export class GameLayoutEditorApp {
   #selectedSymbolId: string | null = null;
   #selectedPopupId: string | null = null;
   #modeDialogNewId = "";
-  #modeDialogNewType: "" | EditorProject["mode"] = "";
   #modeDialogRenameId = "";
   #modeDialogFeedback = "";
   #eventAudioDialog: ReturnType<typeof mountProjectEventAudioDialog> | null =
@@ -347,32 +342,14 @@ export class GameLayoutEditorApp {
     const newDialog = this.requireElement(
       "[data-new-project-dialog]",
     ) as HTMLDialogElement;
-    const newProjectSplashMode = this.requireSelect(
-      "[data-new-project-splash-mode]",
-    );
-    const newProjectBaseGameMode = this.requireSelect(
-      "[data-new-project-basegame-mode]",
-    );
     const confirmNewProject = this.requireElement(
       "[data-confirm-new-project]",
     ) as HTMLButtonElement;
-    const resetNewProjectDialog = (): void => {
-      newProjectSplashMode.value = "";
-      newProjectBaseGameMode.value = "";
-      confirmNewProject.disabled = true;
-    };
     this.requireElement("[data-new-project]").addEventListener("click", () => {
-      resetNewProjectDialog();
+      confirmNewProject.disabled = false;
       if (typeof newDialog.showModal === "function") newDialog.showModal();
       else newDialog.setAttribute("open", "");
     });
-    const updateNewProjectReady = () => {
-      confirmNewProject.disabled =
-        newProjectSplashMode.value === "" ||
-        newProjectBaseGameMode.value === "";
-    };
-    newProjectSplashMode.addEventListener("change", updateNewProjectReady);
-    newProjectBaseGameMode.addEventListener("change", updateNewProjectReady);
     this.requireElement("[data-cancel-new-project]").addEventListener(
       "click",
       () =>
@@ -383,14 +360,7 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-confirm-new-project]").addEventListener(
       "click",
       () => {
-        const splashMode = newProjectSplashMode.value as
-          | EditorProject["mode"]
-          | "";
-        const baseGameMode = newProjectBaseGameMode.value as
-          | EditorProject["mode"]
-          | "";
-        if (!splashMode || !baseGameMode) return;
-        this.createProject(splashMode, baseGameMode);
+        this.createProject();
         if (typeof newDialog.close === "function") newDialog.close();
         else newDialog.removeAttribute("open");
       },
@@ -405,7 +375,6 @@ export class GameLayoutEditorApp {
         this.#selectedGameMode,
       );
       this.#modeDialogNewId = "";
-      this.#modeDialogNewType = "";
       this.#modeDialogRenameId = this.#selectedGameMode;
       this.#modeDialogFeedback = "";
       this.renderModeDialog(project);
@@ -814,10 +783,7 @@ export class GameLayoutEditorApp {
     this.bindPickerActions();
   }
 
-  private createProject(
-    splashMode: EditorProject["mode"],
-    baseGameMode: EditorProject["mode"],
-  ): void {
+  private createProject(): void {
     this.closePicker(false);
     this.resetSymbolsForProjectReplace();
     this.resetTransientDraftsForProjectReplace();
@@ -829,10 +795,8 @@ export class GameLayoutEditorApp {
     this.#selectedPreviewMode = "Splash";
     this.#selectedSymbolId = null;
     this.#selectedPopupId = null;
-    this.#store.replace(
-      createSplashFirstEditorProject(splashMode, baseGameMode),
-    );
-    this.showFeedback("已新建项目。先上传资源，再显式设置背景或添加图层。");
+    this.#store.replace(createSplashFirstEditorProject());
+    this.showFeedback("已新建中心坐标项目。先上传资源，再添加普通图层。");
   }
 
   private async selectAuthoringPreviewMode(
@@ -1500,7 +1464,6 @@ export class GameLayoutEditorApp {
       project,
       selectedModeId: this.#selectedGameMode,
       newModeId: this.#modeDialogNewId,
-      newModeType: this.#modeDialogNewType,
       renameModeId: this.#modeDialogRenameId,
       feedback: this.#modeDialogFeedback,
     });
@@ -1517,14 +1480,7 @@ export class GameLayoutEditorApp {
         this.#modeDialogNewId = (event.currentTarget as HTMLInputElement).value;
         dialog.querySelector<HTMLButtonElement>(
           "[data-add-game-mode]",
-        )!.disabled = !this.#modeDialogNewId || !this.#modeDialogNewType;
-      });
-    dialog
-      .querySelector<HTMLSelectElement>("[data-new-game-mode-type]")!
-      .addEventListener("change", (event) => {
-        this.#modeDialogNewType = (event.currentTarget as HTMLSelectElement)
-          .value as "" | EditorProject["mode"];
-        this.renderModeDialog(this.#store.getSnapshot().project);
+        )!.disabled = !this.#modeDialogNewId;
       });
     dialog
       .querySelector<HTMLInputElement>("[data-rename-game-mode-input]")!
@@ -1569,11 +1525,9 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLButtonElement>("[data-add-game-mode]")!
       .addEventListener("click", () => {
         const id = this.#modeDialogNewId;
-        const type = this.#modeDialogNewType;
         if (
-          !type ||
           !this.runTransaction((draft) => {
-            addGameMode(draft, id, type);
+            addGameMode(draft, id);
             activateEditorGameMode(draft, id);
           })
         ) {
@@ -1584,7 +1538,6 @@ export class GameLayoutEditorApp {
         }
         this.#selectedGameMode = id;
         this.#modeDialogNewId = "";
-        this.#modeDialogNewType = "";
         this.#modeDialogRenameId = id;
         this.#modeDialogFeedback = `已创建状态 ${id}`;
         if (this.#followEditMode) this.#selectedPreviewMode = id;
@@ -2033,24 +1986,6 @@ export class GameLayoutEditorApp {
         ),
       );
     panel
-      .querySelectorAll<HTMLButtonElement>("[data-resource-background]")
-      .forEach((button) =>
-        button.addEventListener("click", () =>
-          this.openPicker(
-            {
-              kind: "assign-background",
-              modeId: this.#selectedGameMode,
-              variant: button.dataset.resourceBackground as
-                | "default"
-                | "landscape"
-                | "portrait",
-            },
-            button,
-            button.dataset.resourceId,
-          ),
-        ),
-      );
-    panel
       .querySelectorAll<HTMLButtonElement>("[data-runtime-resource-action]")
       .forEach((button) =>
         button.addEventListener("click", () => {
@@ -2118,44 +2053,6 @@ export class GameLayoutEditorApp {
     outline?.addEventListener("keydown", (event) =>
       this.handleOutlineKeydown(event),
     );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-choose-background]")
-      .forEach((button) =>
-        button.addEventListener("click", () =>
-          this.openPicker(
-            {
-              kind: "assign-background",
-              modeId: this.#selectedGameMode,
-              variant: button.dataset.chooseBackground as
-                | "default"
-                | "landscape"
-                | "portrait",
-            },
-            button,
-          ),
-        ),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-clear-background]")
-      .forEach((button) =>
-        button.addEventListener("click", () => {
-          const variant = button.dataset.clearBackground as
-            | "default"
-            | "landscape"
-            | "portrait";
-          const nodeId = project.gameModes.modes.find(
-            (mode) => mode.id === this.#selectedGameMode,
-          )?.backgroundNodes[variant];
-          if (
-            !window.confirm(`确认清除 ${variant} 背景 ${nodeId}？资源会保留。`)
-          )
-            return;
-          this.runTransaction(
-            (draft) => clearBackground(draft, this.#selectedGameMode, variant),
-            `已清除 ${variant} 背景；资源仍保留。`,
-          );
-        }),
-      );
     panel
       .querySelectorAll<HTMLInputElement>("[data-node-id]")
       .forEach((input) =>
@@ -2337,10 +2234,6 @@ export class GameLayoutEditorApp {
       input.addEventListener("change", () => {
         this.runTransaction((draft) => {
           const path = input.dataset.number!;
-          const artSizeMatch =
-            /^variants\.(default|landscape|portrait)\.artSize\.(width|height)$/u.exec(
-              path,
-            );
           const nodeTransformMatch =
             /^nodes\.(\d+)\.placements\.(default|landscape|portrait)\.(rotation|center\.[xy])$/u.exec(
               path,
@@ -2372,7 +2265,7 @@ export class GameLayoutEditorApp {
             );
             if (!transition) throw new Error("所选转场已不存在。");
             if (transition.kind !== "spine")
-              throw new Error("video 转场没有 art-space placement。");
+              throw new Error("video 转场没有中心坐标 placement。");
             const variant = transitionPlacementMatch[1] as SceneLayoutVariantId;
             const field = transitionPlacementMatch[2] as "x" | "y" | "scale";
             const current = transition.placements[variant] ?? {
@@ -2384,30 +2277,12 @@ export class GameLayoutEditorApp {
               ...current,
               [field]: Number(input.value),
             });
-          } else if (artSizeMatch) {
-            setVariantArtSizeDimension(
-              draft,
-              artSizeMatch[1] as "default" | "landscape" | "portrait",
-              artSizeMatch[2] as "width" | "height",
-              Number(input.value),
-            );
           } else {
             setPath(draft, path, Number(input.value));
           }
           if (path.startsWith("reel.")) {
             for (const variant of activeVariantIds(draft)) {
               updateVariantFocusFromReel(draft, variant);
-            }
-          } else if (!artSizeMatch && !transitionPlacementMatch) {
-            const match =
-              /^variants\.(default|landscape|portrait)\.(focusOffsets|artSize)\./u.exec(
-                path,
-              );
-            if (match) {
-              updateVariantFocusFromReel(
-                draft,
-                match[1] as "default" | "landscape" | "portrait",
-              );
             }
           }
         });
@@ -2517,22 +2392,6 @@ export class GameLayoutEditorApp {
           }
         }),
       );
-    panel
-      .querySelector<HTMLButtonElement>("[data-toggle-coordinate-origin]")
-      ?.addEventListener("click", (event) => {
-        const target = (event.currentTarget as HTMLButtonElement).dataset
-          .toggleCoordinateOrigin as "top-left" | "center";
-        if (
-          !window.confirm(
-            `确认切换为${target === "center" ? "中心" : "左上角"}坐标？现有 art-space 坐标会统一转换。`,
-          )
-        )
-          return;
-        this.runTransaction(
-          (draft) => convertProjectCoordinateOrigin(draft, target),
-          `全局坐标类型已切换为 ${target}。`,
-        );
-      });
   }
 
   private selectOutline(key: string): void {
@@ -2574,14 +2433,9 @@ export class GameLayoutEditorApp {
   private removeSelectedLayer(nodeId: string): void {
     if (!window.confirm(`确认删除图层 ${nodeId}？资源不会删除。`)) return;
     const project = this.#store.getSnapshot().project;
-    const backgroundIds = new Set(
-      activeVariantIds(project).map(
-        (variant) => project.variants[variant].backgroundNode,
-      ),
+    const layers = project.nodes.sort(
+      (left, right) => left.order - right.order,
     );
-    const layers = project.nodes
-      .filter((node) => !backgroundIds.has(node.id))
-      .sort((left, right) => left.order - right.order);
     const index = layers.findIndex((node) => node.id === nodeId);
     const next = layers[index + 1] ?? layers[index - 1];
     try {
@@ -2635,26 +2489,14 @@ export class GameLayoutEditorApp {
     const contextLabel =
       state.context.kind === "add-layer"
         ? "添加图层"
-        : state.context.kind === "assign-background"
-          ? `设置 ${state.context.modeId} / ${state.context.variant} 背景`
-          : `重绑图层 ${state.context.nodeId}`;
-    const needsSpineBackgroundArtSize =
-      state.context.kind === "assign-background" &&
-      selected?.kind === "spine" &&
-      (project.variants[state.context.variant].artSize.width <= 0 ||
-        project.variants[state.context.variant].artSize.height <= 0);
-    const backgroundArtSizeFields = needsSpineBackgroundArtSize
-      ? `<fieldset><legend>背景 art size（必填）</legend><p class="hint">这是完整背景画布尺寸，不从 Spine export bounds 或 atlas texture 猜测。</p><label>width<input type="number" min="1" step="1" data-picker-art-width value="${Number.isFinite(state.backgroundArtSize.width) && state.backgroundArtSize.width > 0 ? state.backgroundArtSize.width : ""}" /></label><label>height<input type="number" min="1" step="1" data-picker-art-height value="${Number.isFinite(state.backgroundArtSize.height) && state.backgroundArtSize.height > 0 ? state.backgroundArtSize.height : ""}" /></label></fieldset>`
-      : "";
+        : `重绑图层 ${state.context.nodeId}`;
     const placementHint =
-      state.context.kind === "assign-background"
-        ? "背景初始 placement 按完整 art size 居中，scale 为 1。不会按文件名或唯一候选自动绑定。"
-        : state.context.kind === "add-layer" && selected?.kind === "spine"
-          ? "普通 Spine 以骨架原点放在当前画布中心，不需要填写骨架大小；scale 为 1。"
-          : state.context.kind === "add-layer"
-            ? "初始 placement 为 { x: 0, y: 0, scale: 1 }。不会按文件名或唯一候选自动绑定。"
-            : "重绑资源会保留已有 placement，并尽可能保留兼容的播放配置。";
-    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${state.type === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "vni" ? "VNI" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form"><div class="picker-resource-preview" data-picker-preview aria-live="polite"></div>${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 filename-key resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : state.context.kind === "assign-background" ? `<p class="hint">背景 node id 将按 ${escapeHtml(state.context.modeId)} / ${escapeHtml(state.context.variant)} 稳定生成。</p>` : ""}${
+      state.context.kind === "add-layer" && selected?.kind === "spine"
+        ? "普通 Spine 以骨架原点放在当前画布中心，不需要填写骨架大小；scale 为 1。"
+        : state.context.kind === "add-layer"
+          ? "初始 placement 为 { x: 0, y: 0, scale: 1 }。不会按文件名或唯一候选自动绑定。"
+          : "重绑资源会保留已有 placement，并尽可能保留兼容的播放配置。";
+    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${state.type === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "vni" ? "VNI" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form"><div class="picker-resource-preview" data-picker-preview aria-live="polite"></div>${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 filename-key resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : ""}${
       state.context.kind === "add-layer"
         ? ordinaryLayerVariantIds
             .map(
@@ -2663,7 +2505,7 @@ export class GameLayoutEditorApp {
             )
             .join("")
         : ""
-    }${backgroundArtSizeFields}${selected?.kind === "spine" ? `<label>default animation<select data-picker-animation><option value="">必须明确选择</option>${selected.animationNames.map((name) => `<option value="${escapeHtml(name)}" ${state.defaultAnimation === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>` : ""}<p class="hint">${escapeHtml(placementHint)}</p></section></div><footer><button type="button" data-picker-cancel>取消</button><button type="button" class="primary" data-picker-confirm ${selected ? "" : "disabled"}>确认</button></footer></div>`;
+    }${selected?.kind === "spine" ? `<label>default animation<select data-picker-animation><option value="">必须明确选择</option>${selected.animationNames.map((name) => `<option value="${escapeHtml(name)}" ${state.defaultAnimation === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>` : ""}<p class="hint">${escapeHtml(placementHint)}</p></section></div><footer><button type="button" data-picker-cancel>取消</button><button type="button" class="primary" data-picker-confirm ${selected ? "" : "disabled"}>确认</button></footer></div>`;
     if (!dialog.open) {
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
@@ -2791,20 +2633,6 @@ export class GameLayoutEditorApp {
         this.renderPicker(project);
       });
     dialog
-      .querySelector<HTMLInputElement>("[data-picker-art-width]")
-      ?.addEventListener("input", (event) => {
-        state.backgroundArtSize.width = (
-          event.currentTarget as HTMLInputElement
-        ).valueAsNumber;
-      });
-    dialog
-      .querySelector<HTMLInputElement>("[data-picker-art-height]")
-      ?.addEventListener("input", (event) => {
-        state.backgroundArtSize.height = (
-          event.currentTarget as HTMLInputElement
-        ).valueAsNumber;
-      });
-    dialog
       .querySelector("[data-picker-import]")
       ?.addEventListener("click", () => void this.uploadResources(true));
     dialog
@@ -2875,55 +2703,6 @@ export class GameLayoutEditorApp {
         this.showFeedback(`图层 ${context.nodeId} 已重绑到 ${resource.id}。`);
         return;
       }
-      const context = state.context;
-      const needsSpineBackgroundArtSize =
-        resource.kind === "spine" &&
-        (project.variants[context.variant].artSize.width <= 0 ||
-          project.variants[context.variant].artSize.height <= 0);
-      if (
-        needsSpineBackgroundArtSize &&
-        (!Number.isFinite(state.backgroundArtSize.width) ||
-          state.backgroundArtSize.width <= 0 ||
-          !Number.isFinite(state.backgroundArtSize.height) ||
-          state.backgroundArtSize.height <= 0)
-      ) {
-        throw new Error(
-          "Spine 背景必须明确填写完整 art size 的 width 和 height（有限正数）。",
-        );
-      }
-      this.#store.transact((draft) => {
-        if (needsSpineBackgroundArtSize) {
-          setVariantArtSizeDimension(
-            draft,
-            context.variant,
-            "width",
-            state.backgroundArtSize.width,
-          );
-          setVariantArtSizeDimension(
-            draft,
-            context.variant,
-            "height",
-            state.backgroundArtSize.height,
-          );
-        }
-        assignBackgroundResource({
-          project: draft,
-          modeId: context.modeId,
-          variant: context.variant,
-          resourceId: resource.id,
-          ...(resource.kind === "spine"
-            ? { defaultAnimation: state.defaultAnimation || undefined }
-            : {}),
-        });
-      });
-      this.#session.activeTab = "layout";
-      this.#session.selection = {
-        kind: "background",
-        variant: context.variant,
-      };
-      this.closePicker(false);
-      this.renderWorkspace(this.#store.getSnapshot());
-      this.showFeedback(`已设置 ${context.variant} 背景为 ${resource.id}。`);
     } catch (error) {
       this.#store.setExternalError(error);
       this.renderPicker(this.#store.getSnapshot().project);
@@ -3348,12 +3127,10 @@ export class GameLayoutEditorApp {
     };
     const revision = ++this.#previewRevision;
     const preferredVariant =
-      snapshot.project.mode === "maximized-focus"
-        ? "default"
-        : (this.#preview?.pageSize.height ?? 0) >
-            (this.#preview?.pageSize.width ?? 0)
-          ? "portrait"
-          : "landscape";
+      (this.#preview?.pageSize.height ?? 0) >
+      (this.#preview?.pageSize.width ?? 0)
+        ? "portrait"
+        : "landscape";
     const manifest = editorProjectToPreviewManifest(
       snapshot.project,
       preferredVariant,
@@ -3407,12 +3184,10 @@ export class GameLayoutEditorApp {
     snapshot: EditorStoreSnapshot,
   ): Promise<void> {
     const preferredVariant =
-      snapshot.project.mode === "maximized-focus"
-        ? "default"
-        : (this.#preview?.pageSize.height ?? 0) >
-            (this.#preview?.pageSize.width ?? 0)
-          ? "portrait"
-          : "landscape";
+      (this.#preview?.pageSize.height ?? 0) >
+      (this.#preview?.pageSize.width ?? 0)
+        ? "portrait"
+        : "landscape";
     const manifest = editorProjectToPreviewManifest(
       snapshot.project,
       preferredVariant,
@@ -4011,7 +3786,7 @@ export class GameLayoutEditorApp {
 
   private renderProjectStatus(snapshot: EditorStoreSnapshot): void {
     this.requireElement("[data-project-status]").textContent =
-      `${snapshot.project.id} · ${snapshot.project.mode} · ${snapshot.project.resources.size} resources · ${snapshot.project.nodes.length} nodes · ${snapshot.errors.length ? `${snapshot.errors.length} diagnostics` : "strict ready"}`;
+      `${snapshot.project.id} · center coordinates · ${snapshot.project.resources.size} resources · ${snapshot.project.nodes.length} nodes · ${snapshot.errors.length ? `${snapshot.errors.length} diagnostics` : "strict ready"}`;
     const errors = this.requireElement("[data-errors]");
     const messages = [
       ...snapshot.errors,
@@ -4168,7 +3943,7 @@ export class GameLayoutEditorApp {
 }
 
 function shellMarkup(): string {
-  return `<main class="editor-shell"><header class="topbar"><div class="brand"><strong>Game Layout Editor</strong><span>scene-layout v2 · mode workspaces</span></div><nav aria-label="项目操作"><button type="button" data-new-project>新建项目</button><button type="button" data-import>导入 ZIP</button><button type="button" class="primary" data-export>导出 ZIP</button></nav><output data-project-status></output></header><section class="workspace"><aside class="editor-pane"><section class="state-bar"><label>主状态<select data-game-mode></select></label><button type="button" data-manage-modes>管理状态</button><output data-main-state-status></output></section><div class="workspace-tabs" role="tablist" aria-label="编辑工作区">${(
+  return `<main class="editor-shell"><header class="topbar"><div class="brand"><strong>Game Layout Editor</strong><span>scene-layout v7 · centered workspaces</span></div><nav aria-label="项目操作"><button type="button" data-new-project>新建项目</button><button type="button" data-import>导入 ZIP</button><button type="button" class="primary" data-export>导出 ZIP</button></nav><output data-project-status></output></header><section class="workspace"><aside class="editor-pane"><section class="state-bar"><label>主状态<select data-game-mode></select></label><button type="button" data-manage-modes>管理状态</button><output data-main-state-status></output></section><div class="workspace-tabs" role="tablist" aria-label="编辑工作区">${(
     [
       ["assets", "资源"],
       ["layout", "布局"],
@@ -4184,20 +3959,11 @@ function shellMarkup(): string {
     )
     .join(
       "",
-    )}</div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section><div data-symbols-workspace hidden>${symbolsWorkspaceMarkup()}</div><div data-bigwin-workspace hidden>${bigWinWorkspaceMarkup()}</div></aside><section class="preview-column"><div class="preview-toolbar"><label>分辨率<select data-preview-resolution></select></label><label>宽<input type="number" min="1" value="1920" data-preview-width /></label><label>高<input type="number" min="1" value="1080" data-preview-height /></label><label>预览状态<select data-preview-game-mode></select></label><button type="button" data-request-preview-mode>切换到该状态</button><button type="button" data-unlock-preview-audio>启用声音</button><output data-preview-transition-status aria-live="polite"></output><label><input type="checkbox" checked data-follow-edit-mode />跟随编辑状态</label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog data-new-project-dialog aria-label="新建项目"><form method="dialog"><h2>新建项目</h2><label>Splash 适配类型<select data-new-project-splash-mode><option value="">请选择</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><label>BaseGame 适配类型<select data-new-project-basegame-mode><option value="">请选择</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><div class="button-row"><button type="button" data-cancel-new-project>取消</button><button type="button" class="primary" data-confirm-new-project disabled>创建</button></div></form></dialog><dialog data-mode-dialog aria-label="管理主状态"></dialog><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
+    )}</div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section><div data-symbols-workspace hidden>${symbolsWorkspaceMarkup()}</div><div data-bigwin-workspace hidden>${bigWinWorkspaceMarkup()}</div></aside><section class="preview-column"><div class="preview-toolbar"><label>分辨率<select data-preview-resolution></select></label><label>宽<input type="number" min="1" value="1920" data-preview-width /></label><label>高<input type="number" min="1" value="1080" data-preview-height /></label><label>预览状态<select data-preview-game-mode></select></label><button type="button" data-request-preview-mode>切换到该状态</button><button type="button" data-unlock-preview-audio>启用声音</button><output data-preview-transition-status aria-live="polite"></output><label><input type="checkbox" checked data-follow-edit-mode />跟随编辑状态</label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog data-new-project-dialog aria-label="新建项目"><form method="dialog"><h2>新建中心坐标项目</h2><p>默认创建 Splash 与 BaseGame，横竖屏均使用中心坐标。</p><div class="button-row"><button type="button" data-cancel-new-project>取消</button><button type="button" class="primary" data-confirm-new-project>创建</button></div></form></dialog><dialog data-mode-dialog aria-label="管理主状态"></dialog><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
 }
 
 function parseSelectionKey(key: string): LayoutSelection {
   if (key === "reel:main") return { kind: "reel", reelId: "main" };
-  if (key.startsWith("background:")) {
-    return {
-      kind: "background",
-      variant: key.slice("background:".length) as
-        | "default"
-        | "landscape"
-        | "portrait",
-    };
-  }
   if (key.startsWith("layer:")) {
     return { kind: "layer", nodeId: key.slice("layer:".length) };
   }

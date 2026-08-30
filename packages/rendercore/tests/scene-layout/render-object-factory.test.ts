@@ -39,7 +39,6 @@ function imageStringResource(): ImageStringResource {
 
 function createResource(options?: {
   readonly lazyRuntimeResources?: boolean;
-  readonly coordinateOrigin?: "top-left" | "center";
 }): SceneLayoutPackageResource {
   const resources = {
     nearwin1: {
@@ -78,7 +77,6 @@ function createResource(options?: {
   } satisfies Readonly<Record<string, SceneLayoutRuntimeResource>>;
   const runtimeManifest = {
     id: "factory-test",
-    coordinateOrigin: options?.coordinateOrigin ?? "top-left",
     runtimeResources: {
       nearwin1: {
         kind: "spine",
@@ -386,28 +384,18 @@ describe("Scene Layout named RenderObject factory", () => {
     frame.destroy(true);
   });
 
-  it("aligns runtime images to the package coordinate origin", async () => {
-    const topLeftFactory = createSceneLayoutRenderObjectFactory({
-      resource: createResource({ coordinateOrigin: "top-left" }),
-      dependencies: { loadTexture: async () => Texture.WHITE },
-    });
+  it("aligns runtime images to the center coordinate origin", async () => {
     const centeredFactory = createSceneLayoutRenderObjectFactory({
-      resource: createResource({ coordinateOrigin: "center" }),
+      resource: createResource(),
       dependencies: { loadTexture: async () => Texture.WHITE },
     });
 
-    const topLeft = await topLeftFactory.createRenderObject("badge");
     const centered = await centeredFactory.createRenderObject("badge");
-    const topLeftView = getRenderObjectAdapter(topLeft).view;
     const centeredView = getRenderObjectAdapter(centered).view;
-    expect(topLeftView).toBeInstanceOf(Sprite);
     expect(centeredView).toBeInstanceOf(Sprite);
-    expect((topLeftView as Sprite).anchor.x).toBe(0);
-    expect((topLeftView as Sprite).anchor.y).toBe(0);
     expect((centeredView as Sprite).anchor.x).toBe(0.5);
     expect((centeredView as Sprite).anchor.y).toBe(0.5);
 
-    topLeftFactory.destroy();
     centeredFactory.destroy();
   });
 

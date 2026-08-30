@@ -12,7 +12,7 @@ import {
   prepareSymbolResourceImport,
 } from "../src/model/resource-import.js";
 import { applyStateTextureImageBinding } from "../src/model/state-texture-generation.js";
-import { readMinecart2SymbolFixtureBytes } from "../../../test-utils/minecart2-fixtures.js";
+import { readSymbolArtifactFixtureBytes } from "./artifact-fixtures.js";
 
 const gameConfig = {
   paytable: { "1": { code: 1, symbol: "A", pays: [1] } },
@@ -27,7 +27,7 @@ const multiSymbolGameConfig = {
   symbolCodes: { A: 1, B: 2 },
   reels: { main: [[1, 2]] },
 };
-const image = (name: string) => readMinecart2SymbolFixtureBytes(name);
+const image = (name: string) => readSymbolArtifactFixtureBytes(name);
 const encode = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value));
 const spineSkeleton = (animations: readonly string[], slots = ["Num"]) =>

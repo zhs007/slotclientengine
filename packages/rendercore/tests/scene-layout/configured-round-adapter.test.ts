@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { GameLogic, SceneMatrix } from "@slotclientengine/logiccore";
 import { Container, type Application } from "pixi.js";
 import {
+  createSceneLayoutRuntimeAllocation,
   createConfiguredSceneLayoutRoundAdapter,
+  parseSceneLayoutManifestV7,
   parseSlotTemplatePresentationProfile,
   type SceneLayoutPackageResource,
   type SceneLayoutPackageRuntime,
@@ -20,34 +22,66 @@ const refillScene: SceneMatrix = [
 
 function createResource() {
   const destroy = vi.fn();
-  const resource = {
-    manifest: {
-      version: 1,
-      kind: "scene-layout",
-      id: "adapter-fixture",
-      adaptation: {
-        mode: "maximized-focus",
-        artSize: { width: 100, height: 100 },
-        focusRect: { x: 0, y: 0, width: 100, height: 100 },
-        backgroundNode: "background",
-      },
-      nodes: [],
-      reels: {
-        main: {
-          columns: 2,
-          rows: 2,
-          cellSize: { width: 10, height: 10 },
-          gap: { x: 0, y: 0 },
-          placements: { default: { x: 0, y: 0 } },
-        },
-      },
-      symbolPackage: {
-        manifest: "dependencies/symbols/fixture/symbols.package.json",
-        reel: "main",
-        reelSet: "public-reels",
-        renderMode: "standard",
-      },
+  const draft = {
+    version: 7 as const,
+    kind: "scene-layout" as const,
+    id: "adapter-fixture",
+    main: {
+      order: 0,
+      columns: 2,
+      rows: 2,
+      cellSize: { width: 10, height: 10 },
+      gap: { x: 0, y: 0 },
     },
+    nodes: [],
+    symbolPackage: {
+      manifest: "dependencies/symbols/fixture/symbols.package.json",
+      reel: "main" as const,
+      reelSet: "public-reels",
+      renderMode: "standard" as const,
+    },
+    gameModes: {
+      initialMode: "BaseGame",
+      modes: [
+        {
+          id: "BaseGame",
+          main: {
+            enabled: true,
+            variants: {
+              landscape: {
+                x: 0,
+                y: 0,
+                focusRect: { x: -50, y: -50, width: 100, height: 100 },
+              },
+              portrait: {
+                x: 0,
+                y: 0,
+                focusRect: { x: -50, y: -50, width: 100, height: 100 },
+              },
+            },
+          },
+          nodeStates: {},
+        },
+      ],
+    },
+    audio: {
+      version: 1 as const,
+      effects: [],
+      music: [],
+      programmaticEffects: [],
+    },
+    eventAudio: { version: 1 as const, ignoreLegacyAudio: false, bindings: [] },
+    runtimeAllocation: undefined as never,
+  };
+  const manifest = structuredClone(
+    parseSceneLayoutManifestV7({
+      ...draft,
+      runtimeAllocation: createSceneLayoutRuntimeAllocation(draft),
+    }),
+  );
+  const resource = {
+    manifest,
+    runtimeManifest: manifest,
     symbolPackage: {
       displaySymbols: ["S1", "S2", "S3", "S4"],
       gameConfig: {
@@ -1114,9 +1148,9 @@ describe("configured scene-layout round adapter", () => {
     });
     await geometryAdapter.mount(geometryHarness.context);
     await geometryAdapter.applyInitialState({ defaultScene: initialScene });
-    Object.assign(geometryResource.manifest.reels, { main: undefined });
+    Object.assign(geometryResource.manifest as any, { main: undefined });
     await expect(geometryAdapter.playSpin(createLogic())).rejects.toThrow(
-      /no reels.main/,
+      /no main/,
     );
     geometryAdapter.destroy();
   });

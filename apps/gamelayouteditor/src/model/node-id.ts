@@ -65,9 +65,6 @@ export function migrateSceneLayoutNodeIds(manifestValue: SceneLayoutManifest): {
   (draft as { nodes: SceneLayoutManifestLatest["nodes"] }).nodes =
     draft.nodes.map((node) => ({ ...node, id: rename(node.id) }));
   for (const mode of draft.gameModes.modes) {
-    for (const [variant, id] of Object.entries(mode.backgroundNodes))
-      if (id)
-        (mode.backgroundNodes as Record<string, string>)[variant] = rename(id);
     (mode as { nodeStates: Record<string, string> }).nodeStates =
       Object.fromEntries(
         Object.entries(mode.nodeStates).map(([id, state]) => [

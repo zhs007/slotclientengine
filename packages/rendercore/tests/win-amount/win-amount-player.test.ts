@@ -1,13 +1,6 @@
 import { Container } from "pixi.js";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  rewriteVNIProjectAssetPaths,
-  type VNIProjectConfig,
-} from "@slotclientengine/vnicore/data";
-import {
-  getMinecart2AwardVniProjectPath,
-  readMinecart2LogicalJson,
-} from "../../../../test-utils/minecart2-fixtures.js";
+import { createTestVniProject } from "../fixtures/artifact-fixtures.js";
 import {
   createWinAmountAnimationPlayer,
   createWinAmountAnimationTiersFromModules,
@@ -15,15 +8,9 @@ import {
 } from "../../src/win-amount/index.js";
 import type { VNIRuntimeOptions } from "@slotclientengine/vnicore/core";
 
-const bigwinProject = readLegacyWinAmountProject(
-  getMinecart2AwardVniProjectPath("bigwin"),
-);
-const superwinProject = readLegacyWinAmountProject(
-  getMinecart2AwardVniProjectPath("superwin"),
-);
-const megawinProject = readLegacyWinAmountProject(
-  getMinecart2AwardVniProjectPath("megawin"),
-);
+const bigwinProject = createTestVniProject("big win0721");
+const superwinProject = createTestVniProject("super win0721");
+const megawinProject = createTestVniProject("mega win0721");
 
 describe("win amount animation player", () => {
   beforeEach(() => {
@@ -516,13 +503,6 @@ function createAssetModules(
     }
   }
   return modules;
-}
-
-function readLegacyWinAmountProject(logicalPath: string): VNIProjectConfig {
-  return rewriteVNIProjectAssetPaths(
-    readMinecart2LogicalJson(logicalPath),
-    (assetPath) => `assets/${assetPath.split("/").at(-1)}`,
-  );
 }
 
 async function flushMicrotasks(): Promise<void> {

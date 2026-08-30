@@ -4,9 +4,8 @@ import {
   createSceneLayoutResource,
   createSceneLayoutRuntime,
   createSceneLayoutRuntimeAllocation,
-  materializeSceneLayoutManifestForMode,
   parseSceneLayoutManifest,
-  parseSceneLayoutManifestV6,
+  parseSceneLayoutManifestV7,
   upgradeSceneLayoutManifestToLatest,
 } from "../../src/scene-layout/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
@@ -42,8 +41,8 @@ describe("scene layout runtime", () => {
       portrait: { x: 30, y: 40, scale: 1 },
     };
     draft.runtimeAllocation = createSceneLayoutRuntimeAllocation(draft);
-    const latest = parseSceneLayoutManifestV6(draft);
-    const manifest = materializeSceneLayoutManifestForMode(latest, "BaseGame");
+    const latest = parseSceneLayoutManifestV7(draft);
+    const manifest = latest;
     const runtime = createSceneLayoutRuntime({
       resource: createSceneLayoutResource({
         manifest,
@@ -59,8 +58,7 @@ describe("scene layout runtime", () => {
 
     const landscape = runtime.applyViewport({ width: 1920, height: 1080 });
     expect(landscape).toMatchObject({
-      variantId: "default",
-      orientationVariantId: "landscape",
+      variantId: "landscape",
     });
     expect(runtime.getNode("ordinary").parent!.position).toMatchObject({
       x: 10,
@@ -69,8 +67,7 @@ describe("scene layout runtime", () => {
 
     const portrait = runtime.applyViewport({ width: 1080, height: 1920 });
     expect(portrait).toMatchObject({
-      variantId: "default",
-      orientationVariantId: "portrait",
+      variantId: "portrait",
     });
     expect(runtime.getNode("ordinary").parent!.position).toMatchObject({
       x: 30,
@@ -78,7 +75,7 @@ describe("scene layout runtime", () => {
     });
 
     const square = runtime.applyViewport({ width: 1200, height: 1200 });
-    expect(square.orientationVariantId).toBe("portrait");
+    expect(square.variantId).toBe("portrait");
     expect(runtime.getNode("ordinary").parent!.position).toMatchObject({
       x: 30,
       y: 40,
@@ -244,7 +241,7 @@ describe("scene layout runtime", () => {
     );
   });
 
-  it("commits prepared mode background order without repeating the public structure check", async () => {
+  it("commits a prepared ordinary-node mode without rebuilding node order", async () => {
     const initial = parseSceneLayoutManifest({
       ...game002LayoutFixture,
       nodes: [
@@ -276,10 +273,11 @@ describe("scene layout runtime", () => {
         transitions: [],
       },
     });
-    const free = materializeSceneLayoutManifestForMode(
-      upgradeSceneLayoutManifestToLatest(initial),
-      "FreeGame",
-    );
+    const latestInitial = upgradeSceneLayoutManifestToLatest(initial);
+    const free = parseSceneLayoutManifestV7({
+      ...latestInitial,
+      gameModes: { ...latestInitial.gameModes, initialMode: "FreeGame" },
+    });
     const runtime = createPreparedSceneLayoutRuntime({
       resource: createSceneLayoutResource({
         manifest: initial,
@@ -292,16 +290,17 @@ describe("scene layout runtime", () => {
       unloadTexture: async () => undefined,
     });
     await runtime.init();
+    runtime.applyViewport({ width: 2000, height: 2000 });
 
-    expect(() => runtime.applyGeometryManifest(free)).toThrow(
-      /changed immutable structure/,
-    );
-    expect(runtime.commitPreparedGeometryManifest(free)).toBeNull();
+    expect(runtime.applyGeometryManifest(free)).not.toBeNull();
+    expect(runtime.commitGameMode("FreeGame")).not.toBeNull();
     expect(
       runtime.container.children
         .map((child) => child.label)
         .filter((label) => label.startsWith("scene-layout-slot:")),
-    ).toEqual(["scene-layout-slot:free-bg", "scene-layout-slot:bg"]);
+    ).toEqual(["scene-layout-slot:bg", "scene-layout-slot:free-bg"]);
+    expect(runtime.getNode("bg").parent?.visible).toBe(false);
+    expect(runtime.getNode("free-bg").parent?.visible).toBe(true);
 
     runtime.destroy();
   });
@@ -413,11 +412,11 @@ describe("scene layout runtime", () => {
     await runtime.init();
     expect(runtime.applyGeometryManifest(manifest)).toBeNull();
     runtime.applyViewport({ width: 2000, height: 2000 });
-    expect(display.pivot).toMatchObject({ x: 0, y: 0 });
+    expect(display.pivot).toMatchObject({ x: 200, y: 150 });
     expect(runtime.getNode("vni-fx").parent).toMatchObject({
       angle: 90,
-      pivot: { x: 200, y: 150 },
-      position: { x: 250, y: 312.5 },
+      pivot: { x: 0, y: 0 },
+      position: { x: -900, y: -800 },
     });
     expect(player.setLoop).toHaveBeenCalledWith(false);
     expect(player.play).toHaveBeenCalledOnce();
@@ -427,15 +426,6 @@ describe("scene layout runtime", () => {
     expect(player.play).toHaveBeenCalledTimes(2);
     runtime.update(1 / 60);
     expect(player.update).toHaveBeenCalledOnce();
-    const centered = structuredClone(manifest) as any;
-    centered.coordinateOrigin = "center";
-    centered.nodes[0].placements.default = {
-      x: -999.5,
-      y: -999.5,
-      scale: 1,
-    };
-    centered.reels.main.placements.default = { x: 0, y: -123 };
-    runtime.applyGeometryManifest(centered);
     expect(display.pivot).toMatchObject({ x: 200, y: 150 });
     runtime.setNodeActive("vni-fx", false);
     runtime.update(1 / 60);
@@ -727,10 +717,21 @@ describe("scene layout runtime", () => {
     await runtime.init();
     runtime.applyViewport({ width: 1920, height: 1080 });
     expect(runtime.getImageStringNodeNames()).toEqual(["first", "second"]);
-    expect(runtime.getNode("first").parent).toMatchObject({
+    const firstPlacement = runtime.getNode("first").parent!;
+    expect({
+      angle: firstPlacement.angle,
+      pivot: {
+        x: firstPlacement.pivot.x,
+        y: firstPlacement.pivot.y,
+      },
+      position: {
+        x: firstPlacement.position.x,
+        y: firstPlacement.position.y,
+      },
+    }).toEqual({
       angle: -90,
       pivot: { x: 1.5, y: 0.5 },
-      position: { x: 11.5, y: 20.5 },
+      position: { x: -988.5, y: -979.5 },
     });
     expect(runtime.getImageStringText("first")).toBe("001");
     expect(runtime.getImageStringText("second")).toBe("1");
@@ -978,10 +979,15 @@ describe("scene layout runtime", () => {
       center: { x: 0.5, y: 0.5 },
     };
     runtime.applyGeometryManifest(rotated);
-    expect(node.parent).toMatchObject({
+    expect({
+      angle: node.parent!.angle,
+      position: { x: node.parent!.position.x, y: node.parent!.position.y },
+      pivot: { x: node.parent!.pivot.x, y: node.parent!.pivot.y },
+      scale: { x: node.parent!.scale.x, y: node.parent!.scale.y },
+    }).toEqual({
       angle: 90,
-      position: { x: 11, y: 21 },
-      pivot: { x: 0.5, y: 0.5 },
+      position: { x: -989, y: -979 },
+      pivot: { x: 0, y: 0 },
       scale: { x: 2, y: 2 },
     });
     expect(loadTexture).toHaveBeenCalledOnce();
@@ -994,17 +1000,19 @@ describe("scene layout runtime", () => {
       scale: 1,
     };
     centered.reels.main.placements.default = { x: 0, y: -123 };
-    const snapshot = runtime.applyGeometryManifest(centered);
+    const snapshot = runtime.applyGeometryManifest(
+      upgradeSceneLayoutManifestToLatest(centered),
+    );
 
-    expect(snapshot?.reels.main.artRect).toEqual({
-      x: 640,
-      y: 337,
+    expect(snapshot?.main.layoutRect).toEqual({
+      x: -360,
+      y: -663,
       width: 720,
       height: 1080,
     });
     expect(runtime.getNode("bg")).toBe(node);
     expect(sprite.anchor.x).toBe(0.5);
-    expect(node.parent?.position).toMatchObject({ x: 10.5, y: 20.5 });
+    expect(node.parent?.position).toMatchObject({ x: -989.5, y: -979.5 });
     expect(loadTexture).toHaveBeenCalledOnce();
 
     const structural = structuredClone(centered);
