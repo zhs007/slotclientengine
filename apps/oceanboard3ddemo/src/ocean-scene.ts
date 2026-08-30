@@ -1,6 +1,7 @@
 import {
   ACESFilmicToneMapping,
   BackSide,
+  ClampToEdgeWrapping,
   Color,
   LinearFilter,
   LinearMipmapLinearFilter,
@@ -43,6 +44,18 @@ const seabedCausticTextureUrl = new URL(
   "../assets/textures/seabed-caustics-v2.ktx2",
   import.meta.url,
 ).href;
+const cloudBankTextureUrl = new URL(
+  "../assets/textures/cloud-bank-v3.ktx2",
+  import.meta.url,
+).href;
+const smallCloudTextureUrl = new URL(
+  "../assets/textures/small-clouds-v2.ktx2",
+  import.meta.url,
+).href;
+const skySunlightTextureUrl = new URL(
+  "../assets/textures/sky-sunlight-v3.ktx2",
+  import.meta.url,
+).href;
 
 export class OceanSurfaceRenderer {
   readonly #renderer: WebGLRenderer;
@@ -63,8 +76,14 @@ export class OceanSurfaceRenderer {
   readonly #sky: Mesh<SphereGeometry, ShaderMaterial>;
   #waterHeightTexture = new Texture();
   #seabedCausticTexture = new Texture();
+  #cloudBankTexture = new Texture();
+  #smallCloudTexture = new Texture();
+  #skySunlightTexture = new Texture();
   #waterHeightReady = false;
   #seabedCausticReady = false;
+  #cloudBankReady = false;
+  #smallCloudReady = false;
+  #skySunlightReady = false;
   #textureLoadError: Error | null = null;
   #destroyed = false;
 
@@ -107,6 +126,13 @@ export class OceanSurfaceRenderer {
       uniforms: {
         uTime: { value: 0 },
         uSunDirection: { value: sunDirection },
+        uCloudTexture: { value: this.#cloudBankTexture },
+        uCloudTextureMix: { value: 0 },
+        uSmallCloudTexture: { value: this.#smallCloudTexture },
+        uSmallCloudTextureMix: { value: 0 },
+        uSkySunlight: { value: this.#skySunlightTexture },
+        uSkySunlightMix: { value: 0 },
+        uResolution: { value: new Vector2(1, 1) },
       },
       vertexShader: skyVertexShader,
       fragmentShader: skyFragmentShader,
@@ -135,16 +161,19 @@ export class OceanSurfaceRenderer {
       toneMapped: true,
     });
     const ocean = new Mesh(
-      new PlaneGeometry(520, 720, 160, 196),
+      new PlaneGeometry(900, 1600, 180, 260),
       this.#oceanMaterial,
     );
     ocean.name = "gerstner-style-ocean-surface";
     ocean.rotation.x = -Math.PI / 2;
-    ocean.position.z = -330;
+    ocean.position.z = -780;
     ocean.frustumCulled = false;
     this.#scene.add(ocean);
     this.#loadWaterHeightTexture();
     this.#loadSeabedCausticTexture();
+    this.#loadCloudBankTexture();
+    this.#loadSmallCloudTexture();
+    this.#loadSkySunlightTexture();
 
     this.#camera.position.set(0, 5.8, 14);
     this.resize(host.clientWidth, host.clientHeight);
@@ -174,6 +203,7 @@ export class OceanSurfaceRenderer {
     this.#oceanMaterial.uniforms.uResolution.value.copy(
       this.#drawingBufferSize,
     );
+    this.#skyMaterial.uniforms.uResolution.value.copy(this.#drawingBufferSize);
   }
 
   destroy(): void {
@@ -185,6 +215,9 @@ export class OceanSurfaceRenderer {
     this.#underwaterTarget.dispose();
     this.#waterHeightTexture.dispose();
     this.#seabedCausticTexture.dispose();
+    this.#cloudBankTexture.dispose();
+    this.#smallCloudTexture.dispose();
+    this.#skySunlightTexture.dispose();
     this.#ktx2Loader.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
@@ -202,6 +235,16 @@ export class OceanSurfaceRenderer {
       : 0;
     this.#seabedMaterial.uniforms.uCausticTextureMix.value = this
       .#seabedCausticReady
+      ? 1
+      : 0;
+    this.#skyMaterial.uniforms.uCloudTextureMix.value = this.#cloudBankReady
+      ? 1
+      : 0;
+    this.#skyMaterial.uniforms.uSmallCloudTextureMix.value = this
+      .#smallCloudReady
+      ? 1
+      : 0;
+    this.#skyMaterial.uniforms.uSkySunlightMix.value = this.#skySunlightReady
       ? 1
       : 0;
     this.#sky.position.copy(this.#camera.position);
@@ -262,6 +305,81 @@ export class OceanSurfaceRenderer {
     );
   }
 
+  #loadCloudBankTexture(): void {
+    this.#ktx2Loader.load(
+      cloudBankTextureUrl,
+      (texture) => {
+        if (this.#destroyed) {
+          texture.dispose();
+          return;
+        }
+        const placeholder = this.#cloudBankTexture;
+        this.#configureCloudTexture(texture, "ocean-cloud-bank-v3-color");
+        this.#cloudBankTexture = texture;
+        this.#skyMaterial.uniforms.uCloudTexture.value = texture;
+        placeholder.dispose();
+        this.#cloudBankReady = true;
+      },
+      undefined,
+      (cause) => {
+        this.#textureLoadError = new Error(
+          `Failed to load ocean cloud-bank texture: ${cloudBankTextureUrl}`,
+          { cause },
+        );
+      },
+    );
+  }
+
+  #loadSmallCloudTexture(): void {
+    this.#ktx2Loader.load(
+      smallCloudTextureUrl,
+      (texture) => {
+        if (this.#destroyed) {
+          texture.dispose();
+          return;
+        }
+        const placeholder = this.#smallCloudTexture;
+        this.#configureCloudTexture(texture, "ocean-small-clouds-v2-color");
+        this.#smallCloudTexture = texture;
+        this.#skyMaterial.uniforms.uSmallCloudTexture.value = texture;
+        placeholder.dispose();
+        this.#smallCloudReady = true;
+      },
+      undefined,
+      (cause) => {
+        this.#textureLoadError = new Error(
+          `Failed to load ocean small-cloud texture: ${smallCloudTextureUrl}`,
+          { cause },
+        );
+      },
+    );
+  }
+
+  #loadSkySunlightTexture(): void {
+    this.#ktx2Loader.load(
+      skySunlightTextureUrl,
+      (texture) => {
+        if (this.#destroyed) {
+          texture.dispose();
+          return;
+        }
+        const placeholder = this.#skySunlightTexture;
+        this.#configureLightmapTexture(texture, "ocean-sky-sunlight-v3-data");
+        this.#skySunlightTexture = texture;
+        this.#skyMaterial.uniforms.uSkySunlight.value = texture;
+        placeholder.dispose();
+        this.#skySunlightReady = true;
+      },
+      undefined,
+      (cause) => {
+        this.#textureLoadError = new Error(
+          `Failed to load sky sunlight texture: ${skySunlightTextureUrl}`,
+          { cause },
+        );
+      },
+    );
+  }
+
   #configureDataTexture(texture: Texture, name: string): void {
     texture.name = name;
     texture.wrapS = MirroredRepeatWrapping;
@@ -272,6 +390,36 @@ export class OceanSurfaceRenderer {
     texture.generateMipmaps = false;
     texture.anisotropy = Math.min(
       8,
+      this.#renderer.capabilities.getMaxAnisotropy(),
+    );
+    texture.needsUpdate = true;
+  }
+
+  #configureCloudTexture(texture: Texture, name: string): void {
+    texture.name = name;
+    texture.wrapS = ClampToEdgeWrapping;
+    texture.wrapT = ClampToEdgeWrapping;
+    texture.minFilter = LinearMipmapLinearFilter;
+    texture.magFilter = LinearFilter;
+    texture.colorSpace = SRGBColorSpace;
+    texture.generateMipmaps = false;
+    texture.anisotropy = Math.min(
+      4,
+      this.#renderer.capabilities.getMaxAnisotropy(),
+    );
+    texture.needsUpdate = true;
+  }
+
+  #configureLightmapTexture(texture: Texture, name: string): void {
+    texture.name = name;
+    texture.wrapS = ClampToEdgeWrapping;
+    texture.wrapT = ClampToEdgeWrapping;
+    texture.minFilter = LinearMipmapLinearFilter;
+    texture.magFilter = LinearFilter;
+    texture.colorSpace = NoColorSpace;
+    texture.generateMipmaps = false;
+    texture.anisotropy = Math.min(
+      4,
       this.#renderer.capabilities.getMaxAnisotropy(),
     );
     texture.needsUpdate = true;
