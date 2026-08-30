@@ -34,23 +34,28 @@ float hash21(vec2 point) {
 
 void main() {
   vec2 uv = vUv;
-  float surfaceMask = smoothstep(0.52, 1.0, uv.y);
-  float ripple = sin(uv.y * 43.0 + uTime * 0.72) * 0.00075 +
-    sin(uv.x * 57.0 - uTime * 0.46) * 0.00055;
-  vec2 warpedUv = uv + vec2(ripple * surfaceMask, ripple * 0.24);
-  float chroma = 0.00055 + surfaceMask * 0.00065;
-  vec3 color;
-  color.r = texture2D(tScene, warpedUv + vec2(chroma, 0.0)).r;
-  color.g = texture2D(tScene, warpedUv).g;
-  color.b = texture2D(tScene, warpedUv - vec2(chroma, 0.0)).b;
+  float aspect = uResolution.x / max(uResolution.y, 1.0);
+  vec2 fieldUv = uv * vec2(aspect, 1.0);
+  float horizontal = sin(
+    fieldUv.y * 7.2 + uTime * 0.16 + sin(fieldUv.x * 3.1 - uTime * 0.07)
+  );
+  float vertical = cos(
+    fieldUv.x * 5.4 - uTime * 0.12 + sin(fieldUv.y * 2.7 + uTime * 0.05)
+  );
+  float edgeFade = smoothstep(0.0, 0.08, uv.x) *
+    smoothstep(0.0, 0.08, 1.0 - uv.x) *
+    smoothstep(0.0, 0.08, uv.y) *
+    smoothstep(0.0, 0.08, 1.0 - uv.y);
+  vec2 refractedUv = clamp(
+    uv + vec2(horizontal * 0.00042, vertical * 0.00028) * edgeFade,
+    0.0,
+    1.0
+  );
+  vec3 color = texture2D(tScene, refractedUv).rgb;
 
   float depthGrade = smoothstep(0.15, 0.96, uv.y);
   color *= mix(vec3(0.86, 0.96, 1.08), vec3(0.91, 1.04, 1.11), depthGrade);
   color = mix(color, color * vec3(0.82, 1.02, 1.12), 0.22);
-
-  vec2 sunDelta = (uv - vec2(0.52, 1.02)) * vec2(1.35, 1.0);
-  float sunGlow = 1.0 - smoothstep(0.02, 0.6, length(sunDelta));
-  color += vec3(0.2, 0.78, 1.0) * sunGlow * 0.17;
 
   float grain = hash21(gl_FragCoord.xy + floor(uTime * 12.0)) - 0.5;
   color += grain * 0.012;

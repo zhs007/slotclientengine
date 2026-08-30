@@ -38,50 +38,6 @@ body,
   touch-action: none;
 }
 
-.scene-title {
-  position: absolute;
-  z-index: 2;
-  top: max(1.25rem, env(safe-area-inset-top));
-  left: 50%;
-  display: grid;
-  justify-items: center;
-  pointer-events: none;
-  text-align: center;
-  text-shadow: 0 3px 18px rgb(0 35 75 / 72%);
-  transform: translateX(-50%);
-}
-
-.scene-title span {
-  color: rgb(193 244 255 / 82%);
-  font-size: clamp(0.46rem, 1.15vw, 0.68rem);
-  font-weight: 750;
-  letter-spacing: 0.32em;
-}
-
-.scene-title strong {
-  margin-top: 0.28rem;
-  color: #f1feff;
-  font-size: clamp(0.9rem, 3.2vw, 1.75rem);
-  letter-spacing: 0.08em;
-}
-
-.scene-hint {
-  position: absolute;
-  z-index: 2;
-  right: max(0.75rem, env(safe-area-inset-right));
-  bottom: max(0.75rem, env(safe-area-inset-bottom));
-  padding: 0.42rem 0.62rem;
-  border: 1px solid rgb(150 236 255 / 23%);
-  border-radius: 999px;
-  background: rgb(1 31 70 / 30%);
-  color: rgb(201 246 255 / 66%);
-  font-size: 0.54rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  pointer-events: none;
-  backdrop-filter: blur(6px);
-}
-
 .fatal-error {
   position: relative;
   z-index: 3;

@@ -1,46 +1,38 @@
 import {
   ACESFilmicToneMapping,
   AdditiveBlending,
-  AmbientLight,
-  BufferGeometry,
   Color,
-  ConeGeometry,
-  CylinderGeometry,
-  DirectionalLight,
-  DoubleSide,
   FogExp2,
-  Float32BufferAttribute,
   Group,
-  HemisphereLight,
-  IcosahedronGeometry,
-  InstancedMesh,
+  LinearFilter,
+  LinearMipmapLinearFilter,
   Mesh,
-  MeshBasicMaterial,
-  MeshPhysicalMaterial,
-  MeshStandardMaterial,
-  Object3D,
+  NoColorSpace,
   PerspectiveCamera,
   PlaneGeometry,
-  PointLight,
-  Points,
-  PointsMaterial,
+  RepeatWrapping,
   Scene,
   ShaderMaterial,
-  Shape,
-  ShapeGeometry,
-  SphereGeometry,
   SRGBColorSpace,
+  Texture,
   Vector2,
   WebGLRenderer,
+  type BufferGeometry,
   type Material,
 } from "three";
-import { BUBBLES, PARTICLES } from "./config.js";
-import { createBubblePlacements, type BubblePlacement } from "./layout.js";
-import { createRandom, randomBetween } from "./random.js";
-import { SymbolField } from "./symbols.js";
+import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
 import { UnderwaterPass } from "./underwater-pass.js";
 
-const backdropVertexShader = /* glsl */ `
+const densityFlowTextureUrl = new URL(
+  "../assets/textures/water-density-flow.ktx2",
+  import.meta.url,
+).href;
+const surfaceCausticTextureUrl = new URL(
+  "../assets/textures/surface-caustic-field.ktx2",
+  import.meta.url,
+).href;
+
+const waterVolumeVertexShader = /* glsl */ `
 varying vec2 vUv;
 
 void main() {
@@ -49,7 +41,7 @@ void main() {
 }
 `;
 
-const backdropFragmentShader = /* glsl */ `
+const waterVolumeFragmentShader = /* glsl */ `
 uniform float uTime;
 varying vec2 vUv;
 
@@ -60,141 +52,206 @@ float hash21(vec2 point) {
 }
 
 void main() {
-  vec3 deep = vec3(0.004, 0.075, 0.19);
-  vec3 middle = vec3(0.01, 0.3, 0.56);
-  vec3 surface = vec3(0.08, 0.77, 0.93);
-  vec3 color = mix(deep, middle, smoothstep(0.02, 0.72, vUv.y));
-  color = mix(color, surface, smoothstep(0.72, 1.0, vUv.y));
-  float bloom = 1.0 - smoothstep(0.0, 0.42, distance(vUv, vec2(0.52, 1.08)));
-  color += vec3(0.13, 0.72, 0.9) * bloom * 0.66;
-  float band = sin(vUv.y * 54.0 + sin(vUv.x * 13.0 + uTime * 0.13)) * 0.5 + 0.5;
-  color += vec3(0.01, 0.09, 0.13) * band * smoothstep(0.56, 0.96, vUv.y) * 0.14;
-  color += (hash21(vUv * vec2(620.0, 940.0)) - 0.5) * 0.018;
+  vec3 deepWater = vec3(0.004, 0.055, 0.14);
+  vec3 midWater = vec3(0.008, 0.23, 0.43);
+  vec3 shallowWater = vec3(0.06, 0.52, 0.68);
+
+  float depth = smoothstep(0.02, 0.74, vUv.y);
+  vec3 color = mix(deepWater, midWater, depth);
+  color = mix(color, shallowWater, smoothstep(0.72, 1.0, vUv.y));
+
+  float broadHaze = sin(vUv.y * 4.2 + sin(vUv.x * 2.4 + uTime * 0.11));
+  float currentA = sin(vUv.x * 5.2 + vUv.y * 2.1 + uTime * 0.18);
+  float currentB = sin(vUv.x * -2.8 + vUv.y * 6.1 - uTime * 0.12);
+  float currentMask = smoothstep(0.04, 0.22, vUv.y) *
+    (1.0 - smoothstep(0.86, 1.0, vUv.y));
+  float current = (currentA + currentB) * 0.5 * currentMask;
+  color += vec3(0.008, 0.035, 0.052) * broadHaze;
+  color += vec3(0.012, 0.045, 0.058) * current;
+
+  float grain = hash21(vUv * vec2(720.0, 1080.0)) - 0.5;
+  color += grain * 0.009;
   gl_FragColor = vec4(color, 1.0);
 }
 `;
 
-const surfaceVertexShader = /* glsl */ `
-uniform float uTime;
+const depthHazeVertexShader = /* glsl */ `
 varying vec2 vUv;
-varying float vWave;
 
 void main() {
   vUv = uv;
-  vec3 transformed = position;
-  float wave = sin(position.x * 1.35 + uTime * 0.72) * 0.17 +
-    sin(position.y * 2.1 - uTime * 0.54) * 0.1;
-  transformed.z += wave;
-  vWave = wave;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
 
-const surfaceFragmentShader = /* glsl */ `
+const depthHazeFragmentShader = /* glsl */ `
 uniform float uTime;
+uniform float uPhase;
+uniform float uDensity;
+uniform float uTextureMix;
+uniform vec3 uColor;
+uniform sampler2D uDensityFlow;
 varying vec2 vUv;
-varying float vWave;
+
+float hash21(vec2 point) {
+  return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float valueNoise(vec2 point) {
+  vec2 cell = floor(point);
+  vec2 local = fract(point);
+  local = local * local * (3.0 - 2.0 * local);
+  float a = hash21(cell);
+  float b = hash21(cell + vec2(1.0, 0.0));
+  float c = hash21(cell + vec2(0.0, 1.0));
+  float d = hash21(cell + vec2(1.0, 1.0));
+  return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
+}
 
 void main() {
-  float lineA = abs(sin(vUv.x * 38.0 + sin(vUv.y * 13.0 + uTime * 0.7) * 2.3));
-  float lineB = abs(sin(vUv.y * 29.0 - uTime * 0.55 + sin(vUv.x * 17.0)));
-  float cells = pow(max(0.0, 1.0 - abs(lineA - lineB)), 8.0);
-  float horizon = smoothstep(0.1, 0.96, vUv.y);
-  vec3 color = mix(vec3(0.025, 0.3, 0.6), vec3(0.18, 0.78, 0.94), horizon);
-  color += vec3(0.34, 0.86, 1.0) * cells * 0.34;
-  float alpha = 0.1 + cells * 0.18 + abs(vWave) * 0.12;
+  vec2 drift = vec2(uTime * 0.024, -uTime * 0.014);
+  vec2 point = vUv * vec2(2.6, 3.4) + drift + uPhase;
+  float proceduralHaze = valueNoise(point) * 0.62 + valueNoise(point * 2.15 - drift) * 0.38;
+  proceduralHaze = smoothstep(0.26, 0.84, proceduralHaze);
+  vec2 fieldUv = vUv * vec2(0.78, 1.08) + vec2(uPhase * 0.071) + drift * 0.32;
+  vec4 densityFlow = texture2D(uDensityFlow, fieldUv);
+  vec2 flow = densityFlow.ba * 2.0 - 1.0;
+  float detail = texture2D(
+    uDensityFlow,
+    fieldUv * 1.83 + flow * 0.075 - drift * 0.41
+  ).g;
+  float mappedDensity = densityFlow.r * 0.7 + detail * 0.3;
+  float mappedHaze = 0.46 + (mappedDensity - 0.5) * 0.42;
+  float haze = mix(proceduralHaze, mappedHaze, uTextureMix);
+  float edgeFade = smoothstep(0.0, 0.15, vUv.x) *
+    smoothstep(0.0, 0.15, 1.0 - vUv.x) *
+    smoothstep(0.0, 0.12, vUv.y) *
+    smoothstep(0.0, 0.12, 1.0 - vUv.y);
+  gl_FragColor = vec4(uColor, haze * edgeFade * uDensity);
+}
+`;
+
+const ambientLightFieldFragmentShader = /* glsl */ `
+uniform float uTime;
+varying vec2 vUv;
+
+float hash21(vec2 point) {
+  return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+void main() {
+  vec2 center = vec2(
+    0.5 + sin(uTime * 0.09) * 0.035,
+    0.73 + cos(uTime * 0.072) * 0.018
+  );
+  vec2 delta = (vUv - center) * vec2(0.68, 1.0);
+  float field = exp(-3.8 * dot(delta, delta));
+  float variation = hash21(floor(vUv * vec2(24.0, 32.0)) + floor(uTime * 0.4));
+  float edgeFade = smoothstep(0.0, 0.18, vUv.x) *
+    smoothstep(0.0, 0.18, 1.0 - vUv.x) *
+    smoothstep(0.0, 0.14, vUv.y) *
+    smoothstep(0.0, 0.14, 1.0 - vUv.y);
+  float alpha = field * edgeFade * (0.055 + variation * 0.008);
+  gl_FragColor = vec4(vec3(0.17, 0.58, 0.7), alpha);
+}
+`;
+
+const surfaceLightFieldFragmentShader = /* glsl */ `
+uniform float uTime;
+uniform float uSurfaceMix;
+uniform sampler2D uSurfaceCaustic;
+varying vec2 vUv;
+
+void main() {
+  vec2 uvA = vUv * vec2(1.08, 0.62) + vec2(uTime * 0.013, -uTime * 0.004);
+  vec4 fieldA = texture2D(uSurfaceCaustic, uvA);
+  vec2 flow = fieldA.ba * 2.0 - 1.0;
+  vec2 uvB = vUv * vec2(1.67, 0.91) + flow * 0.035 +
+    vec2(-uTime * 0.009, uTime * 0.003);
+  vec4 fieldB = texture2D(uSurfaceCaustic, uvB);
+  float ridge = max(fieldA.r * 0.74, fieldB.g * 0.64);
+  float shimmer = smoothstep(0.18, 0.86, ridge);
+
+  float upperBand = smoothstep(0.69, 0.93, vUv.y);
+  float horizontalFade = smoothstep(0.0, 0.16, vUv.x) *
+    smoothstep(0.0, 0.16, 1.0 - vUv.x);
+  float broadField = 0.78 + 0.22 * sin(vUv.x * 4.1 + uTime * 0.12);
+  float alpha = (0.006 + shimmer * 0.038) * upperBand * horizontalFade *
+    broadField * uSurfaceMix;
+  vec3 color = mix(vec3(0.2, 0.63, 0.72), vec3(0.62, 0.91, 0.91), shimmer);
   gl_FragColor = vec4(color, alpha);
 }
 `;
 
-const seabedVertexShader = /* glsl */ `
-varying vec2 vUv;
-varying vec3 vPosition;
-
-void main() {
-  vUv = uv;
-  vec3 transformed = position;
-  transformed.z += sin(position.x * 0.72) * 0.13 + cos(position.y * 0.48) * 0.12;
-  vPosition = transformed;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);
-}
-`;
-
-const seabedFragmentShader = /* glsl */ `
+const primaryVolumeLightFragmentShader = /* glsl */ `
 uniform float uTime;
+uniform float uTextureMix;
+uniform float uSurfaceMix;
+uniform sampler2D uDensityFlow;
+uniform sampler2D uSurfaceCaustic;
 varying vec2 vUv;
-varying vec3 vPosition;
 
-float caustic(vec2 point) {
-  float first = sin(point.x * 18.0 + sin(point.y * 11.0 + uTime * 0.8) * 2.2);
-  float second = sin(point.y * 21.0 - uTime * 0.7 + sin(point.x * 9.0) * 2.0);
-  return pow(max(0.0, 1.0 - abs(first - second)), 9.0);
+float hash21(vec2 point) {
+  return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float valueNoise(vec2 point) {
+  vec2 cell = floor(point);
+  vec2 local = fract(point);
+  local = local * local * (3.0 - 2.0 * local);
+  float a = hash21(cell);
+  float b = hash21(cell + vec2(1.0, 0.0));
+  float c = hash21(cell + vec2(0.0, 1.0));
+  float d = hash21(cell + vec2(1.0, 1.0));
+  return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
 }
 
 void main() {
-  vec3 sandDeep = vec3(0.025, 0.16, 0.24);
-  vec3 sandLight = vec3(0.14, 0.39, 0.43);
-  vec3 color = mix(sandDeep, sandLight, smoothstep(0.0, 1.0, vUv.y));
-  float ripples = sin(vPosition.x * 4.2 + sin(vPosition.y * 1.7)) * 0.5 + 0.5;
-  color *= 0.9 + ripples * 0.1;
-  color += vec3(0.16, 0.62, 0.68) * caustic(vUv * vec2(2.1, 1.25)) * 0.19;
-  gl_FragColor = vec4(color, 1.0);
+  vec2 apex = vec2(0.53, 1.12);
+  float travel = clamp((apex.y - vUv.y) / 1.15, 0.0, 1.0);
+  vec2 surfaceUv = vec2(
+    apex.x * 1.18 + uTime * 0.008 + travel * 0.047,
+    0.42 - uTime * 0.003 + travel * 0.09
+  );
+  vec4 surfaceField = texture2D(uSurfaceCaustic, surfaceUv);
+  float sourceFocus = max(surfaceField.r, surfaceField.g);
+  float depthBend = sin(vUv.y * 3.4 - uTime * 0.085) * 0.022 * travel;
+  float surfaceBend = (surfaceField.b - 0.5) * 0.05 * travel * uSurfaceMix;
+  float center = apex.x + sin(uTime * 0.045) * 0.012 * travel +
+    depthBend + surfaceBend;
+  float halfWidth = mix(0.09, 0.38, pow(travel, 0.78));
+  float normalizedLateral = (vUv.x - center) / max(halfWidth, 0.001);
+  float softCore = exp(-2.05 * normalizedLateral * normalizedLateral);
+  float broadShoulder = exp(-0.78 * normalizedLateral * normalizedLateral);
+  float beam = softCore * 0.68 + broadShoulder * 0.16;
+  float verticalFade = smoothstep(0.0, 0.1, travel) *
+    (1.0 - smoothstep(0.72, 1.0, travel));
+  vec2 noiseUv = vUv * vec2(2.4, 5.2) + vec2(uTime * 0.012, -uTime * 0.018);
+  float proceduralDensity = valueNoise(noiseUv) * 0.65 + valueNoise(noiseUv * 2.1) * 0.35;
+  vec2 fieldUv = vUv * vec2(0.92, 1.24) + vec2(uTime * 0.004, -uTime * 0.007);
+  vec4 densityFlow = texture2D(uDensityFlow, fieldUv);
+  vec2 flow = densityFlow.ba * 2.0 - 1.0;
+  float detail = texture2D(
+    uDensityFlow,
+    fieldUv * 2.06 + flow * 0.06 + vec2(-uTime * 0.006, uTime * 0.003)
+  ).g;
+  float mappedDensity = densityFlow.r * 0.72 + detail * 0.28;
+  float density = mix(proceduralDensity, mappedDensity, uTextureMix);
+  float focusModulation = mix(1.0, mix(0.88, 1.1, sourceFocus), uSurfaceMix);
+  float alpha = beam * verticalFade * mix(0.09, 0.14, density) *
+    focusModulation;
+  vec3 color = mix(vec3(0.12, 0.48, 0.62), vec3(0.38, 0.78, 0.84), 1.0 - travel);
+  gl_FragColor = vec4(color, alpha);
 }
 `;
 
-class BubbleField extends InstancedMesh {
-  readonly #placements: BubblePlacement[];
-  readonly #dummy = new Object3D();
-
-  constructor() {
-    const placements = createBubblePlacements();
-    super(
-      new SphereGeometry(1, 12, 8),
-      new MeshPhysicalMaterial({
-        color: 0xb5f6ff,
-        transparent: true,
-        opacity: 0.28,
-        roughness: 0.05,
-        metalness: 0,
-        transmission: 0.64,
-        thickness: 0.08,
-        ior: 1.33,
-        depthWrite: false,
-      }),
-      placements.length,
-    );
-    this.name = "rising-bubble-field";
-    this.#placements = placements;
-    this.frustumCulled = false;
-    this.update(0);
-  }
-
-  update(time: number): void {
-    const span = BUBBLES.maxY - BUBBLES.minY;
-    for (let index = 0; index < this.#placements.length; index += 1) {
-      const bubble = this.#placements[index];
-      const y =
-        BUBBLES.minY +
-        ((((bubble.y - BUBBLES.minY + time * bubble.speed) % span) + span) %
-          span);
-      this.#dummy.position.set(
-        bubble.x + Math.sin(time * 0.62 + bubble.phase) * 0.16,
-        y,
-        bubble.z,
-      );
-      const pulse = 1 + Math.sin(time * 1.8 + bubble.phase) * 0.07;
-      this.#dummy.scale.setScalar(bubble.radius * pulse);
-      this.#dummy.updateMatrix();
-      this.setMatrixAt(index, this.#dummy.matrix);
-    }
-    this.instanceMatrix.needsUpdate = true;
-  }
-}
-
-interface LightShaft {
+interface DepthHazeLayer {
   readonly mesh: Mesh;
+  readonly material: ShaderMaterial;
+  readonly baseX: number;
+  readonly baseY: number;
   readonly phase: number;
-  readonly baseRotation: number;
+  readonly drift: number;
 }
 
 export class UnderwaterRenderer {
@@ -202,15 +259,16 @@ export class UnderwaterRenderer {
   readonly #scene = new Scene();
   readonly #camera = new PerspectiveCamera(49, 1, 0.1, 100);
   readonly #root = new Group();
-  readonly #cameraPointer = new Vector2();
-  readonly #cameraOffset = new Vector2();
   readonly #drawingBufferSize = new Vector2();
   readonly #underwaterPass = new UnderwaterPass();
-  readonly #symbols = new SymbolField(0x0cea_5eed);
-  readonly #bubbles = new BubbleField();
-  readonly #lightShafts: LightShaft[] = [];
   readonly #animatedMaterials: ShaderMaterial[] = [];
-  readonly #particles: Points;
+  readonly #depthHazeLayers: DepthHazeLayer[] = [];
+  readonly #ktx2Loader: KTX2Loader;
+  #densityFlowTexture = new Texture();
+  #surfaceCausticTexture = new Texture();
+  #densityFlowReady = false;
+  #surfaceCausticReady = false;
+  #textureLoadError: Error | null = null;
   #destroyed = false;
 
   constructor(host: HTMLElement) {
@@ -222,36 +280,25 @@ export class UnderwaterRenderer {
     this.#renderer.domElement.className = "underwater-canvas";
     this.#renderer.outputColorSpace = SRGBColorSpace;
     this.#renderer.toneMapping = ACESFilmicToneMapping;
-    this.#renderer.toneMappingExposure = 1.08;
-    this.#renderer.shadowMap.enabled = true;
-    this.#renderer.setClearColor(0x031f42, 1);
+    this.#renderer.toneMappingExposure = 0.96;
+    this.#renderer.setClearColor(0x021331, 1);
     host.prepend(this.#renderer.domElement);
 
-    this.#scene.background = new Color(0x031f42);
-    this.#scene.fog = new FogExp2(0x063865, 0.027);
+    this.#ktx2Loader = new KTX2Loader().detectSupport(this.#renderer);
+    this.#loadDensityFlowTexture();
+    this.#loadSurfaceCausticTexture();
+
+    this.#scene.background = new Color(0x021331);
+    this.#scene.fog = new FogExp2(0x052a4d, 0.032);
     this.#scene.add(this.#root);
-    this.#createBackdrop();
-    this.#createSurface();
-    this.#createLightShafts();
-    this.#createSeabed();
-    this.#createShipwreck();
-    this.#createDistantFish();
-    this.#createCaveFrame();
-    this.#createCorals();
-    this.#particles = this.#createParticles();
-    this.#root.add(this.#particles, this.#bubbles, this.#symbols);
-    this.#createLighting();
+    this.#createWaterVolume();
+    this.#createAmbientLightField();
+    this.#createSurfaceLightField();
+    this.#createPrimaryVolumeLight();
+    this.#createDepthHaze();
 
     this.#camera.position.set(0, 0.35, 18.8);
     this.#camera.lookAt(0, -0.2, -5.2);
-    this.#renderer.domElement.addEventListener(
-      "pointermove",
-      this.#onPointerMove,
-    );
-    this.#renderer.domElement.addEventListener(
-      "pointerleave",
-      this.#onPointerLeave,
-    );
     this.resize(host.clientWidth, host.clientHeight);
     this.#renderer.setAnimationLoop(this.#renderFrame);
   }
@@ -277,19 +324,11 @@ export class UnderwaterRenderer {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#renderer.setAnimationLoop(null);
-    this.#symbols.dispose();
-    this.#renderer.domElement.removeEventListener(
-      "pointermove",
-      this.#onPointerMove,
-    );
-    this.#renderer.domElement.removeEventListener(
-      "pointerleave",
-      this.#onPointerLeave,
-    );
+
     const geometries = new Set<BufferGeometry>();
     const materials = new Set<Material>();
     this.#root.traverse((object) => {
-      if (!(object instanceof Mesh) && !(object instanceof Points)) return;
+      if (!(object instanceof Mesh)) return;
       geometries.add(object.geometry);
       const objectMaterials = Array.isArray(object.material)
         ? object.material
@@ -298,46 +337,35 @@ export class UnderwaterRenderer {
     });
     for (const geometry of geometries) geometry.dispose();
     for (const material of materials) material.dispose();
+    this.#densityFlowTexture.dispose();
+    this.#surfaceCausticTexture.dispose();
+    this.#ktx2Loader.dispose();
     this.#underwaterPass.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
   }
 
-  readonly #onPointerMove = (event: PointerEvent): void => {
-    const bounds = this.#renderer.domElement.getBoundingClientRect();
-    this.#cameraPointer.set(
-      ((event.clientX - bounds.left) / Math.max(bounds.width, 1)) * 2 - 1,
-      ((event.clientY - bounds.top) / Math.max(bounds.height, 1)) * 2 - 1,
-    );
-  };
-
-  readonly #onPointerLeave = (): void => {
-    this.#cameraPointer.set(0, 0);
-  };
-
   readonly #renderFrame = (timeMilliseconds: number): void => {
     if (this.#destroyed) return;
+    if (this.#textureLoadError) throw this.#textureLoadError;
     const time = timeMilliseconds / 1000;
     for (const material of this.#animatedMaterials) {
       material.uniforms.uTime.value = time;
+      if (material.uniforms.uTextureMix) {
+        material.uniforms.uTextureMix.value = this.#densityFlowReady ? 1 : 0;
+      }
+      if (material.uniforms.uSurfaceMix) {
+        material.uniforms.uSurfaceMix.value = this.#surfaceCausticReady ? 1 : 0;
+      }
     }
-    this.#symbols.update(time);
-    this.#bubbles.update(time);
-    this.#particles.rotation.y = Math.sin(time * 0.08) * 0.035;
-    this.#particles.position.y = Math.sin(time * 0.14) * 0.12;
-    for (const shaft of this.#lightShafts) {
-      shaft.mesh.rotation.z =
-        shaft.baseRotation + Math.sin(time * 0.21 + shaft.phase) * 0.055;
-      const material = shaft.mesh.material as MeshBasicMaterial;
-      material.opacity = 0.035 + Math.sin(time * 0.43 + shaft.phase) * 0.012;
+
+    for (const layer of this.#depthHazeLayers) {
+      layer.mesh.position.x =
+        layer.baseX + Math.sin(time * layer.drift + layer.phase) * 0.16;
+      layer.mesh.position.y =
+        layer.baseY + Math.cos(time * layer.drift * 0.73 + layer.phase) * 0.1;
     }
-    this.#cameraOffset.lerp(this.#cameraPointer, 0.022);
-    this.#camera.position.set(
-      this.#cameraOffset.x * 0.34,
-      0.35 - this.#cameraOffset.y * 0.2,
-      18.8 + this.#cameraOffset.y * 0.22,
-    );
-    this.#camera.lookAt(this.#cameraOffset.x * 0.22, -0.2, -5.2);
+
     this.#underwaterPass.render(
       this.#renderer,
       this.#scene,
@@ -346,288 +374,220 @@ export class UnderwaterRenderer {
     );
   };
 
-  #createBackdrop(): void {
+  #createWaterVolume(): void {
     const material = new ShaderMaterial({
       uniforms: { uTime: { value: 0 } },
-      vertexShader: backdropVertexShader,
-      fragmentShader: backdropFragmentShader,
+      vertexShader: waterVolumeVertexShader,
+      fragmentShader: waterVolumeFragmentShader,
       depthWrite: false,
       fog: false,
     });
     this.#animatedMaterials.push(material);
-    const backdrop = new Mesh(new PlaneGeometry(35, 28), material);
-    backdrop.name = "water-depth-gradient";
-    backdrop.position.set(0, 0.7, -24);
-    this.#root.add(backdrop);
+    const volume = new Mesh(new PlaneGeometry(72, 38), material);
+    volume.name = "water-volume-gradient";
+    volume.position.set(0, 0.7, -24);
+    this.#root.add(volume);
   }
 
-  #createSurface(): void {
-    const material = new ShaderMaterial({
-      uniforms: { uTime: { value: 0 } },
-      vertexShader: surfaceVertexShader,
-      fragmentShader: surfaceFragmentShader,
-      transparent: true,
-      depthWrite: false,
-      side: DoubleSide,
-      blending: AdditiveBlending,
-      fog: false,
-    });
-    this.#animatedMaterials.push(material);
-    const surface = new Mesh(new PlaneGeometry(25, 3.8, 72, 16), material);
-    surface.name = "animated-water-surface";
-    surface.position.set(0, 11.35, -17.4);
-    surface.rotation.x = -0.2;
-    this.#root.add(surface);
-  }
+  #createDepthHaze(): void {
+    const geometry = new PlaneGeometry(1, 1);
+    const layers = [
+      {
+        name: "far",
+        z: -18.5,
+        width: 66,
+        height: 36,
+        density: 0.065,
+        color: 0x063656,
+        phase: 0.7,
+        drift: 0.09,
+      },
+      {
+        name: "middle",
+        z: -10,
+        width: 48,
+        height: 28,
+        density: 0.042,
+        color: 0x0b6073,
+        phase: 2.3,
+        drift: 0.125,
+      },
+      {
+        name: "near",
+        z: -2,
+        width: 34,
+        height: 21,
+        density: 0.022,
+        color: 0x158493,
+        phase: 4.8,
+        drift: 0.16,
+      },
+    ] as const;
 
-  #createLightShafts(): void {
-    const random = createRandom(0x51a7_2026);
-    const geometry = new ConeGeometry(2.1, 17, 20, 1, true);
-    for (let index = 0; index < 6; index += 1) {
-      const material = new MeshBasicMaterial({
-        color: index % 2 === 0 ? 0x6cecff : 0x48bfff,
+    for (const layer of layers) {
+      const material = new ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uPhase: { value: layer.phase },
+          uDensity: { value: layer.density },
+          uColor: { value: new Color(layer.color) },
+          uTextureMix: { value: 0 },
+          uDensityFlow: { value: this.#densityFlowTexture },
+        },
+        vertexShader: depthHazeVertexShader,
+        fragmentShader: depthHazeFragmentShader,
         transparent: true,
-        opacity: 0.04,
         depthWrite: false,
-        side: DoubleSide,
-        blending: AdditiveBlending,
+        fog: false,
       });
-      const shaft = new Mesh(geometry, material);
-      shaft.name = `volumetric-light-shaft-${index + 1}`;
-      shaft.position.set(randomBetween(random, -5.8, 5.8), 3.4, -11.5);
-      shaft.scale.x = randomBetween(random, 0.5, 1.2);
-      shaft.scale.z = randomBetween(random, 0.45, 0.9);
-      const baseRotation = randomBetween(random, -0.1, 0.1);
-      shaft.rotation.z = baseRotation;
-      this.#lightShafts.push({
-        mesh: shaft,
-        phase: randomBetween(random, 0, Math.PI * 2),
-        baseRotation,
+      const mesh = new Mesh(geometry, material);
+      mesh.name = `water-depth-haze-${layer.name}`;
+      mesh.position.set(0, 0.25, layer.z);
+      mesh.scale.set(layer.width, layer.height, 1);
+      this.#animatedMaterials.push(material);
+      this.#depthHazeLayers.push({
+        mesh,
+        material,
+        baseX: mesh.position.x,
+        baseY: mesh.position.y,
+        phase: layer.phase,
+        drift: layer.drift,
       });
-      this.#root.add(shaft);
+      this.#root.add(mesh);
     }
   }
 
-  #createSeabed(): void {
+  #createAmbientLightField(): void {
     const material = new ShaderMaterial({
       uniforms: { uTime: { value: 0 } },
-      vertexShader: seabedVertexShader,
-      fragmentShader: seabedFragmentShader,
-      side: DoubleSide,
-      fog: false,
-    });
-    this.#animatedMaterials.push(material);
-    const seabed = new Mesh(new PlaneGeometry(31, 18, 40, 26), material);
-    seabed.name = "caustic-sand-seabed";
-    seabed.position.set(0, -9.8, -7.5);
-    seabed.rotation.x = -1.08;
-    this.#root.add(seabed);
-  }
-
-  #createShipwreck(): void {
-    const ship = new Group();
-    ship.name = "distant-shipwreck-silhouette";
-    ship.position.set(-5.1, 5.15, -18.4);
-    ship.rotation.z = -0.08;
-    ship.scale.setScalar(1.25);
-    const material = new MeshBasicMaterial({ color: 0x03254a, fog: true });
-    const hullShape = new Shape();
-    hullShape.moveTo(-2.7, 0.45);
-    hullShape.lineTo(2.2, 0.45);
-    hullShape.lineTo(1.45, -0.58);
-    hullShape.lineTo(-1.75, -0.82);
-    hullShape.closePath();
-    ship.add(new Mesh(new ShapeGeometry(hullShape), material));
-    const mastGeometry = new CylinderGeometry(0.055, 0.075, 3.8, 7);
-    const beamGeometry = new CylinderGeometry(0.045, 0.045, 2.6, 7);
-    for (const x of [-1.15, 0.55]) {
-      const mast = new Mesh(mastGeometry, material);
-      mast.position.set(x, 1.75, 0);
-      const beam = new Mesh(beamGeometry, material);
-      beam.position.set(x, 2.45, 0);
-      beam.rotation.z = Math.PI / 2;
-      ship.add(mast, beam);
-    }
-    const sailShape = new Shape();
-    sailShape.moveTo(-0.95, 2.28);
-    sailShape.lineTo(0.2, 2.05);
-    sailShape.lineTo(-0.86, 0.98);
-    sailShape.closePath();
-    const sail = new Mesh(new ShapeGeometry(sailShape), material);
-    sail.position.x = -0.12;
-    ship.add(sail);
-    this.#root.add(ship);
-  }
-
-  #createDistantFish(): void {
-    const school = new Group();
-    school.name = "distant-fish-school";
-    const bodyGeometry = new SphereGeometry(0.32, 9, 6);
-    const tailGeometry = new ConeGeometry(0.22, 0.4, 3);
-    const material = new MeshBasicMaterial({ color: 0x064b72, fog: true });
-    const random = createRandom(0xf157_2026);
-    for (let index = 0; index < 14; index += 1) {
-      const fish = new Group();
-      fish.position.set(
-        randomBetween(random, 2.5, 7.5),
-        randomBetween(random, 4.2, 8.2),
-        randomBetween(random, -19.5, -15.5),
-      );
-      const scale = randomBetween(random, 0.5, 1.15);
-      fish.scale.setScalar(scale);
-      const body = new Mesh(bodyGeometry, material);
-      body.scale.set(1.45, 0.7, 0.28);
-      const tail = new Mesh(tailGeometry, material);
-      tail.position.x = -0.56;
-      tail.rotation.z = Math.PI / 2;
-      fish.add(body, tail);
-      school.add(fish);
-    }
-    this.#root.add(school);
-  }
-
-  #createCaveFrame(): void {
-    const random = createRandom(0xca7e_2026);
-    const geometry = new IcosahedronGeometry(1, 1);
-    const backMaterial = new MeshStandardMaterial({
-      color: 0x06345b,
-      roughness: 0.88,
-      metalness: 0,
-    });
-    const frontMaterial = new MeshStandardMaterial({
-      color: 0x02192f,
-      roughness: 0.94,
-      metalness: 0,
-    });
-    const positions: Array<readonly [number, number, number, number]> = [];
-    for (const side of [-1, 1]) {
-      for (let index = 0; index < 18; index += 1) {
-        positions.push([
-          side * randomBetween(random, 6.0, 7.3),
-          -9.2 + index * 1.1 + randomBetween(random, -0.35, 0.35),
-          randomBetween(random, -5.8, -0.8),
-          randomBetween(random, 0.75, 1.6),
-        ]);
-      }
-    }
-    for (let index = 0; index < 17; index += 1) {
-      positions.push([
-        -7.2 + index * 0.9 + randomBetween(random, -0.25, 0.25),
-        randomBetween(random, 9.1, 10.2),
-        randomBetween(random, -5.4, -1.0),
-        randomBetween(random, 0.78, 1.65),
-      ]);
-    }
-    const back = new InstancedMesh(geometry, backMaterial, positions.length);
-    const front = new InstancedMesh(
-      geometry.clone(),
-      frontMaterial,
-      positions.length,
-    );
-    back.name = "cave-frame-mid-rocks";
-    front.name = "cave-frame-foreground-rocks";
-    const dummy = new Object3D();
-    for (let index = 0; index < positions.length; index += 1) {
-      const [x, y, z, scale] = positions[index];
-      dummy.position.set(x, y, z - 0.8);
-      dummy.rotation.set(
-        random() * Math.PI,
-        random() * Math.PI,
-        random() * Math.PI,
-      );
-      dummy.scale.set(scale * 1.15, scale, scale * 0.78);
-      dummy.updateMatrix();
-      back.setMatrixAt(index, dummy.matrix);
-      dummy.position.set(x * 1.035, y, z + 0.52);
-      dummy.scale.multiplyScalar(0.72);
-      dummy.updateMatrix();
-      front.setMatrixAt(index, dummy.matrix);
-    }
-    back.instanceMatrix.needsUpdate = true;
-    front.instanceMatrix.needsUpdate = true;
-    this.#root.add(back, front);
-  }
-
-  #createCorals(): void {
-    const coralRoot = new Group();
-    coralRoot.name = "seabed-coral-accents";
-    const random = createRandom(0xc0a1_2026);
-    const palettes = [0xff6f61, 0x9b5de5, 0x27c6a8, 0xff9f1c];
-    for (const side of [-1, 1]) {
-      for (let clusterIndex = 0; clusterIndex < 5; clusterIndex += 1) {
-        const cluster = new Group();
-        cluster.position.set(
-          side * randomBetween(random, 5.4, 7.0),
-          randomBetween(random, -9.15, -6.4),
-          randomBetween(random, -4.2, -0.4),
-        );
-        cluster.rotation.z = side * randomBetween(random, -0.2, 0.18);
-        const color = palettes[Math.floor(random() * palettes.length)];
-        const material = new MeshStandardMaterial({
-          color,
-          roughness: 0.64,
-          emissive: new Color(color).multiplyScalar(0.13),
-          emissiveIntensity: 0.5,
-        });
-        const branches = 3 + Math.floor(random() * 4);
-        for (let branchIndex = 0; branchIndex < branches; branchIndex += 1) {
-          const height = randomBetween(random, 0.65, 1.55);
-          const branch = new Mesh(
-            new CylinderGeometry(0.08, 0.15, height, 7),
-            material,
-          );
-          branch.position.set(
-            randomBetween(random, -0.38, 0.38),
-            height / 2,
-            randomBetween(random, -0.2, 0.2),
-          );
-          branch.rotation.z = randomBetween(random, -0.35, 0.35);
-          cluster.add(branch);
-        }
-        coralRoot.add(cluster);
-      }
-    }
-    this.#root.add(coralRoot);
-  }
-
-  #createParticles(): Points {
-    const random = createRandom(PARTICLES.seed);
-    const positions = new Float32Array(PARTICLES.count * 3);
-    for (let index = 0; index < PARTICLES.count; index += 1) {
-      const offset = index * 3;
-      positions[offset] = randomBetween(random, -10, 10);
-      positions[offset + 1] = randomBetween(random, -11, 11);
-      positions[offset + 2] = randomBetween(random, -15, 8);
-    }
-    const geometry = new BufferGeometry();
-    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
-    const material = new PointsMaterial({
-      color: 0xb7f5ff,
-      size: 0.035,
+      vertexShader: depthHazeVertexShader,
+      fragmentShader: ambientLightFieldFragmentShader,
       transparent: true,
-      opacity: 0.48,
       depthWrite: false,
       blending: AdditiveBlending,
-      sizeAttenuation: true,
+      fog: false,
     });
-    const particles = new Points(geometry, material);
-    particles.name = "suspended-water-particles";
-    return particles;
+    const field = new Mesh(new PlaneGeometry(58, 34), material);
+    field.name = "broad-underwater-ambient-light";
+    field.position.set(0, 0.55, -15.5);
+    this.#animatedMaterials.push(material);
+    this.#root.add(field);
   }
 
-  #createLighting(): void {
-    this.#scene.add(
-      new HemisphereLight(0x8aeaff, 0x062446, 1.05),
-      new AmbientLight(0x2277aa, 0.46),
+  #createSurfaceLightField(): void {
+    const material = new ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uSurfaceMix: { value: 0 },
+        uSurfaceCaustic: { value: this.#surfaceCausticTexture },
+      },
+      vertexShader: depthHazeVertexShader,
+      fragmentShader: surfaceLightFieldFragmentShader,
+      transparent: true,
+      depthWrite: false,
+      blending: AdditiveBlending,
+      fog: false,
+    });
+    const field = new Mesh(new PlaneGeometry(42, 25), material);
+    field.name = "dynamic-surface-light-field";
+    field.position.set(0, 0.8, -4.5);
+    this.#animatedMaterials.push(material);
+    this.#root.add(field);
+  }
+
+  #createPrimaryVolumeLight(): void {
+    const material = new ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uTextureMix: { value: 0 },
+        uSurfaceMix: { value: 0 },
+        uDensityFlow: { value: this.#densityFlowTexture },
+        uSurfaceCaustic: { value: this.#surfaceCausticTexture },
+      },
+      vertexShader: depthHazeVertexShader,
+      fragmentShader: primaryVolumeLightFragmentShader,
+      transparent: true,
+      depthWrite: false,
+      blending: AdditiveBlending,
+      fog: false,
+    });
+    const light = new Mesh(new PlaneGeometry(46, 28), material);
+    light.name = "surface-modulated-primary-volume-light";
+    light.position.set(0, 0.55, -6);
+    this.#animatedMaterials.push(material);
+    this.#root.add(light);
+  }
+
+  #loadDensityFlowTexture(): void {
+    this.#ktx2Loader.load(
+      densityFlowTextureUrl,
+      (texture) => {
+        if (this.#destroyed) {
+          texture.dispose();
+          return;
+        }
+        const placeholder = this.#densityFlowTexture;
+        this.#configureDataTexture(texture, "water-density-flow-data");
+        this.#densityFlowTexture = texture;
+        this.#replaceTextureUniform("uDensityFlow", texture);
+        placeholder.dispose();
+        this.#densityFlowReady = true;
+      },
+      undefined,
+      (cause) => {
+        this.#textureLoadError = new Error(
+          `Failed to load underwater density/flow texture: ${densityFlowTextureUrl}`,
+          { cause },
+        );
+      },
     );
-    const sun = new DirectionalLight(0xb8f8ff, 2.2);
-    sun.position.set(-3, 12, 8);
-    sun.castShadow = true;
-    this.#scene.add(sun);
-    const cyanFill = new PointLight(0x29bfff, 14, 24, 1.8);
-    cyanFill.position.set(4, 5, 5);
-    const sandFill = new PointLight(0x58f0d0, 8, 14, 2);
-    sandFill.position.set(-3, -7, 2);
-    this.#scene.add(cyanFill, sandFill);
+  }
+
+  #loadSurfaceCausticTexture(): void {
+    this.#ktx2Loader.load(
+      surfaceCausticTextureUrl,
+      (texture) => {
+        if (this.#destroyed) {
+          texture.dispose();
+          return;
+        }
+        const placeholder = this.#surfaceCausticTexture;
+        this.#configureDataTexture(texture, "surface-caustic-field-data");
+        this.#surfaceCausticTexture = texture;
+        this.#replaceTextureUniform("uSurfaceCaustic", texture);
+        placeholder.dispose();
+        this.#surfaceCausticReady = true;
+      },
+      undefined,
+      (cause) => {
+        this.#textureLoadError = new Error(
+          `Failed to load underwater surface caustic texture: ${surfaceCausticTextureUrl}`,
+          { cause },
+        );
+      },
+    );
+  }
+
+  #configureDataTexture(texture: Texture, name: string): void {
+    texture.name = name;
+    texture.wrapS = RepeatWrapping;
+    texture.wrapT = RepeatWrapping;
+    texture.minFilter = LinearMipmapLinearFilter;
+    texture.magFilter = LinearFilter;
+    texture.colorSpace = NoColorSpace;
+    texture.generateMipmaps = false;
+    texture.anisotropy = Math.min(
+      8,
+      this.#renderer.capabilities.getMaxAnisotropy(),
+    );
+    texture.needsUpdate = true;
+  }
+
+  #replaceTextureUniform(uniformName: string, texture: Texture): void {
+    for (const material of this.#animatedMaterials) {
+      if (material.uniforms[uniformName]) {
+        material.uniforms[uniformName].value = texture;
+      }
+    }
   }
 }
