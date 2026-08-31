@@ -163,6 +163,38 @@ describe("award amount motion", () => {
     expect(brakingSamples.at(-1)).toBe(200);
   });
 
+  it("continues accelerating through a long megawin span", () => {
+    const manifest = popupFixture();
+    const input = { betAmountRaw: 100, winAmountRaw: 100_000 };
+    const plan = createAwardAmountMotionPlan(
+      manifest,
+      input,
+      createAwardCountStages(manifest, input),
+    )!;
+    const megawin = plan.stages.find(({ tierId }) => tierId === "megawin")!;
+    const sampleDuration = Math.min(
+      megawin.effectiveCanonicalDurationSeconds,
+      awardAmountMotionElapsedForAmount(
+        megawin,
+        plan.terminalBrake.startAmountRaw,
+      ),
+    );
+    const samples = [0, 0.25, 0.5, 0.75, 1].map((part) =>
+      awardAmountMotionAmountAtElapsed(
+        megawin,
+        sampleDuration * part,
+        plan.terminalBrake.startAmountRaw,
+      ),
+    );
+    const deltas = samples
+      .slice(1)
+      .map((amount, index) => amount - samples[index]!);
+
+    expect(deltas[1]).toBeGreaterThan(deltas[0]!);
+    expect(deltas[2]).toBeGreaterThan(deltas[1]!);
+    expect(deltas[3]).toBeGreaterThan(deltas[2]!);
+  });
+
   it("keeps exact threshold finals on the reached visual tier", () => {
     const manifest = popupFixture();
     const input = { betAmountRaw: 100, winAmountRaw: 1500 };

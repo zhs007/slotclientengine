@@ -215,6 +215,7 @@ export interface SlotGameMountContext {
   readonly frame: HTMLElement;
   readonly gameLayer: HTMLElement;
   readonly overlay: HTMLElement;
+  readonly formatMoney: (amount: number) => string;
   getState(): SlotGameStateSnapshot;
   getViewport(): SlotGameViewportSnapshot;
   onViewportChange(listener: SlotGameViewportListener): () => void;

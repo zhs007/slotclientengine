@@ -521,7 +521,7 @@ function createHarness() {
         spinning = false;
       },
     ),
-    startAwardCelebrationForCurrentMode: vi.fn(),
+    playAwardCelebrationForCurrentMode: vi.fn(async () => undefined),
     dismissActiveAwardCelebrationImmediately: vi.fn(),
     getReelPresentation: vi.fn(() => reelPresentation),
     destroy: vi.fn(),
@@ -540,6 +540,7 @@ function createHarness() {
   const unsubscribe = vi.fn();
   const context = {
     gameLayer,
+    formatMoney: vi.fn((amountRaw: number) => `$${amountRaw}`),
     getViewport: () => ({
       frameDesignSize: { width: 320, height: 180 },
     }),
@@ -901,19 +902,40 @@ describe("configured scene-layout round adapter", () => {
       getBet: () => 10,
       getLines: () => 30,
     });
+    let resolvePopup!: () => void;
+    const popupCompletion = new Promise<void>((resolve) => {
+      resolvePopup = resolve;
+    });
+    (
+      harness.runtime
+        .playAwardCelebrationForCurrentMode as unknown as ReturnType<
+        typeof vi.fn
+      >
+    ).mockReturnValueOnce(popupCompletion);
     const round = adapter.playSpin(logic);
+    let settled = false;
+    void round.then(() => {
+      settled = true;
+    });
     expect(
-      harness.runtime.startAwardCelebrationForCurrentMode,
+      harness.runtime.playAwardCelebrationForCurrentMode,
     ).not.toHaveBeenCalled();
     harness.setSpinning(false);
-    await runTicks(harness);
-    await round;
+    await runTicks(harness, 2);
     expect(
-      harness.runtime.startAwardCelebrationForCurrentMode,
+      harness.runtime.playAwardCelebrationForCurrentMode,
     ).toHaveBeenCalledWith({
       betAmountRaw: 300,
       winAmountRaw: 200,
+      formatMoney: harness.context.formatMoney,
     });
+    expect(settled).toBe(false);
+    await expect(adapter.playSpin(logic)).rejects.toThrow(
+      /already in progress/,
+    );
+    resolvePopup();
+    await round;
+    expect(settled).toBe(true);
     adapter.destroy();
   });
 

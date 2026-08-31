@@ -44,6 +44,7 @@ import type { SlotTemplatePresentationProfileV1 } from "./template-presentation.
 
 export interface ConfiguredSceneLayoutAdapterMountContext {
   readonly gameLayer: HTMLElement;
+  readonly formatMoney: (amountRaw: number) => string;
   getViewport(): {
     readonly frameDesignSize: {
       readonly width: number;
@@ -97,6 +98,8 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
   #runtime: SceneLayoutPackageRuntime | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #coordinator: ReturnType<typeof createSlotOperationCoordinator> | null = null;
+  #formatMoney: ((amountRaw: number) => string) | null = null;
+  #roundInProgress = false;
   #destroyed = false;
   #resourceOwned = true;
 
@@ -128,6 +131,10 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
       throw new SceneLayoutError(
         "Configured scene-layout adapter is already mounted.",
       );
+    if (typeof context.formatMoney !== "function")
+      throw new SceneLayoutError(
+        "Configured scene-layout adapter requires formatMoney().",
+      );
     const viewport = context.getViewport().frameDesignSize;
     const app = this.#applicationFactory();
     await app.init({
@@ -141,6 +148,7 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
     context.gameLayer.replaceChildren(app.canvas);
     app.ticker.add(this.#onTick);
     this.#app = app;
+    this.#formatMoney = context.formatMoney;
     this.#unsubscribeViewport = context.onViewportChange((next) => {
       this.applyViewport(next.frameDesignSize);
     });
@@ -205,7 +213,7 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
   playSpin(logic: GameLogic): Promise<void> {
     try {
       this.assertAlive();
-      if (this.#coordinator?.isRunning())
+      if (this.#roundInProgress || this.#coordinator?.isRunning())
         throw new SceneLayoutError(
           "Configured scene-layout round is already in progress.",
         );
@@ -235,13 +243,19 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
         { includeCompletion: false },
       );
       const completion = this.requireCoordinator().start(plan);
-      return completion.then(() => {
-        if (this.#presentation.flow.popup.enabled && logic.getTotalWin() > 0)
-          runtime.startAwardCelebrationForCurrentMode({
-            betAmountRaw: logic.getBet() * logic.getLines(),
-            winAmountRaw: logic.getTotalWin(),
-          });
-      });
+      this.#roundInProgress = true;
+      return completion
+        .then(() => {
+          if (this.#presentation.flow.popup.enabled && logic.getTotalWin() > 0)
+            return runtime.playAwardCelebrationForCurrentMode({
+              betAmountRaw: logic.getBet() * logic.getLines(),
+              winAmountRaw: logic.getTotalWin(),
+              formatMoney: this.requireFormatMoney(),
+            });
+        })
+        .finally(() => {
+          this.#roundInProgress = false;
+        });
     } catch (error) {
       return Promise.reject(asError(error));
     }
@@ -257,6 +271,8 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
     this.#app?.ticker.remove(this.#onTick);
     this.#runtime?.destroy();
     this.#runtime = null;
+    this.#formatMoney = null;
+    this.#roundInProgress = false;
     if (this.#resourceOwned) void this.#resource.destroy();
     this.#resourceOwned = false;
     this.#app?.destroy();
@@ -329,6 +345,14 @@ class DefaultConfiguredSceneLayoutRoundAdapter implements ConfiguredSceneLayoutR
         "Configured scene-layout adapter has no round coordinator.",
       );
     return this.#coordinator;
+  }
+
+  private requireFormatMoney(): (amountRaw: number) => string {
+    if (!this.#formatMoney)
+      throw new SceneLayoutError(
+        "Configured scene-layout adapter is not mounted with formatMoney().",
+      );
+    return this.#formatMoney;
   }
 
   private assertAlive(): void {

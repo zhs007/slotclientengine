@@ -80,13 +80,14 @@ describe("SlotGameUiFactory contract", () => {
       brandLabel: "FACTORY TEST",
       currency: "USD",
       locale: "en-US",
-      formatMoney,
     });
+    expect(firstContext.formatMoney?.(123)).toBe("$123");
     expect(firstAdapter.context?.frame).toBe(factory.uis[0].elements.frame);
     expect(firstAdapter.context?.gameLayer).toBe(
       factory.uis[0].elements.gameLayer,
     );
     expect(firstAdapter.context?.overlay).toBe(factory.uis[0].elements.overlay);
+    expect(firstAdapter.context?.formatMoney).toBe(firstContext.formatMoney);
     expect(secondAdapter.context?.frame).toBe(factory.uis[1].elements.frame);
     expect(factory.uis[0].elements.frame).not.toBe(
       factory.uis[1].elements.frame,

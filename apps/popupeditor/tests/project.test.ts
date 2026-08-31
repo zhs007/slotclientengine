@@ -39,7 +39,6 @@ import {
   renameSingleStateLayer,
   reuseAwardLayerInTier,
   resourceReferenceCount,
-  setPopupVniPlaybackMode,
   validatePopupEditorAttachments,
 } from "../src/model/project.js";
 import { readFileSync } from "node:fs";
@@ -835,33 +834,31 @@ describe("popup editor filename-key project", () => {
       resource: "effect.json",
       playback: { keepParticlesAlive: false },
     });
-    const vni = project.tiers
-      .get("bigwin")!
-      .layers.find(({ resource }) => resource === "effect.json")!;
-    setPopupVniPlaybackMode(project, "bigwin", vni.id, "once");
-    expect(
-      project.tiers.get("bigwin")!.layers.find(({ id }) => id === vni.id),
-    ).toMatchObject({ playback: { mode: "once" } });
     const manifest = projectToManifest(project);
     expect(manifest.type).toBe("award-celebration");
     if (manifest.type !== "award-celebration")
       throw new Error("Expected award celebration popup project.");
     expect(manifest.awardCelebration.celebrationTiers[0]).toMatchObject({
       layers: expect.arrayContaining([
-        expect.objectContaining({ playback: { mode: "once" } }),
+        expect.objectContaining({
+          playback: {
+            mode: "segmented",
+            loopStartTime: 1,
+            loopEndTime: 2,
+            keepParticlesAlive: false,
+          },
+        }),
       ]),
     });
-    setPopupVniPlaybackMode(project, "bigwin", vni.id, "segmented");
-    expect(
-      project.tiers.get("bigwin")!.layers.find(({ id }) => id === vni.id),
-    ).toMatchObject({
-      playback: {
-        mode: "segmented",
-        loopStartTime: 1,
-        loopEndTime: 2.5,
-        keepParticlesAlive: true,
-      },
-    });
+    const invalid = structuredClone(
+      project.tiers
+        .get("bigwin")!
+        .layers.find(({ resource }) => resource === "effect.json")!,
+    );
+    if (invalid.kind !== "vni") throw new Error("Expected VNI layer.");
+    (invalid as { playback: { mode: "once" } }).playback = { mode: "once" };
+    project.tiers.get("bigwin")!.layers.push(invalid);
+    expect(() => projectToManifest(project)).toThrow(/必须使用 segmented/);
   });
 
   it("enumerates only exact text layers from the VNI selected in this tier", () => {

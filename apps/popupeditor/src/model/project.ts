@@ -388,9 +388,14 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
     });
   }
   const used = new Set<string>();
-  for (const tier of project.tiers.values())
-    for (const layer of tier.layers)
+  for (const [tierId, tierValue] of project.tiers)
+    for (const layer of tierValue.layers) {
+      if (layer.kind === "vni" && layer.playback.mode !== "segmented")
+        throw new Error(
+          `Award tier ${tierId} 的 VNI layer ${layer.id} 必须使用 segmented 播放。`,
+        );
       if (layer.resource) used.add(layer.resource);
+    }
   const resources = Object.fromEntries(
     [...used].sort().map((id) => {
       const resource = project.resources.get(id);
@@ -1043,36 +1048,6 @@ function popupSpineSlotNames(
     },
     requiredAnimations: [],
   }).slotNames;
-}
-
-export function setPopupVniPlaybackMode(
-  project: PopupEditorProject,
-  tierId: AwardTierId,
-  layerId: string,
-  mode: "segmented" | "once",
-): void {
-  const tier = project.tiers.get(tierId);
-  if (!tier) throw new Error(`Popup tier 不存在：${tierId}`);
-  const layer = tier.layers.find(({ id }) => id === layerId);
-  if (!layer || layer.kind !== "vni")
-    throw new Error(`VNI layer 不存在：${layerId}`);
-  if (layer.playback.mode === mode) return;
-  tier.layers = tier.layers.map((candidate) =>
-    candidate.id !== layerId
-      ? candidate
-      : {
-          ...layer,
-          playback:
-            mode === "once"
-              ? { mode: "once" }
-              : {
-                  mode: "segmented",
-                  loopStartTime: 1,
-                  loopEndTime: 2.5,
-                  keepParticlesAlive: true,
-                },
-        },
-  );
 }
 
 export function applyImportedResourceBindings(

@@ -209,8 +209,8 @@
 - popup 字体文字的单行/NFC 校验、字号/颜色/渐变/描边/投影/grapheme 弧排、显式 package 字体 FontFace hash 复用/释放及 image/ImgNumber/Spine/VNI overlay 生命周期属于 rendercore；v9 `widthRange` 使用 local typographic width，`0/0` 关闭，启用后只调整 effective font size，不换行、截断、横向缩放或回写 manifest。省略 font resource 才使用 `system-ui/sans-serif`，系统字体不建模为 package 资源。游戏优先通过 player 的 exact name handle 原子 set/reset string；legacy prompt 仍可由 `start(text?)` 传入已翻译 string，省略时使用 manifest 默认值，但新 v5 authoring 不生成 prompt。
 - Scene Layout transition prelude 的本轮 text/manual ImgNumber 最终 string 可由游戏随 `requestGameMode()` 按 kind + exact name提交；rendercore在Popup start前应用，并在complete、失败、取消或destroy后恢复调用前handle状态。翻译、金额formatter和长期persistent override仍由游戏拥有。
 - component 名、amount resolver、formatter、样式和业务阻塞边界由 app 传入；shared code 不维护游戏专属金额或 symbol 规则。
-- award win-amount 到达最终金额后必须立即进入 `dismissing`，播放最后实际到达档位的 end 并在 drain 完成后自动关闭；不得停在需要额外输入的 final hold。显式 `requestDismiss()` 同样先提交最终金额，再启动正式 end/drain。
-- reel runtime 在金额或 popup 播放期间仍需逐帧 update，不能冻结 active Spine/VNI loop。
+- award win-amount 到达最终金额后必须立即进入 `dismissing`，保持最终金额并播放最后实际到达档位的完整 end，drain 完成后自动关闭；不得停在需要额外输入的 final hold。segmented 庆祝动画在数字到达 final 前必须保持 loop，不得提前进入 end；显式 `requestDismiss()` 同样先提交最终金额，再启动正式 end/drain。
+- reel runtime 在金额或 popup 播放期间仍需逐帧 update，不能冻结 active Spine/VNI loop。配置驱动 round adapter 的 `playSpin()` completion 必须包含已启用 award popup 的完整 lifecycle，不能在 popup 仍 active 时让 framework 回到 idle 或启动下一轮 coordinator。
 - grid-cell full/selective spin 活跃期间，rendercore 必须在每个 timeline slice 恰好推进一次
   所有 occupied cell 的 symbol player，包括 waiting、已落地/完成和未选 held cell；hole
   不推进，app 不补 ticker 或逐格 update。

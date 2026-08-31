@@ -14,6 +14,7 @@ import { SlotGameStateStore } from "./state.js";
 import { createDefaultSlotGameUiFactory } from "./ui-adapter.js";
 import { createAndValidateUi, validateViewportSnapshot } from "./ui-factory.js";
 import type { SpinParams, UserInfo } from "@slotclientengine/netcore";
+import { createMoneyFormatter } from "@slotclientengine/uiframeworks";
 import type {
   GameLogic,
   SlotGameAdapter,
@@ -41,6 +42,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
   readonly #options: SlotGameFrameworkOptions;
   readonly #state: SlotGameStateStore;
   readonly #ui: SlotGameUi;
+  readonly #formatMoney: (amount: number) => string;
   readonly #session: SlotGameLiveSessionLike;
   readonly #mountPromise: Promise<void>;
   readonly #rngConsole: SlotGameRngConsoleController | null;
@@ -71,6 +73,15 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
         initialFastMode: options.initialFastMode,
         initialAutoMode: options.initialAutoMode,
       });
+      this.#formatMoney = createMoneyFormatter({
+        ...(options.currency === undefined
+          ? {}
+          : { currency: options.currency }),
+        ...(options.locale === undefined ? {} : { locale: options.locale }),
+        ...(options.formatMoney === undefined
+          ? {}
+          : { formatMoney: options.formatMoney }),
+      });
       const commands = this.#createUiCommands();
       const uiFactory = options.uiFactory ?? createDefaultSlotGameUiFactory();
       this.#ui = createAndValidateUi(uiFactory, {
@@ -82,7 +93,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
         brandLabel: options.brandLabel,
         currency: options.currency,
         locale: options.locale,
-        formatMoney: options.formatMoney,
+        formatMoney: this.#formatMoney,
         commands,
       });
       this.#session =
@@ -327,6 +338,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       frame: this.#ui.elements.frame,
       gameLayer: this.#ui.elements.gameLayer,
       overlay: this.#ui.elements.overlay,
+      formatMoney: this.#formatMoney,
       getState: () => this.#state.getState(),
       getViewport: () => {
         this.#assertAlive();

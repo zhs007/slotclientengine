@@ -903,20 +903,14 @@ describe("PopupEditorApp", () => {
     expect(root.querySelector("#diagnostics")!.textContent).not.toContain(
       "must be an object",
     );
-    const mode = root.querySelector<HTMLSelectElement>(
-      "[data-vni-playback-mode]",
-    )!;
-    mode.value = "once";
-    mode.dispatchEvent(new Event("change"));
-    expect(root.textContent).toContain("完整单次 0–3s");
+    expect(root.querySelector("[data-vni-playback-mode]")).toBeNull();
+    expect(root.textContent).toContain("播放模式：分段循环");
     expect(
-      root.querySelector(
-        `[data-layer-id="${mode.dataset.layerId}"][data-layer-field="loopStartTime"]`,
-      ),
-    ).toBeNull();
+      root.querySelector('[data-layer-field="loopStartTime"]'),
+    ).not.toBeNull();
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
     expect(root.textContent).toContain("game-win");
-    expect(root.textContent).toContain('"mode": "once"');
+    expect(root.textContent).toContain('"mode": "segmented"');
 
     expect(root.querySelector("#project-type")).toBeNull();
     app.destroy();

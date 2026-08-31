@@ -308,6 +308,130 @@ describe("award celebration player", () => {
     player.destroy();
   });
 
+  it("holds base and standard final amounts until their authored end segments complete", async () => {
+    const resource = fakeResource();
+    const tiers = [
+      resource.manifest.awardCelebration.base,
+      resource.manifest.awardCelebration.standard,
+    ];
+    const effect = structuredClone(
+      resource.manifest.awardCelebration.celebrationTiers[0]!.layers.find(
+        ({ kind }) => kind === "vni",
+      )!,
+    );
+    for (const [index, tier] of tiers.entries())
+      (tier as unknown as { layers: unknown[] }).layers.unshift({
+        ...effect,
+        id: `effect-${index}`,
+      });
+    let endComplete = false;
+    const requestEnd = vi.fn();
+    const player = createAwardCelebrationPlayer({
+      resource,
+      layerFactory: ({ layer }) => {
+        const runtime = fakeLayer(layer.kind === "vni");
+        return layer.kind !== "vni"
+          ? runtime
+          : {
+              ...runtime,
+              isLoopReady: () => true,
+              requestEnd,
+              isEndComplete: () => endComplete,
+            };
+      },
+    });
+    await player.init();
+
+    player.start({ betAmountRaw: 100, winAmountRaw: 50 });
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "dismissing",
+      activeTierId: "base",
+      activeSegment: "end",
+      displayedAmountRaw: 50,
+    });
+    player.update(10);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "dismissing",
+      displayedAmountRaw: 50,
+    });
+    endComplete = true;
+    player.update(0);
+    expect(player.getSnapshot().phase).toBe("complete");
+
+    endComplete = false;
+    player.start({ betAmountRaw: 100, winAmountRaw: 101 });
+    player.requestAdvance();
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "dismissing",
+      activeTierId: "standard",
+      activeSegment: "end",
+      displayedAmountRaw: 101,
+    });
+    player.update(10);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "dismissing",
+      displayedAmountRaw: 101,
+    });
+    endComplete = true;
+    player.update(0);
+    expect(player.getSnapshot().phase).toBe("complete");
+    expect(requestEnd).toHaveBeenCalledTimes(2);
+    player.destroy();
+  });
+
+  it("keeps megawin looping until the amount reaches its final value", async () => {
+    const requestedEnd: string[] = [];
+    const appliedSegments: string[] = [];
+    const player = createAwardCelebrationPlayer({
+      resource: fakeResource(),
+      layerFactory: ({ layer, tierId }) => {
+        const runtime = fakeLayer(layer.kind === "vni");
+        if (layer.kind !== "vni") return runtime;
+        return {
+          ...runtime,
+          isLoopReady: () => true,
+          requestEnd() {
+            requestedEnd.push(tierId);
+          },
+          isEndComplete: () => false,
+          applySegment(segment) {
+            appliedSegments.push(`${tierId}:${segment}`);
+          },
+        };
+      },
+    });
+    await player.init();
+    player.start({ betAmountRaw: 100, winAmountRaw: 100_000 });
+    player.requestAdvance();
+    player.requestAdvance();
+    player.requestAdvance();
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "counting",
+      activeTierId: "megawin",
+      displayedAmountRaw: 5000,
+    });
+
+    player.update(0.1);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "counting",
+      activeTierId: "megawin",
+      activeSegment: "loop",
+    });
+    expect(player.getSnapshot().displayedAmountRaw).toBeGreaterThan(5000);
+    expect(requestedEnd).not.toContain("megawin");
+    expect(appliedSegments).toContain("megawin:loop");
+
+    player.update(100);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "dismissing",
+      activeTierId: "megawin",
+      activeSegment: "end",
+      displayedAmountRaw: 100_000,
+    });
+    expect(requestedEnd).toContain("megawin");
+    player.destroy();
+  });
+
   it("jumps from a celebration tier into the final braking tail", async () => {
     const player = createAwardCelebrationPlayer({
       resource: fakeResource(),
