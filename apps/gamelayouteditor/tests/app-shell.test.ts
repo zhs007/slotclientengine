@@ -266,7 +266,8 @@ describe("GameLayoutEditorApp current workspace", () => {
 
     await vi.waitFor(() => {
       const lastCall = previewSpies.setLayout.mock.lastCall as unknown as
-        [ReturnType<typeof editorProjectToManifest>] | undefined;
+        | [ReturnType<typeof editorProjectToManifest>]
+        | undefined;
       const manifest = lastCall?.[0];
       expect(manifest?.nodes[0]?.scope).toEqual({
         BaseGame: ["landscape", "portrait"],

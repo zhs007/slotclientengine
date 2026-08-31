@@ -96,6 +96,11 @@ vi.mock("../src/io/resource-import.js", async (original) => {
   };
 });
 vi.mock("../src/io/popup-zip.js", () => ({
+  getPopupLegacyAudioMigration: vi.fn(() => ({
+    effects: 0,
+    cues: 0,
+    assets: 0,
+  })),
   exportPopupZip: vi.fn(async () => ({
     fileName: "test-popup.zip",
     bytes: new Uint8Array([1]),
@@ -270,7 +275,7 @@ describe("PopupEditorApp", () => {
     }
   });
 
-  it("configures multiple audio effects inside each Popup state", async () => {
+  it("does not expose legacy Popup audio authoring", async () => {
     const { PopupEditorApp } = await import("../src/ui/app-shell.js");
     const root = document.querySelector<HTMLElement>("#app")!;
     const app = new PopupEditorApp(root);
@@ -278,34 +283,13 @@ describe("PopupEditorApp", () => {
     createProject(root);
     root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
 
-    const wav = new Uint8Array(12);
-    wav.set(new TextEncoder().encode("RIFF"), 0);
-    wav.set(new TextEncoder().encode("WAVE"), 8);
-    const input = root.querySelector<HTMLInputElement>(
-      '[data-import-popup-audio][data-popup-audio-target="award-tier:base"]',
-    )!;
-    Object.defineProperty(input, "files", {
-      configurable: true,
-      value: [
-        new File([wav], "coin.wav", { type: "audio/wav" }),
-        new File([wav], "cheer.wav", { type: "audio/wav" }),
-      ],
-    });
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    await vi.waitFor(() =>
-      expect(root.querySelectorAll("[data-popup-audio-card]")).toHaveLength(2),
-    );
+    expect(root.querySelector("[data-import-popup-audio]")).toBeNull();
+    expect(root.querySelector("[data-popup-audio-card]")).toBeNull();
 
     root.querySelector<HTMLButtonElement>('[data-tier="bigwin"]')!.click();
-    expect(
-      root.querySelector(
-        '[data-import-popup-audio][data-popup-audio-target="award-tier:bigwin"]',
-      ),
-    ).not.toBeNull();
-    expect(root.querySelectorAll("[data-popup-audio-card]")).toHaveLength(0);
+    expect(root.querySelector("[data-import-popup-audio]")).toBeNull();
 
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
-    expect(root.textContent).toContain("当前共 2 条状态音效");
     expect(root.querySelector("[data-import-popup-audio]")).toBeNull();
     app.destroy();
   });

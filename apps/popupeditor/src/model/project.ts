@@ -9,7 +9,6 @@ import {
   type PopupAmountFormat,
   type PopupLayer,
   type PopupManifest,
-  type PopupAudioV1,
   type PopupOverlayLayer,
   type PopupResourceSpec,
   type SingleStatePopupLayerV9,
@@ -64,7 +63,6 @@ export interface PopupEditorProject {
     visibleStates: PopupVisibilityState[];
   };
   amountFormat: PopupAmountFormat;
-  audio: PopupAudioV1;
   resources: Map<string, PopupEditorResource>;
   assets: Map<string, EditorAssetEntry>;
   tiers: Map<AwardTierId, PopupEditorTier>;
@@ -207,7 +205,6 @@ export function createPopupEditorProject(
       ],
     },
     amountFormat: createPopupAmountFormat("integer"),
-    audio: { version: 1, effects: [], cues: [] },
     resources: new Map(),
     assets: new Map(),
     tiers: new Map([
@@ -259,7 +256,6 @@ export function clonePopupEditorProject(
       visibleStates: [...project.backdrop.visibleStates],
     },
     amountFormat: { ...project.amountFormat },
-    audio: structuredClone(project.audio),
     spine: structuredClone(project.spine),
     singleState: structuredClone(project.singleState),
     resources: new Map(
@@ -301,7 +297,7 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
       ...project.backdrop,
       visibleStates: [...project.backdrop.visibleStates] as any,
     },
-    audio: structuredClone(project.audio),
+    audio: { version: 1 as const, effects: [], cues: [] },
   };
   const canonicalLayer = <T extends PopupLayer>(layer: T) => {
     const {

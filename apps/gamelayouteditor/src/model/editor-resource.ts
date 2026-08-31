@@ -87,12 +87,7 @@ export type EditorLayoutResource =
 
 export interface EditorResourceReference {
   readonly nodeId: string;
-  readonly role:
-    | "layer"
-    | "scene-transition"
-    | "mode-bgm"
-    | "event-audio"
-    | "programmatic-audio";
+  readonly role: "layer" | "scene-transition" | "event-audio";
   readonly variants: readonly SceneLayoutVariantId[];
 }
 

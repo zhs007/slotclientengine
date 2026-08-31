@@ -7,6 +7,7 @@ import {
   createSymbolPackageResource,
   materializeMappedSymbolPackageContents,
   parseSymbolPackageManifest,
+  parseSymbolStateTextureManifest,
   type SymbolPackageResource,
 } from "@slotclientengine/rendercore/symbol/editor";
 import {
@@ -25,6 +26,11 @@ export const SYMBOL_ZIP_LIMITS = Object.freeze({
 export interface ImportedSymbolEditorPackage {
   readonly project: SymbolEditorProject;
   readonly resource: SymbolPackageResource;
+  readonly legacyAudioMigration: {
+    readonly effects: number;
+    readonly cues: number;
+    readonly assets: number;
+  };
   destroy(): void;
 }
 
@@ -54,6 +60,22 @@ export async function importSymbolPackageZip(
       assets: resource.assets,
     });
     resource.destroy();
+    const parsedSymbolManifest = parseSymbolStateTextureManifest(
+      materialized.rawSymbolManifest,
+    );
+    const legacyAudioAssets = new Set(
+      parsedSymbolManifest.audio.effects.flatMap((effect) =>
+        effect.asset.sources.map(({ path }) => path.replace(/^\.\//u, "")),
+      ),
+    );
+    const legacyAudioMigration = Object.freeze({
+      effects: parsedSymbolManifest.audio.effects.length,
+      cues: Object.values(parsedSymbolManifest.symbols).reduce(
+        (count, symbol) => count + symbol.audioCues.length,
+        0,
+      ),
+      assets: legacyAudioAssets.size,
+    });
     const prepared = await createSymbolPackageResource({
       packageManifest: materialized.packageManifest,
       files: materialized.files,
@@ -68,10 +90,12 @@ export async function importSymbolPackageZip(
         rawSymbolManifest: materialized.rawSymbolManifest,
         assets: materialized.assets,
       });
+      exportSnapshot(project);
       let destroyed = false;
       return Object.freeze({
         project,
         resource: prepared,
+        legacyAudioMigration,
         destroy(): void {
           if (destroyed) return;
           destroyed = true;

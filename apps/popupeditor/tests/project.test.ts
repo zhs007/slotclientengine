@@ -1,10 +1,18 @@
 import {
+  createEditorAssetEntry,
+  decodeEditorAssetsMap,
+} from "@slotclientengine/editorresource";
+import {
   createDeterministicZip,
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
 import { describe, expect, it } from "vitest";
 import type { PopupOverlayLayer } from "@slotclientengine/rendercore/popup/editor";
-import { exportPopupZip, importPopupZip } from "../src/io/popup-zip.js";
+import {
+  exportPopupZip,
+  getPopupLegacyAudioMigration,
+  importPopupZip,
+} from "../src/io/popup-zip.js";
 import {
   commitImportReview,
   discoverPopupResources,
@@ -38,6 +46,126 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("popup editor filename-key project", () => {
+  it("strictly imports then removes legacy Popup audio and its payload", async () => {
+    const project = createPopupEditorProject({ type: "spine" });
+    const spineAssets = await Promise.all([
+      createEditorAssetEntry({
+        key: "popup.json",
+        bytes: new TextEncoder().encode(
+          JSON.stringify({
+            skeleton: { spine: "4.3.23" },
+            bones: [{ name: "root" }],
+            slots: [],
+            skins: [{ name: "default", attachments: {} }],
+            animations: { Start: {}, Loop: {}, End: {} },
+          }),
+        ),
+        mediaType: "application/json",
+      }),
+      createEditorAssetEntry({
+        key: "popup.atlas",
+        bytes: new TextEncoder().encode(
+          "popup.png\nsize:1,1\nfilter:Linear,Linear\n",
+        ),
+        mediaType: "text/plain",
+      }),
+      createEditorAssetEntry({
+        key: "popup.png",
+        bytes: png(1, 1),
+        mediaType: "image/png",
+      }),
+    ]);
+    for (const entry of spineAssets) project.assets.set(entry.key, entry);
+    project.resources.set("popup.json", {
+      rootKey: "popup.json",
+      kind: "spine",
+      spec: {
+        kind: "spine",
+        skeleton: "popup.json",
+        atlas: "popup.atlas",
+        textures: { "popup.png": "popup.png" },
+      },
+      keys: ["popup.json", "popup.atlas", "popup.png"],
+    });
+    project.spine.resource = "popup.json";
+    project.spine.playback = {
+      startAnimation: "Start",
+      loopAnimation: "Loop",
+      endAnimation: "End",
+    };
+    const exported = await exportPopupZip(project, { prepare: false });
+    const entries = new Map(
+      extractBoundedZip(exported.bytes, { limits: POPUP_ZIP_LIMITS }),
+    );
+    const audio = await createEditorAssetEntry({
+      key: "coin.wav",
+      bytes: new Uint8Array([
+        0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45,
+      ]),
+      mediaType: "audio/wav",
+    });
+    const map = structuredClone(
+      decodeEditorAssetsMap(entries.get("assets.map.json")!),
+    ) as any;
+    map.files[audio.key] = {
+      path: audio.payloadPath,
+      sha256: audio.sha256,
+      mediaType: audio.mediaType,
+      byteLength: audio.byteLength,
+    };
+    entries.set(
+      "assets.map.json",
+      new TextEncoder().encode(`${JSON.stringify(map)}\n`),
+    );
+    entries.set(audio.payloadPath, audio.bytes);
+    const manifest = JSON.parse(
+      new TextDecoder().decode(entries.get("popup.manifest.json")),
+    );
+    manifest.audio = {
+      version: 1,
+      effects: [
+        {
+          name: "coin",
+          asset: {
+            sources: [{ path: "coin.wav", mediaType: "audio/wav" }],
+          },
+          playback: "once",
+          offsetSeconds: 0,
+          voices: { maxConcurrent: 4, overflow: "restart-oldest" },
+          bgm: { kind: "keep" },
+        },
+      ],
+      cues: [
+        {
+          effect: "coin",
+          target: { kind: "segment", segment: "start" },
+        },
+      ],
+    };
+    entries.set(
+      "popup.manifest.json",
+      new TextEncoder().encode(`${JSON.stringify(manifest)}\n`),
+    );
+
+    const imported = await importPopupZip(createDeterministicZip(entries), {
+      prepare: false,
+    });
+    expect(getPopupLegacyAudioMigration(imported)).toEqual({
+      effects: 1,
+      cues: 1,
+      assets: 1,
+    });
+    expect(imported.assets.has("coin.wav")).toBe(false);
+    expect(projectToManifest(imported)).toMatchObject({
+      version: 9,
+      audio: {
+        version: 1,
+        effects: [],
+        cues: [],
+      },
+    });
+  });
+
   it("authors an unconstrained single-state project with exact runtime names", () => {
     const project = createPopupEditorProject({ type: "single-state" });
     expect(project.backdrop.visibleStates).toEqual(["active"]);

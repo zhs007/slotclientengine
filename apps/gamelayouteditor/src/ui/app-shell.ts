@@ -1,5 +1,6 @@
 import {
   type SceneLayoutGameModeSnapshot,
+  type SceneLayoutManifestLatest,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/editor";
 import { formatGameLayoutRuntimeAddress } from "@slotclientengine/rendercore/scene-layout/data";
@@ -50,8 +51,6 @@ import {
 } from "../model/editor-store.js";
 import {
   addLayerFromResource,
-  bindModeBgm,
-  bindProgrammaticAudioEffect,
   bindRuntimeResource,
   deleteLayoutResource,
   getLayoutResourceReferences,
@@ -68,7 +67,6 @@ import {
   setLayerScopeGlobal,
   setLayerScopeVisibility,
   setLayerVariantVisibility,
-  setModeBgmFade,
   setImageStringLayerAnchor,
   setImageStringLayerText,
   setNodeDefaultAnimation,
@@ -84,7 +82,6 @@ import {
   uploadAudioResources,
   uploadSpineResources,
   uploadVideoResource,
-  unbindProgrammaticAudioEffect,
   unbindRuntimeResource,
 } from "../model/resource-commands.js";
 import {
@@ -2299,103 +2296,6 @@ export class GameLayoutEditorApp {
           draft.id = (event.currentTarget as HTMLInputElement).value;
         }),
       );
-    panel
-      .querySelector<HTMLInputElement>("[data-ignore-legacy-audio]")
-      ?.addEventListener("change", (event) => {
-        const checked = (event.currentTarget as HTMLInputElement).checked;
-        this.runTransaction(
-          (draft) => {
-            draft.eventAudio = {
-              ...draft.eventAudio,
-              ignoreLegacyAudio: checked,
-            };
-          },
-          checked
-            ? "runtime 将忽略老版本自动音乐音效配置。"
-            : "runtime 将同时保留老版本自动音乐音效配置。",
-        );
-      });
-    panel
-      .querySelector<HTMLSelectElement>("[data-mode-bgm-asset]")
-      ?.addEventListener("change", (event) => {
-        const value = (event.currentTarget as HTMLSelectElement).value;
-        this.runTransaction(
-          (draft) => bindModeBgm(draft, this.#selectedGameMode, value || null),
-          value
-            ? `已为 ${this.#selectedGameMode} 绑定 loop BGM。`
-            : `已清除 ${this.#selectedGameMode} BGM。`,
-        );
-      });
-    panel
-      .querySelectorAll<HTMLInputElement>("[data-mode-bgm-fade]")
-      .forEach((input) =>
-        input.addEventListener("change", () =>
-          this.runTransaction((draft) =>
-            setModeBgmFade(
-              draft,
-              this.#selectedGameMode,
-              input.dataset.modeBgmFade as "fadeOutSeconds" | "fadeInSeconds",
-              Number(input.value),
-            ),
-          ),
-        ),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-bind-audio-effect]")
-      .forEach((button) =>
-        button.addEventListener("click", () => {
-          const resourceId = button.dataset.bindAudioEffect!;
-          const input = [
-            ...panel.querySelectorAll<HTMLInputElement>(
-              "[data-audio-effect-name]",
-            ),
-          ].find(
-            (candidate) => candidate.dataset.audioEffectName === resourceId,
-          );
-          this.runTransaction(
-            (draft) =>
-              bindProgrammaticAudioEffect(
-                draft,
-                resourceId,
-                input?.value ?? "",
-              ),
-            `已添加程序音效 ${input?.value.trim().toLowerCase() ?? ""}。`,
-          );
-        }),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-unbind-audio-effect]")
-      .forEach((button) =>
-        button.addEventListener("click", () => {
-          const name = button.dataset.unbindAudioEffect!;
-          this.runTransaction(
-            (draft) => unbindProgrammaticAudioEffect(draft, name),
-            `已取消程序音效 ${name}；asset bytes 仍保留在资源库。`,
-          );
-        }),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-preview-audio-effect]")
-      .forEach((button) =>
-        button.addEventListener("click", () => {
-          try {
-            this.#preview?.playEffect(button.dataset.previewAudioEffect!);
-          } catch (error) {
-            this.#store.setExternalError(error);
-          }
-        }),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-stop-audio-effect]")
-      .forEach((button) =>
-        button.addEventListener("click", () => {
-          try {
-            this.#preview?.stopEffect(button.dataset.stopAudioEffect!);
-          } catch (error) {
-            this.#store.setExternalError(error);
-          }
-        }),
-      );
   }
 
   private selectOutline(key: string): void {
@@ -2887,7 +2787,7 @@ export class GameLayoutEditorApp {
         if (!confirmImportReview(project, imported, files)) return;
         this.#store.replace(project);
         this.showFeedback(
-          `导入审查确认 ${files.length} 个 audio filename-key assets；尚未绑定 BGM 或程序音效。`,
+          `导入审查确认 ${files.length} 个 audio filename-key assets；可在全局 Event 音频中绑定。`,
         );
       } catch (error) {
         this.#store.setExternalError(error);
@@ -3228,6 +3128,9 @@ export class GameLayoutEditorApp {
         imported.assets,
         imported.videoMetadata,
       );
+      const legacyAudioMigration = summarizeLegacyLayoutAudio(
+        imported.manifest,
+      );
       this.closePicker(false);
       this.resetSymbolsForProjectReplace();
       this.resetTransientDraftsForProjectReplace();
@@ -3259,7 +3162,12 @@ export class GameLayoutEditorApp {
             .map(({ from, to }) => `${from}→${to}`)
             .join("，")}。`
         : "";
-      this.showFeedback(`${importMessage}${renameMessage}`);
+      const audioMigrationMessage = legacyAudioMigration.removed
+        ? ` 已移除旧音频配置：${legacyAudioMigration.music} music / ${legacyAudioMigration.effects} effects / ${legacyAudioMigration.modeBgm} mode BGM / ${legacyAudioMigration.assets} assets。`
+        : "";
+      this.showFeedback(
+        `${importMessage}${renameMessage}${audioMigrationMessage}`,
+      );
     } catch (error) {
       this.#store.setExternalError(error);
     } finally {
@@ -4142,6 +4050,38 @@ function mimeType(path: string): string {
   if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
   if (path.endsWith(".webp")) return "image/webp";
   return "application/octet-stream";
+}
+
+function summarizeLegacyLayoutAudio(manifest: SceneLayoutManifestLatest): {
+  readonly music: number;
+  readonly effects: number;
+  readonly modeBgm: number;
+  readonly assets: number;
+  readonly removed: boolean;
+} {
+  const music = manifest.audio.music.length;
+  const effects = manifest.audio.effects.length;
+  const modeBgm =
+    manifest.gameModes?.modes.filter(({ bgm }) => bgm).length ?? 0;
+  const eventPaths = new Set(
+    manifest.eventAudio.bindings.flatMap(({ audio }) =>
+      audio.asset.sources.map(({ path }) => path),
+    ),
+  );
+  const assets = new Set(
+    [...manifest.audio.music, ...manifest.audio.effects].flatMap(({ asset }) =>
+      asset.sources
+        .map(({ path }) => path)
+        .filter((path) => !eventPaths.has(path)),
+    ),
+  ).size;
+  return Object.freeze({
+    music,
+    effects,
+    modeBgm,
+    assets,
+    removed: music + effects + modeBgm > 0,
+  });
 }
 
 function cssEscape(value: string): string {

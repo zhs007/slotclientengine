@@ -111,38 +111,15 @@ describe("symbols editor app shell", () => {
     expect(root.querySelector("[data-project-id]")).toBeNull();
   });
 
-  it("configures multiple independent audio effects inside each Symbol state", async () => {
+  it("does not expose legacy Symbol audio authoring", async () => {
     await createProject(root);
     const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
-    const wav = new Uint8Array(12);
-    wav.set(new TextEncoder().encode("RIFF"), 0);
-    wav.set(new TextEncoder().encode("WAVE"), 8);
-    Object.defineProperty(upload, "files", {
-      configurable: true,
-      value: [new File([wav], "coin.wav", { type: "audio/wav" })],
-    });
-    upload.dispatchEvent(new Event("change", { bubbles: true }));
-    await vi.waitFor(() =>
-      expect(root.textContent).toContain("已上传 1 个资源"),
-    );
+    expect(upload.accept).not.toMatch(/audio|wav|mp3|ogg/iu);
 
     click(root, '[data-workspace-tab][data-tab-value="symbols"]');
     click(root, '[data-inspector-tab][data-tab-value="states"]');
-    expect(root.textContent).toContain("只属于 A / normal");
-    const path = root.querySelector<HTMLSelectElement>(
-      "[data-new-state-audio-path]",
-    )!;
-    path.value = "coin.wav";
-    click(root, "[data-add-state-audio]");
-    root.querySelector<HTMLSelectElement>(
-      "[data-new-state-audio-path]",
-    )!.value = "coin.wav";
-    click(root, "[data-add-state-audio]");
-    expect(root.querySelectorAll("[data-state-audio-card]")).toHaveLength(2);
-
-    click(root, "[data-toggle-add-state]");
-    click(root, '[data-add-state-id="win"]');
-    expect(root.textContent).toContain("只属于 A / win");
+    expect(root.querySelector("[data-new-state-audio-path]")).toBeNull();
+    expect(root.querySelector("[data-add-state-audio]")).toBeNull();
     expect(root.querySelectorAll("[data-state-audio-card]")).toHaveLength(0);
   });
 

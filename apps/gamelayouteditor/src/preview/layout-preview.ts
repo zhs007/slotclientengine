@@ -523,17 +523,6 @@ export class LayoutPreview {
     this.applySize();
   }
 
-  playEffect(route: string): void {
-    if (!this.#packageRuntime)
-      throw new Error("当前 layout preview 没有 package runtime。");
-    void (this.#packageRuntime.unlockAudio?.() ?? Promise.resolve()).then(
-      () => {
-        this.#audioUnlocked = true;
-      },
-    );
-    this.#packageRuntime.playEffect(route);
-  }
-
   async unlockAudio(): Promise<void> {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
@@ -543,12 +532,6 @@ export class LayoutPreview {
 
   isAudioUnlocked(): boolean {
     return this.#audioUnlocked;
-  }
-
-  stopEffect(route: string): void {
-    if (!this.#packageRuntime)
-      throw new Error("当前 layout preview 没有 package runtime。");
-    this.#packageRuntime.stopEffect(route);
   }
 
   private gameModeRequestOptions(modeId: string) {

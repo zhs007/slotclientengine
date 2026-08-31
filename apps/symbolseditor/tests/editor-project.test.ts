@@ -648,39 +648,23 @@ describe("symbol editor typed project", () => {
     });
   });
 
-  it("keeps multiple audio cues per state and cleans owned effects with the state", () => {
+  it("exports the required empty legacy audio contract", () => {
     const project = createFromGameConfig({
       rawGameConfig: gameConfig,
       fileName: "audio.json",
     });
     addSymbolState(project, "A", "win");
-    project.audio = {
-      version: 1,
-      effects: ["coin", "cheer"].map((name) => ({
-        name,
-        asset: { sources: [{ path: `${name}.wav`, mediaType: "audio/wav" }] },
-        playback: "once" as const,
-        offsetSeconds: 0,
-        voices: { maxConcurrent: 4, overflow: "restart-oldest" as const },
-        bgm: { kind: "keep" as const },
-      })),
-    };
-    project.symbols.get("A")!.audioCues = [
-      { state: "win", effect: "coin" },
-      { state: "win", effect: "cheer" },
-    ];
+    const manifest = parseSymbolStateTextureManifest(
+      compileSymbolEditorManifest(project),
+    );
+    expect(manifest.audio).toEqual({ version: 1, effects: [] });
+    expect(manifest.symbols.A.audioCues).toEqual([]);
 
+    removeSymbolState(project, "A", "win");
     expect(
       parseSymbolStateTextureManifest(compileSymbolEditorManifest(project))
         .symbols.A.audioCues,
-    ).toEqual([
-      { state: "win", effect: "coin" },
-      { state: "win", effect: "cheer" },
-    ]);
-
-    removeSymbolState(project, "A", "win");
-    expect(project.symbols.get("A")!.audioCues).toEqual([]);
-    expect(project.audio.effects).toEqual([]);
+    ).toEqual([]);
   });
 
   it("keeps store transactions atomic when an update throws", () => {

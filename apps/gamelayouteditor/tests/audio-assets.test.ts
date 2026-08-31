@@ -10,14 +10,8 @@ import {
   manifestToEditorProject,
 } from "../src/model/editor-project.js";
 import {
-  bindModeBgm,
-  bindProgrammaticAudioEffect,
   deleteLayoutResource,
   getLayoutResourceReferences,
-  getModeBgmResourceId,
-  getProgrammaticAudioEffects,
-  setModeBgmFade,
-  unbindProgrammaticAudioEffect,
   uploadAudioResources,
 } from "../src/model/resource-commands.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
@@ -42,7 +36,90 @@ function createProject() {
 }
 
 describe("audio assets", () => {
-  it("imports audio as unbound assets, then exports only typed bindings", async () => {
+  it("migrates legacy audio while preserving an Event-shared asset", () => {
+    const canonical = editorProjectToManifest(createProject());
+    const effect = {
+      name: "coin",
+      asset: {
+        sources: [{ path: "coin.ogg", mediaType: "audio/ogg" as const }],
+      },
+      playback: "once" as const,
+      offsetSeconds: 0,
+      voices: { maxConcurrent: 4, overflow: "restart-oldest" as const },
+      bgm: { kind: "keep" as const },
+    };
+    const music = {
+      name: "base",
+      asset: {
+        sources: [{ path: "base.wav", mediaType: "audio/wav" as const }],
+      },
+      loop: true as const,
+      fadeOutSeconds: 1,
+      fadeInSeconds: 1,
+    };
+    const legacy = {
+      ...canonical,
+      audio: {
+        version: 1 as const,
+        effects: [effect],
+        music: [music],
+        programmaticEffects: ["coin"],
+      },
+      eventAudio: {
+        version: 1 as const,
+        ignoreLegacyAudio: false,
+        bindings: [
+          {
+            event: "gamelayout:/mode/BaseGame/state/stable/entered" as const,
+            audio: {
+              name: "event-base",
+              asset: music.asset,
+              category: "music" as const,
+              playback: "loop" as const,
+              voices: {
+                maxConcurrent: 1,
+                overflow: "restart-oldest" as const,
+              },
+              focus: {},
+            },
+            endEvent: "gamelayout:/mode/BaseGame/state/stable/exited" as const,
+          },
+        ],
+      },
+      gameModes: {
+        ...canonical.gameModes,
+        modes: canonical.gameModes.modes.map((mode) => ({
+          ...mode,
+          bgm: "base",
+        })),
+      },
+    };
+    const project = manifestToEditorProject(
+      legacy,
+      new Map([
+        ["bg.png", assetBytes.get("assets/bg.png")!],
+        ["base.wav", wavBytes],
+        ["coin.ogg", oggBytes],
+      ]),
+    );
+
+    expect(project.assets.has("base.wav")).toBe(true);
+    expect(project.assets.has("coin.ogg")).toBe(false);
+    expect(project.resources.get("base.wav")).toMatchObject({ kind: "audio" });
+    expect(project.resources.has("coin.ogg")).toBe(false);
+    const migrated = editorProjectToManifest(project);
+    expect(migrated.audio).toEqual({
+      version: 1,
+      effects: [],
+      music: [],
+      programmaticEffects: [],
+    });
+    expect(migrated.gameModes.modes[0]).not.toHaveProperty("bgm");
+    expect(migrated.eventAudio.ignoreLegacyAudio).toBe(true);
+    expect(migrated.eventAudio.bindings).toEqual(legacy.eventAudio.bindings);
+  });
+
+  it("imports audio as unbound assets, then exports only Event bindings", async () => {
     const project = createProject();
     const [bgm, effect] = await uploadAudioResources({
       project,
@@ -70,45 +147,47 @@ describe("audio assets", () => {
       programmaticEffects: [],
     });
 
-    bindModeBgm(project, "BaseGame", bgm!.id);
-    setModeBgmFade(project, "BaseGame", "fadeInSeconds", 0.25);
-    bindProgrammaticAudioEffect(project, effect!.id, "coin-win");
+    project.eventAudio = {
+      version: 1,
+      ignoreLegacyAudio: true,
+      bindings: [
+        {
+          event: "gamelayout:/mode/BaseGame/state/stable/entered",
+          audio: {
+            name: "coin-win",
+            asset: {
+              sources: [{ path: effect!.path, mediaType: effect!.mediaType }],
+            },
+            category: "effect",
+            playback: "once",
+            voices: { maxConcurrent: 4, overflow: "restart-oldest" },
+            focus: {},
+          },
+        },
+      ],
+    };
 
-    expect(getModeBgmResourceId(project, "BaseGame")).toBe("base.wav");
-    expect(getProgrammaticAudioEffects(project, "coin.ogg")).toHaveLength(1);
-    expect(getLayoutResourceReferences(project, "base.wav")).toEqual([
-      expect.objectContaining({ role: "mode-bgm", nodeId: "BaseGame" }),
+    expect(getLayoutResourceReferences(project, "base.wav")).toEqual([]);
+    expect(getLayoutResourceReferences(project, "coin.ogg")).toEqual([
+      expect.objectContaining({ role: "event-audio" }),
     ]);
-    expect(() => deleteLayoutResource(project, "base.wav")).toThrow(/BGM/u);
     expect(() => deleteLayoutResource(project, "coin.ogg")).toThrow(
-      /程序音效/u,
+      /event audio/iu,
     );
 
     const manifest = editorProjectToManifest(project);
     expect(manifest.audio).toEqual({
       version: 1,
-      effects: [
-        expect.objectContaining({
-          name: "coin-win",
-          asset: {
-            sources: [{ path: "coin.ogg", mediaType: "audio/ogg" }],
-          },
-        }),
-      ],
-      music: [
-        {
-          name: "base",
-          asset: {
-            sources: [{ path: "base.wav", mediaType: "audio/wav" }],
-          },
-          loop: true,
-          fadeOutSeconds: 1,
-          fadeInSeconds: 0.25,
-        },
-      ],
-      programmaticEffects: ["coin-win"],
+      effects: [],
+      music: [],
+      programmaticEffects: [],
     });
-    expect(manifest.gameModes.modes[0]!.bgm).toBe("base");
+    expect(manifest.gameModes.modes[0]).not.toHaveProperty("bgm");
+    expect(manifest.eventAudio).toEqual({
+      version: 1,
+      ignoreLegacyAudio: true,
+      bindings: project.eventAudio.bindings,
+    });
 
     const exported = await exportLayoutZip({
       manifest,
@@ -117,7 +196,7 @@ describe("audio assets", () => {
     });
     const entries = extractBoundedZip(exported.bytes);
     const assetsMap = decodeEditorAssetsMap(entries.get("assets.map.json")!);
-    expect(entries.has(assetsMap.files["base.wav"]!.path)).toBe(true);
+    expect(assetsMap.files["base.wav"]).toBeUndefined();
     expect(entries.has(assetsMap.files["coin.ogg"]!.path)).toBe(true);
 
     const imported = await importLayoutZip(exported.bytes, {
@@ -128,14 +207,14 @@ describe("audio assets", () => {
       imported.assets,
       imported.videoMetadata,
     );
-    expect(roundTripped.resources.get("base.wav")).toMatchObject({
-      kind: "audio",
-      mediaType: "audio/wav",
-    });
+    expect(roundTripped.resources.has("base.wav")).toBe(false);
     expect(roundTripped.resources.get("coin.ogg")).toMatchObject({
       kind: "audio",
       mediaType: "audio/ogg",
     });
+    expect(roundTripped.eventAudio.bindings).toEqual(
+      project.eventAudio.bindings,
+    );
   });
 
   it("keeps unused audio out of ZIP and releases assets after unbinding", async () => {
@@ -152,8 +231,6 @@ describe("audio assets", () => {
     });
     expect(extractBoundedZip(exported.bytes).has("unused.ogg")).toBe(false);
 
-    bindProgrammaticAudioEffect(project, "unused.ogg", "temporary");
-    unbindProgrammaticAudioEffect(project, "temporary");
     deleteLayoutResource(project, "unused.ogg");
     expect(project.assets.has("unused.ogg")).toBe(false);
   });

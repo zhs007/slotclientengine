@@ -1,11 +1,9 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
-  createEditorAssetEntry,
   normalizeEditorPackageZipEntries,
   type EditorImportConflictResolution,
   type EditorImportResolution,
 } from "@slotclientengine/editorresource";
-import { detectAudioMediaType } from "@slotclientengine/audiocore/editor";
 import {
   formatPopupAmount,
   resolvePopupLayerAttachment,
@@ -18,7 +16,6 @@ import type {
   SingleStatePopupLayerV9,
   PopupVisibilityState,
 } from "@slotclientengine/rendercore/popup/editor";
-import type { PopupAudioCueV1 } from "@slotclientengine/rendercore/popup/data";
 import {
   addAwardTextLayer,
   addLayer,
@@ -51,7 +48,11 @@ import {
   type PopupImportReviewCandidate,
   type PopupVniRuntimeProfile,
 } from "../io/resource-import.js";
-import { exportPopupZip, importPopupZip } from "../io/popup-zip.js";
+import {
+  exportPopupZip,
+  getPopupLegacyAudioMigration,
+  importPopupZip,
+} from "../io/popup-zip.js";
 import {
   DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT,
   PopupPreview,
@@ -962,94 +963,6 @@ export class PopupEditorApp {
       });
     });
     this.#root
-      .querySelectorAll<HTMLInputElement>("[data-import-popup-audio]")
-      .forEach((importAudio) =>
-        importAudio.addEventListener("change", () => {
-          void this.importPopupAudio(
-            [...(importAudio.files ?? [])],
-            importAudio.dataset.popupAudioTarget!,
-          );
-          importAudio.value = "";
-        }),
-      );
-    this.#root
-      .querySelectorAll<HTMLButtonElement>("[data-remove-popup-audio-cue]")
-      .forEach((button) =>
-        button.addEventListener("click", () =>
-          this.#store.transact((draft) => {
-            const name = button.dataset.removePopupAudioCue!;
-            const targetKey = button.dataset.popupAudioTarget!;
-            const cues = draft.audio.cues.filter(
-              (cue) =>
-                cue.effect !== name ||
-                popupAudioTargetKey(cue.target) !== targetKey,
-            );
-            const referenced = cues.some((cue) => cue.effect === name);
-            draft.audio = {
-              ...draft.audio,
-              effects: referenced
-                ? draft.audio.effects
-                : draft.audio.effects.filter((effect) => effect.name !== name),
-              cues,
-            };
-          }),
-        ),
-      );
-    this.#root
-      .querySelectorAll<
-        HTMLInputElement | HTMLSelectElement
-      >("[data-popup-audio-field]")
-      .forEach((input) =>
-        input.addEventListener("change", () =>
-          this.#store.transact((draft) => {
-            const name = ensureOwnedPopupAudioEffect(
-              draft,
-              input.dataset.popupAudioName!,
-              parsePopupAudioTarget(
-                draft.type,
-                input.dataset.popupAudioTarget!,
-              ),
-            );
-            draft.audio = {
-              ...draft.audio,
-              effects: draft.audio.effects.map((effect) => {
-                if (effect.name !== name) return effect;
-                if (input.dataset.popupAudioField === "offsetSeconds")
-                  return { ...effect, offsetSeconds: Number(input.value) };
-                if (input.dataset.popupAudioField === "playback")
-                  return {
-                    ...effect,
-                    playback: input.value as "once" | "loop",
-                    voices: {
-                      ...effect.voices,
-                      maxConcurrent: input.value === "loop" ? 1 : 4,
-                    },
-                  };
-                const kind = input.value;
-                return {
-                  ...effect,
-                  bgm:
-                    kind === "duck"
-                      ? {
-                          kind: "duck" as const,
-                          targetGain: 0.35,
-                          attackSeconds: 0.2,
-                          releaseSeconds: 0.5,
-                        }
-                      : kind === "pause"
-                        ? {
-                            kind: "pause" as const,
-                            fadeOutSeconds: 0.2,
-                            fadeInSeconds: 0.5,
-                          }
-                        : { kind: "keep" as const },
-                };
-              }),
-            };
-          }),
-        ),
-      );
-    this.#root
       .querySelectorAll<HTMLInputElement>("[data-project-field]")
       .forEach((input) =>
         input.addEventListener("change", () =>
@@ -1119,63 +1032,6 @@ export class PopupEditorApp {
     this.#preview?.cancelPendingRebuild();
   }
 
-  private async importPopupAudio(
-    files: readonly File[],
-    targetKey: string,
-  ): Promise<void> {
-    await this.action(async () => {
-      const entries = await Promise.all(
-        files.map(async (file) => {
-          const key = file.name.toLowerCase();
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          const mediaType = detectAudioMediaType(bytes);
-          if (!mediaType) throw new Error(`无法识别音频格式：${file.name}`);
-          const name = key
-            .replace(/\.[^.]+$/u, "")
-            .replace(/[^a-z0-9]+/gu, "-")
-            .replace(/^-+|-+$/gu, "");
-          return {
-            name,
-            mediaType,
-            entry: await createEditorAssetEntry({ key, mediaType, bytes }),
-          };
-        }),
-      );
-      this.#store.transact((draft) => {
-        const target = parsePopupAudioTarget(draft.type, targetKey);
-        const usedNames = new Set(
-          draft.audio.effects.map((effect) => effect.name),
-        );
-        for (const imported of entries) {
-          const { mediaType, entry } = imported;
-          const name = allocatePopupAudioName(usedNames, imported.name);
-          usedNames.add(name);
-          const existing = draft.assets.get(entry.key);
-          if (existing && existing.sha256 !== entry.sha256)
-            throw new Error(
-              `音频 filename key 已存在且 bytes 不同：${entry.key}`,
-            );
-          draft.assets.set(entry.key, entry);
-          draft.audio = {
-            ...draft.audio,
-            effects: [
-              ...draft.audio.effects,
-              {
-                name,
-                asset: { sources: [{ path: entry.key, mediaType }] },
-                playback: "once",
-                offsetSeconds: 0,
-                voices: { maxConcurrent: 4, overflow: "restart-oldest" },
-                bgm: { kind: "keep" },
-              },
-            ],
-            cues: [...draft.audio.cues, { effect: name, target }],
-          };
-        }
-      });
-      this.#notice = `已导入 ${entries.length} 个 Popup 音效。`;
-    });
-  }
   private async importProject(file: File) {
     await this.action(async () => {
       if (!file.name.toLowerCase().endsWith(".zip"))
@@ -1183,9 +1039,14 @@ export class PopupEditorApp {
       const imported = await importPopupZip(
         new Uint8Array(await file.arrayBuffer()),
       );
+      const migration = getPopupLegacyAudioMigration(imported);
+      const migrationMessage =
+        migration.effects || migration.cues || migration.assets
+          ? `；已移除旧音频配置：${migration.effects} effects / ${migration.cues} cues / ${migration.assets} assets`
+          : "";
       this.#hasProject = true;
       this.#store.replace(imported);
-      this.#notice = `已导入项目：${imported.name}`;
+      this.#notice = `已导入项目：${imported.name}${migrationMessage}`;
     });
   }
   private async reviewFiles(files: readonly File[]) {
@@ -1493,7 +1354,7 @@ function spineMarkup(project: PopupEditorProject) {
     const selected = project.spine.playback[field];
     return `<label>${label}<select data-spine-popup-field="${field}"><option value="">请选择动画</option>${animations.map((name) => `<option value="${name}" ${name === selected ? "selected" : ""}>${name}</option>`).join("")}</select></label>`;
   };
-  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p><h3>分段音效</h3><p>每个动画段可以独立添加多条音效。</p>${popupStateAudioMarkup(project, { kind: "segment", segment: "start" }, "start")}${popupStateAudioMarkup(project, { kind: "segment", segment: "loop" }, "loop")}${popupStateAudioMarkup(project, { kind: "segment", segment: "end" }, "end")}<h3>Overlay 图层</h3><div class="layer-add"><select id="spine-overlay-resource">${overlayResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-spine-overlay" ${overlayResources.length ? "" : "disabled"}>添加 overlay</button><button id="add-spine-font-text">添加字体文字</button></div>${project.spine.overlays.map((layer) => overlayMarkup(layer, project)).join("")}</section>`;
+  return `<section class="tier-editor"><h2>普通 Spine 弹窗</h2><p>播放 start 后进入 loop；用户点击会锁存关闭请求，并在当前 loop 播放到边界后进入 end。</p><label>Spine 资源<select id="spine-resource"><option value="">请选择资源</option>${resources.map((resource) => `<option value="${resource.rootKey}" ${resource.rootKey === project.spine.resource ? "selected" : ""}>${resource.rootKey}</option>`).join("")}</select></label><div class="threshold-grid">${(["x", "y", "scale"] as const).map((field) => `<label>${field}<input data-spine-popup-field="${field}" type="number" step="0.1" value="${project.spine.transform[field]}"/></label>`).join("")}</div>${animationSelect("startAnimation", "开始动画")}${animationSelect("loopAnimation", "循环动画")}${animationSelect("endAnimation", "结束动画")}<p class="segment-summary">${project.spine.resource ? (animations.length ? `已从 skeleton JSON 读取 ${animations.length} 个动画。` : "所选 skeleton JSON 没有可用动画。") : "导入并选择一组 Spine JSON、atlas 与 PNG 后配置动画。"}</p><h3>Overlay 图层</h3><div class="layer-add"><select id="spine-overlay-resource">${overlayResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-spine-overlay" ${overlayResources.length ? "" : "disabled"}>添加 overlay</button><button id="add-spine-font-text">添加字体文字</button></div>${project.spine.overlays.map((layer) => overlayMarkup(layer, project)).join("")}</section>`;
 }
 
 function overlayMarkup(layer: PopupOverlayLayer, project: PopupEditorProject) {
@@ -1814,7 +1675,7 @@ function tiersMarkup(
   const reuse = reusable.length
     ? `<div class="layer-add"><select id="existing-award-layer">${reusable.map((layer) => `<option value="${layer.id}">${layer.id} (${layer.kind})</option>`).join("")}</select><button id="reuse-award-layer">复用逻辑图层到当前档</button></div>`
     : "";
-  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">同一 id 在不同档位表示同一逻辑图层；当前档没有该 id 时不可见。order 只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label>${popupStateAudioMarkup(project, { kind: "award-tier", tier: active }, `${active} 音效`)}<div class="layer-add"><select id="layer-resource">${layerResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${layerResources.length ? "" : "disabled"}>新增图层</button><button id="add-font-text-layer">添加字体文字</button></div>${reuse}${tier.layers.map((layer) => layerMarkup(layer, project, active)).join("")}</section>`;
+  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">同一 id 在不同档位表示同一逻辑图层；当前档没有该 id 时不可见。order 只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${layerResources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${layerResources.length ? "" : "disabled"}>新增图层</button><button id="add-font-text-layer">添加字体文字</button></div>${reuse}${tier.layers.map((layer) => layerMarkup(layer, project, active)).join("")}</section>`;
 }
 
 function tierBoundarySummary(project: PopupEditorProject, betRaw: number) {
@@ -2028,99 +1889,7 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
     project.type === "award-celebration"
       ? `<h3>金额合同</h3><label>preset<select id="amount-format-preset"><option value="integer" ${preset === "integer" ? "selected" : ""}>纯数字整数（raw 100 → 100）</option><option value="decimal" ${preset === "decimal" ? "selected" : ""}>纯数字两位小数（raw 100 → 1.00）</option><option value="custom" ${preset === "custom" ? "selected" : ""}>自定义</option></select></label><p class="preset-help">整数预设使用 rawScale=1，只要求 glyph 0–9；两位小数预设使用 rawScale=100，要求 glyph 0–9 和 .。两者均不输出货币符号或千分位。</p>${amountInput("rawScale", "number")}${amountInput("fractionDigits", "number")}${amountInput("useGrouping", "checkbox")}${amountInput("groupSeparator")}${amountInput("decimalSeparator")}${amountInput("prefix")}${amountInput("suffix")}<p>rounding: floor（strict contract）</p>`
       : "";
-  const audio = `<h3>音效</h3><p>音效在“动画 / 档位”页的具体状态中配置；每个状态可添加多条。局部名称在导入 Game Layout 后由 Popup binding 名聚合，例如 award.coin。</p><p>当前共 ${project.audio.cues.length} 条状态音效。</p>`;
-  return `${commonWithColorEditor}${amount}${audio}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
-}
-
-function popupStateAudioMarkup(
-  project: PopupEditorProject,
-  target: PopupAudioCueV1["target"],
-  title: string,
-): string {
-  const targetKey = popupAudioTargetKey(target);
-  const effects = new Map(
-    project.audio.effects.map((effect) => [effect.name, effect]),
-  );
-  const cards = project.audio.cues
-    .filter((cue) => popupAudioTargetKey(cue.target) === targetKey)
-    .map((cue) => effects.get(cue.effect))
-    .filter((effect) => Boolean(effect))
-    .map(
-      (effect) =>
-        `<article class="card" data-popup-audio-card="${effect!.name}"><code>${effect!.name}</code><label>播放<select data-popup-audio-field="playback" data-popup-audio-name="${effect!.name}" data-popup-audio-target="${targetKey}"><option value="once" ${effect!.playback === "once" ? "selected" : ""}>once</option><option value="loop" ${effect!.playback === "loop" ? "selected" : ""}>loop</option></select></label><label>延迟秒<input type="number" min="0" step="0.01" value="${effect!.offsetSeconds}" data-popup-audio-field="offsetSeconds" data-popup-audio-name="${effect!.name}" data-popup-audio-target="${targetKey}"></label><label>BGM<select data-popup-audio-field="bgm" data-popup-audio-name="${effect!.name}" data-popup-audio-target="${targetKey}"><option value="keep" ${effect!.bgm.kind === "keep" ? "selected" : ""}>keep</option><option value="duck" ${effect!.bgm.kind === "duck" ? "selected" : ""}>duck</option><option value="pause" ${effect!.bgm.kind === "pause" ? "selected" : ""}>pause</option></select></label><button type="button" data-remove-popup-audio-cue="${effect!.name}" data-popup-audio-target="${targetKey}">删除</button></article>`,
-    )
-    .join("");
-  return `<section class="audio-config state-audio-config"><h4>${title}</h4><p>进入此状态时按各自延迟触发。</p>${cards || "<p>尚未配置音效。</p>"}<label>添加音效<input data-import-popup-audio data-popup-audio-target="${targetKey}" type="file" accept="audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm" multiple></label></section>`;
-}
-
-function popupAudioTargetKey(target: PopupAudioCueV1["target"]): string {
-  return target.kind === "segment"
-    ? `segment:${target.segment}`
-    : `award-tier:${target.tier}`;
-}
-
-function parsePopupAudioTarget(
-  type: PopupEditorProject["type"],
-  value: string,
-): PopupAudioCueV1["target"] {
-  const [kind, state, extra] = value.split(":");
-  if (extra !== undefined) throw new Error(`未知 Popup 音效状态：${value}`);
-  if (
-    type === "spine" &&
-    kind === "segment" &&
-    (state === "start" || state === "loop" || state === "end")
-  )
-    return { kind, segment: state };
-  if (
-    type === "award-celebration" &&
-    kind === "award-tier" &&
-    TIERS.includes(state as AwardTierId)
-  )
-    return { kind, tier: state as AwardTierId };
-  throw new Error(`Popup 类型不支持音效状态：${value}`);
-}
-
-function allocatePopupAudioName(
-  names: ReadonlySet<string>,
-  base: string,
-): string {
-  if (!names.has(base)) return base;
-  let suffix = 2;
-  while (names.has(`${base}-${suffix}`)) suffix += 1;
-  return `${base}-${suffix}`;
-}
-
-function ensureOwnedPopupAudioEffect(
-  project: PopupEditorProject,
-  effectName: string,
-  target: PopupAudioCueV1["target"],
-): string {
-  const references = project.audio.cues.filter(
-    (cue) => cue.effect === effectName,
-  );
-  if (references.length <= 1) return effectName;
-  const source = project.audio.effects.find(
-    (effect) => effect.name === effectName,
-  );
-  if (!source) throw new Error(`Popup 音效不存在：${effectName}`);
-  const ownedName = allocatePopupAudioName(
-    new Set(project.audio.effects.map((effect) => effect.name)),
-    `${effectName}-${popupAudioTargetKey(target).replace(":", "-")}`,
-  );
-  const targetKey = popupAudioTargetKey(target);
-  project.audio = {
-    ...project.audio,
-    effects: [
-      ...project.audio.effects,
-      { ...structuredClone(source), name: ownedName },
-    ],
-    cues: project.audio.cues.map((cue) =>
-      cue.effect === effectName && popupAudioTargetKey(cue.target) === targetKey
-        ? { ...cue, effect: ownedName }
-        : cue,
-    ),
-  };
-  return ownedName;
+  return `${commonWithColorEditor}${amount}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
 }
 
 function popupIdValidationError(value: string): string {

@@ -6,7 +6,7 @@
 
 symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置仍是业务身份。image state 引用图片 key；Spine 在 UI 中只选择 skeleton 与 atlas，atlas 的全部 page 图片由结构化引用自动确定；VNI 引用 project key；image-string dependency 只记录 root key、manifest 与 closure keys，真实 bytes 只存在全局 asset library。
 
-项目状态定义为每个 once state 显式编辑 `afterComplete`：`return-to-default` 完成后回 normal/default，`terminal` 保持终态；stable state 不显示该字段。打开旧 v1/v2 ZIP 时统一由 rendercore upgrader 迁移，新导出只写完整 v3。v3 在每个 Symbol 的每个 state 编辑区内维护零到多条独立 package-local 音效；画面仍同时预览全部 symbol，但项目页的 preview-only 单选框决定唯一发声音的 symbol。
+项目状态定义为每个 once state 显式编辑 `afterComplete`：`return-to-default` 完成后回 normal/default，`terminal` 保持终态；stable state 不显示该字段。打开旧 v1/v2 ZIP 时统一由 rendercore upgrader 迁移，新导出只写完整 v3。音乐音效统一由 Game Layout Event 驱动，因此 Symbols Editor 不再导入、配置或预览 package-local audio。含旧 effect/cue 的合法 ZIP 会先完整 strict 校验，再移除旧配置和仅由其引用的 bytes 并显示摘要；canonical v3 仍写 schema 要求的空 `audio.effects`，且不写任何 `audioCues`。
 
 任意非 value-managed state 都直接提供“增加动画层”，不要求先把旧 visual 重新选择为多图层类型。首次增加时，现有图片会原样保留为 normal/stateTexture base，现有 Spine/VNI 会原样迁移为第一层，再追加一份待绑定的新层；已导入的旧 ZIP 因此不需要重新录入既有资源。附加层按稳定列表顺序逐项选择 `underlay | overlay` 以及 Spine/VNI 资源与播放参数。层 id 必须唯一且为 lowercase kebab-case；至少保留一层。导入、预览、导出与资源覆盖都按 exact layer binding 处理，不按文件名猜层，也不把多层静默降级成单层。
 
@@ -31,7 +31,7 @@ value ImgNumber 的每个档位也可显式生成并绑定自己的 `spinBlurPro
 
 美术增量更新应一次选择同一 Spine closure 的 skeleton JSON、atlas 和 page 图片，并在 review
 中对原 filename key 选择覆盖。编辑器在导入后完整 candidate 上统一复验：animation/slot
-仍存在时保留所有 symbol/state、transform、composite layer、value tier、ImgNumber 与音效
+仍存在时保留所有 symbol/state、transform、composite layer、value tier 与 ImgNumber
 配置；atlas 的首个 page logical name 合法变化时，只结构化同步 manifest 内部用于兼容的首
 page texture key，其余 page 始终由 atlas 自动解析。Picker 再次确认当前 skeleton/atlas 是 no-op；改选兼容 skeleton 也保留仍有效的
 animation/slot。缺失 animation 只清理并报告 exact binding，其它 closure 或 typed binding

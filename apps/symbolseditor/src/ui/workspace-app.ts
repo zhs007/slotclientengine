@@ -12,10 +12,6 @@ import {
   normalizeEditorPackageZipEntries,
   type EditorImportSourceFile,
 } from "@slotclientengine/editorresource";
-import type {
-  AudioEffectBindingV1,
-  AudioMediaType,
-} from "@slotclientengine/audiocore/data";
 import {
   addCustomStateDefinition,
   addStateAnimationLayer,
@@ -710,7 +706,6 @@ export class SymbolsEditorApp {
     this.bindValueControls(panel);
     this.bindImageStringControls(panel);
     this.bindCascadeControls(panel);
-    this.bindStateAudioControls(panel);
     panel
       .querySelectorAll<HTMLDetailsElement>("[data-tier-index]")
       .forEach((details) => {
@@ -740,13 +735,6 @@ export class SymbolsEditorApp {
         }),
       );
     }
-    const audioPreviewSymbol = panel.querySelector<HTMLSelectElement>(
-      "[data-audio-preview-symbol]",
-    );
-    audioPreviewSymbol?.addEventListener("change", () => {
-      this.#session.audioPreviewSymbol = audioPreviewSymbol.value;
-      this.render(this.#store.getSnapshot());
-    });
     panel
       .querySelector<HTMLElement>("[data-add-custom]")
       ?.addEventListener("click", () => {
@@ -800,146 +788,6 @@ export class SymbolsEditorApp {
           } catch (error) {
             this.#store.setExternalError(error);
           }
-        });
-      });
-  }
-
-  private bindStateAudioControls(panel: HTMLElement): void {
-    panel
-      .querySelector<HTMLElement>("[data-add-state-audio]")
-      ?.addEventListener("click", () => {
-        try {
-          const path = panel.querySelector<HTMLSelectElement>(
-            "[data-new-state-audio-path]",
-          )!.value;
-          const requestedName = panel
-            .querySelector<HTMLInputElement>("[data-new-state-audio-name]")!
-            .value.trim();
-          const playback = panel.querySelector<HTMLSelectElement>(
-            "[data-new-state-audio-playback]",
-          )!.value as "once" | "loop";
-          const offsetSeconds = Number(
-            panel.querySelector<HTMLInputElement>(
-              "[data-new-state-audio-delay]",
-            )!.value,
-          );
-          const focus = panel.querySelector<HTMLSelectElement>(
-            "[data-new-state-audio-bgm]",
-          )!.value;
-          this.#store.transact((draft) => {
-            const symbol = draft.symbols.get(this.#session.selectedSymbol);
-            if (!symbol?.states.has(this.#session.selectedState))
-              throw new Error("当前 Symbol 状态不存在。");
-            const record = draft.assetLibrary.records.get(path);
-            if (!record || record.kind !== "audio" || record.diagnostics.length)
-              throw new Error("必须选择一个可用音频资源。");
-            const mediaType = record.metadata?.mediaType;
-            if (typeof mediaType !== "string")
-              throw new Error("音频资源缺少 mediaType。");
-            if (!Number.isFinite(offsetSeconds) || offsetSeconds < 0)
-              throw new Error("延迟必须是非负数。");
-            const fallbackName = `${symbol.symbol}-${this.#session.selectedState}-${audioPathStem(path)}`;
-            const name = allocateAudioEffectName(
-              draft.audio.effects,
-              requestedName || fallbackName,
-            );
-            draft.audio = {
-              ...draft.audio,
-              effects: [
-                ...draft.audio.effects,
-                createAudioEffect(
-                  name,
-                  path,
-                  mediaType as AudioMediaType,
-                  playback,
-                  offsetSeconds,
-                  focus,
-                ),
-              ],
-            };
-            symbol.audioCues = [
-              ...symbol.audioCues,
-              { state: this.#session.selectedState, effect: name },
-            ];
-          });
-        } catch (error) {
-          this.#store.setExternalError(error);
-        }
-      });
-    panel
-      .querySelectorAll<
-        HTMLInputElement | HTMLSelectElement
-      >("[data-state-audio-field]")
-      .forEach((input) => {
-        input.addEventListener("change", () => {
-          try {
-            this.#store.transact((draft) => {
-              const effect = getOwnedStateAudioEffect(
-                draft,
-                this.#session.selectedSymbol,
-                this.#session.selectedState,
-                input.dataset.stateAudioEffect!,
-              );
-              const field = input.dataset.stateAudioField;
-              if (field === "playback") {
-                effect.playback = input.value as "once" | "loop";
-                effect.voices.maxConcurrent =
-                  effect.playback === "loop" ? 1 : 4;
-              } else if (field === "delay") {
-                const delay = Number(input.value);
-                if (!Number.isFinite(delay) || delay < 0)
-                  throw new Error("延迟必须是非负数。");
-                effect.offsetSeconds = delay;
-              } else if (field === "bgm") {
-                effect.bgm = audioFocus(input.value);
-              } else if (field === "asset") {
-                const record = draft.assetLibrary.records.get(input.value);
-                if (
-                  !record ||
-                  record.kind !== "audio" ||
-                  record.diagnostics.length
-                )
-                  throw new Error("必须选择一个可用音频资源。");
-                const mediaType = record.metadata?.mediaType;
-                if (typeof mediaType !== "string")
-                  throw new Error("音频资源缺少 mediaType。");
-                effect.asset = {
-                  sources: [
-                    {
-                      path: input.value,
-                      mediaType: mediaType as AudioMediaType,
-                    },
-                  ],
-                };
-              }
-            });
-          } catch (error) {
-            this.#store.setExternalError(error);
-          }
-        });
-      });
-    panel
-      .querySelectorAll<HTMLElement>("[data-remove-state-audio]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          this.#store.transact((draft) => {
-            const symbol = draft.symbols.get(this.#session.selectedSymbol);
-            if (!symbol) throw new Error("当前 Symbol 不存在。");
-            const effectName = button.dataset.removeStateAudio!;
-            symbol.audioCues = symbol.audioCues.filter(
-              (cue) =>
-                cue.state !== this.#session.selectedState ||
-                cue.effect !== effectName,
-            );
-            if (!isAudioEffectReferenced(draft, effectName)) {
-              draft.audio = {
-                ...draft.audio,
-                effects: draft.audio.effects.filter(
-                  (effect) => effect.name !== effectName,
-                ),
-              };
-            }
-          });
         });
       });
   }
@@ -2369,8 +2217,13 @@ export class SymbolsEditorApp {
           this.#previewError = "";
           this.#session.resetForImport(imported.project);
           this.#store.replace(imported.project);
+          const migration = imported.legacyAudioMigration;
+          const migrationMessage =
+            migration.effects || migration.cues || migration.assets
+              ? `；已移除旧音频配置：${migration.effects} effects / ${migration.cues} cues / ${migration.assets} assets`
+              : "";
           this.showSuccess(
-            `Symbols 项目 ${imported.project.id} 已加载，正在准备预览…`,
+            `Symbols 项目 ${imported.project.id} 已加载${migrationMessage}，正在准备预览…`,
           );
         } finally {
           imported.destroy();
@@ -2704,7 +2557,6 @@ export class SymbolsEditorApp {
     const request = ++this.#previewRequest;
     const project = snapshot.project;
     if (!project || !this.#preview) return;
-    this.#preview.configureAudio?.(project, this.#session.audioPreviewSymbol);
     const cells = createPreviewCells(
       project,
       this.#session.previewState,
@@ -2735,7 +2587,6 @@ export class SymbolsEditorApp {
         cells,
         this.#session.previewState,
       );
-      this.#preview.playAudioCue?.(this.#session.previewState);
       this.clearPreviewError();
       this.updateZoom(this.#preview.getZoom());
     } catch (error) {
@@ -2910,7 +2761,7 @@ function shellMarkup(): string {
       <button data-upload>导入资源 / ZIP</button>
       <button class="primary" data-export disabled>导出 ZIP</button>
       <input hidden type="file" accept="application/json,.json" data-new-input>
-      <input hidden type="file" multiple accept=".png,.jpg,.jpeg,.webp,.json,.atlas,.zip,.mp3,.ogg,.wav,.m4a,.aac,.webm,application/zip,audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm" data-upload-input>
+      <input hidden type="file" multiple accept=".png,.jpg,.jpeg,.webp,.json,.atlas,.zip,application/zip" data-upload-input>
     </header>
     <div class="feedback" data-feedback aria-live="polite"></div>
     <div class="errors" data-errors role="alert"></div>
@@ -3350,44 +3201,7 @@ function statesInspectorMarkup(
               .join("")}</select></label>`
       }
       ${stateFields}
-      ${symbolStateAudioMarkup(project, symbol, state)}
     </article>
-  </section>`;
-}
-
-function symbolStateAudioMarkup(
-  project: SymbolEditorProject,
-  symbol: EditorSymbolDraft,
-  state: string,
-): string {
-  const audioAssets = [...project.assetLibrary.records.values()].filter(
-    (record) => record.kind === "audio" && record.diagnostics.length === 0,
-  );
-  const effects = new Map(
-    project.audio.effects.map((effect) => [effect.name, effect]),
-  );
-  const cards = symbol.audioCues
-    .filter((cue) => cue.state === state)
-    .map((cue) => effects.get(cue.effect))
-    .filter((effect): effect is AudioEffectBindingV1 => Boolean(effect))
-    .map(
-      (
-        effect,
-      ) => `<article class="asset-card audio-effect-card" data-state-audio-card="${escapeAttr(effect.name)}">
-        <header><div><strong>${escapeHtml(effect.name)}</strong><small>进入 ${escapeHtml(state)} 时触发</small></div><button type="button" data-remove-state-audio="${escapeAttr(effect.name)}">删除</button></header>
-        <div class="form-grid">
-          <label>音频资源 <select data-state-audio-field="asset" data-state-audio-effect="${escapeAttr(effect.name)}">${audioAssets.map((record) => option(record.path, record.path, record.path === effect.asset.sources[0]?.path)).join("")}</select></label>
-          <label>播放 <select data-state-audio-field="playback" data-state-audio-effect="${escapeAttr(effect.name)}">${option("once", "once", effect.playback === "once")}${option("loop", "loop", effect.playback === "loop")}</select></label>
-          <label>延迟（秒）<input type="number" min="0" step="0.01" value="${effect.offsetSeconds}" data-state-audio-field="delay" data-state-audio-effect="${escapeAttr(effect.name)}"></label>
-          <label>BGM <select data-state-audio-field="bgm" data-state-audio-effect="${escapeAttr(effect.name)}">${option("keep", "keep", effect.bgm.kind === "keep")}${option("duck", "duck", effect.bgm.kind === "duck")}${option("pause", "pause", effect.bgm.kind === "pause")}</select></label>
-        </div>
-      </article>`,
-    )
-    .join("");
-  return `<section class="audio-config state-audio-config"><div class="section-heading"><div><h3>状态音效</h3><p>只属于 ${escapeHtml(symbol.symbol)} / ${escapeHtml(state)}；可像图层一样添加多条，并按各自延迟触发。</p></div><span>${cards ? `${symbol.audioCues.filter((cue) => cue.state === state).length} 条` : "未配置"}</span></div>
-    <div class="state-audio-list">${cards || '<p class="empty">当前状态没有音效。</p>'}</div>
-    <div class="form-row"><input data-new-state-audio-name placeholder="局部名称（可选）"><select data-new-state-audio-path><option value="">选择音频资源</option>${audioAssets.map((record) => `<option value="${escapeAttr(record.path)}">${escapeHtml(record.path)}</option>`).join("")}</select><select data-new-state-audio-playback><option value="once">once</option><option value="loop">loop</option></select><input data-new-state-audio-delay type="number" min="0" step="0.01" value="0" aria-label="延迟秒"><select data-new-state-audio-bgm><option value="keep">BGM keep</option><option value="duck">BGM duck</option><option value="pause">BGM pause</option></select><button type="button" data-add-state-audio ${audioAssets.length ? "" : "disabled"}>添加到当前状态</button></div>
-    ${audioAssets.length ? "" : '<p class="hint">请先在“资源”页导入音频文件。</p>'}
   </section>`;
 }
 
@@ -3769,20 +3583,9 @@ function cascadeInspectorMarkup(
 
 function projectWorkspaceMarkup(
   project: SymbolEditorProject,
-  session: SymbolsEditorUiSession,
+  _session: SymbolsEditorUiSession,
 ): string {
   return `<section class="project-config"><div class="section-heading"><div><h1>项目配置</h1><p>全局内容独立于单个 symbol Inspector。</p></div></div><div class="form-grid"><label>Package / project id <input data-project-id data-focus-key="project-id" value="${escapeAttr(project.id)}"></label><label>Cell width <input data-cell-width type="number" min="1" value="${project.cellSize.width}"></label><label>Cell height <input data-cell-height type="number" min="1" value="${project.cellSize.height}"></label></div>
-    <section class="audio-config"><h2>音频预览</h2><p>音效在“Symbols → 状态”中按单个 Symbol 的单个状态配置，可为同一状态添加多条。这里仅选择哪个 Symbol 可以发声。</p><label>试听 Symbol（单选）<select data-audio-preview-symbol>${[
-      ...project.symbols.values(),
-    ]
-      .filter((symbol) => symbol.included)
-      .map(
-        (symbol) =>
-          `<option value="${escapeAttr(symbol.symbol)}" ${symbol.symbol === session.audioPreviewSymbol ? "selected" : ""}>${escapeHtml(symbol.symbol)}</option>`,
-      )
-      .join(
-        "",
-      )}</select></label><p class="hint">该选择只控制声音 sink；画面仍可同时预览全部 Symbol。当前项目共 ${project.audio.effects.length} 条状态音效。</p></section>
     <h2>项目状态定义</h2><div class="definition-list">${project.stateDefinitions.map((item) => `<div class="definition-row"><code>${escapeHtml(item.id)}</code><small>${item.phase} / ${item.playback}</small><span>${item.source === "custom" ? "Custom" : "Built-in"}</span>${item.afterComplete ? `<label>完成后 <select data-state-after-complete="${escapeAttr(item.id)}">${option("return-to-default", "回到 normal", item.afterComplete === "return-to-default")}${option("terminal", "停在终止帧", item.afterComplete === "terminal")}</select></label>` : ""}${item.source === "custom" ? `<button data-remove-custom="${escapeAttr(item.id)}">删除</button>` : ""}</div>`).join("")}</div><div class="form-row add-definition"><input data-custom-id placeholder="custom state id"><select data-custom-lifecycle><option value="once">once / once</option><option value="loop">stable / loop</option></select><select data-custom-after-complete><option value="return-to-default">完成后回到 normal</option><option value="terminal">完成后停在终止帧</option></select><button class="primary" data-add-custom>增加 custom state</button></div>
     <details class="advanced-summary"><summary>Legacy 导入兼容数据</summary><p>这些字段只为无损 round-trip 保留，不是现代 state texture 生成配置。</p><pre>${escapeHtml(JSON.stringify({ textureStateOrder: project.legacyTextureStateOrder, settings: project.legacyStateSettings }, null, 2))}</pre></details>
     <details class="advanced-summary"><summary>高级导出摘要</summary><dl class="summary-grid"><div><dt>Game config</dt><dd>${escapeHtml(project.gameConfigFileName)}</dd></div><div><dt>Symbols</dt><dd>${project.symbols.size}</dd></div><div><dt>Included</dt><dd>${getIncludedSymbols(project).length}</dd></div><div><dt>Library resources</dt><dd>${project.assetLibrary.records.size}</dd></div></dl><p>UI Tab、筛选、选择和展开状态不进入 ZIP。</p></details>
@@ -4452,124 +4255,6 @@ function selectOptions(
   return options
     .map(([value, label]) => option(value, label, value === selected))
     .join("");
-}
-
-type MutableAudioEffect = {
-  -readonly [Key in keyof AudioEffectBindingV1]: AudioEffectBindingV1[Key];
-} & {
-  voices: {
-    maxConcurrent: number;
-    overflow: "reject" | "restart-oldest";
-  };
-};
-
-function audioFocus(value: string): AudioEffectBindingV1["bgm"] {
-  if (value === "duck")
-    return {
-      kind: "duck",
-      targetGain: 0.35,
-      attackSeconds: 0.2,
-      releaseSeconds: 0.5,
-    };
-  if (value === "pause")
-    return { kind: "pause", fadeOutSeconds: 0.2, fadeInSeconds: 0.5 };
-  return { kind: "keep" };
-}
-
-function createAudioEffect(
-  name: string,
-  path: string,
-  mediaType: AudioMediaType,
-  playback: "once" | "loop",
-  offsetSeconds: number,
-  focus: string,
-): AudioEffectBindingV1 {
-  return {
-    name,
-    asset: { sources: [{ path, mediaType }] },
-    playback,
-    offsetSeconds,
-    voices: {
-      maxConcurrent: playback === "loop" ? 1 : 4,
-      overflow: "restart-oldest",
-    },
-    bgm: audioFocus(focus),
-  };
-}
-
-function audioPathStem(path: string): string {
-  return (
-    path
-      .split("/")
-      .at(-1)
-      ?.replace(/\.[^.]+$/u, "") || "audio"
-  );
-}
-
-function normalizeAudioEffectName(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/gu, "-")
-      .replace(/^-+|-+$/gu, "") || "audio"
-  );
-}
-
-function allocateAudioEffectName(
-  effects: readonly AudioEffectBindingV1[],
-  requested: string,
-): string {
-  const base = normalizeAudioEffectName(requested);
-  const names = new Set(effects.map((effect) => effect.name));
-  if (!names.has(base)) return base;
-  let suffix = 2;
-  while (names.has(`${base}-${suffix}`)) suffix += 1;
-  return `${base}-${suffix}`;
-}
-
-function isAudioEffectReferenced(
-  project: SymbolEditorProject,
-  effectName: string,
-): boolean {
-  return [...project.symbols.values()].some((symbol) =>
-    symbol.audioCues.some((cue) => cue.effect === effectName),
-  );
-}
-
-function getOwnedStateAudioEffect(
-  project: SymbolEditorProject,
-  symbolName: string,
-  state: string,
-  effectName: string,
-): MutableAudioEffect {
-  const symbol = project.symbols.get(symbolName);
-  if (!symbol) throw new Error(`Symbol 不存在：${symbolName}`);
-  const source = project.audio.effects.find(
-    (effect) => effect.name === effectName,
-  );
-  if (!source) throw new Error(`音效不存在：${effectName}`);
-  const referenceCount = [...project.symbols.values()].reduce(
-    (total, candidate) =>
-      total +
-      candidate.audioCues.filter((cue) => cue.effect === effectName).length,
-    0,
-  );
-  if (referenceCount <= 1) return source as MutableAudioEffect;
-  const ownedName = allocateAudioEffectName(
-    project.audio.effects,
-    `${effectName}-${symbolName}-${state}`,
-  );
-  const owned = structuredClone({ ...source, name: ownedName });
-  project.audio = {
-    ...project.audio,
-    effects: [...project.audio.effects, owned],
-  };
-  symbol.audioCues = symbol.audioCues.map((cue) =>
-    cue.state === state && cue.effect === effectName
-      ? { ...cue, effect: ownedName }
-      : cue,
-  );
-  return owned as MutableAudioEffect;
 }
 
 function option(value: string, label: string, selected = false): string {
