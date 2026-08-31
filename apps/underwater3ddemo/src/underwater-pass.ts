@@ -94,7 +94,7 @@ void main() {
     surfaceGlowFade * 0.34;
 
   float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
-  vec3 saturatedColor = mix(vec3(luminance), color, 1.18);
+  vec3 saturatedColor = mix(vec3(luminance), color, 1.24);
   vec3 contrastedColor = max(
     (saturatedColor - vec3(0.18)) * 1.09 + vec3(0.18),
     vec3(0.0)
@@ -105,6 +105,7 @@ void main() {
     max(color.r, max(color.g, color.b))
   );
   color = mix(contrastedColor, color, hdrHighlight * 0.82);
+  color *= mix(1.1, 1.0, hdrHighlight);
 
   float grain = hash21(gl_FragCoord.xy + floor(uTime * 12.0)) - 0.5;
   color += grain * 0.012;

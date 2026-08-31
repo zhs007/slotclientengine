@@ -125,8 +125,8 @@ float hash21(vec2 point) {
 
 void main() {
   vec3 deepWater = vec3(0.004, 0.055, 0.14);
-  vec3 midWater = vec3(0.007, 0.195, 0.37);
-  vec3 shallowWater = vec3(0.045, 0.43, 0.59);
+  vec3 midWater = vec3(0.006, 0.235, 0.46);
+  vec3 shallowWater = vec3(0.035, 0.52, 0.72);
 
   float depth = smoothstep(0.02, 0.74, vUv.y);
   vec3 color = mix(deepWater, midWater, depth);
@@ -256,36 +256,30 @@ float sampleShaftLayer(vec2 uv, float rotation, float scale) {
 void main() {
   float depth = 1.0 - vUv.y;
   vec2 shaftUv = vec2(vUv.x, clamp((depth - 0.025) / 0.62, 0.0, 1.0));
-  float layerARotation = sin(uTime * 0.45) * 0.12;
-  float layerBRotation = sin(uTime * 0.32 + 2.1) * -0.16;
-  float layerAScale = 1.055 + sin(uTime * 0.24 + 0.7) * 0.035;
-  float layerBScale = 0.955 + cos(uTime * 0.18 + 1.8) * 0.028;
+  float layerARotation = sin(uTime * 0.22) * 0.055;
+  float layerAScale = 1.025 + sin(uTime * 0.16 + 0.7) * 0.018;
   float shaftBase = pow(sampleShaftLayer(shaftUv, 0.0, 1.0), 1.12);
   float shaftLayerA = pow(
     sampleShaftLayer(shaftUv, layerARotation, layerAScale),
-    1.28
-  );
-  float shaftLayerB = pow(
-    sampleShaftLayer(shaftUv, layerBRotation, layerBScale),
-    1.38
+    1.26
   );
   float shaftLight = clamp(
-    shaftBase * 0.46 + shaftLayerA * 0.38 + shaftLayerB * 0.3,
+    shaftBase * 0.64 + shaftLayerA * 0.34,
     0.0,
-    1.08
+    0.98
   );
 
   float edgeFade = smoothstep(0.02, 0.17, vUv.x) *
     smoothstep(0.02, 0.17, 1.0 - vUv.x);
   float verticalFade = smoothstep(0.005, 0.055, depth) *
     (1.0 - smoothstep(0.42, 0.64, depth));
-  float opacityPulse = 0.975 + sin(uTime * 0.3) * 0.025;
-  float overexposedCore = pow(smoothstep(0.4, 0.94, shaftLight), 1.28) *
+  float opacityPulse = 0.985 + sin(uTime * 0.22) * 0.015;
+  float overexposedCore = pow(smoothstep(0.52, 0.94, shaftLight), 1.36) *
     (1.0 - smoothstep(0.25, 0.5, depth));
-  float surfaceHotspot = pow(smoothstep(0.7, 1.02, shaftLight), 1.12) *
+  float surfaceHotspot = pow(smoothstep(0.72, 0.98, shaftLight), 1.18) *
     (1.0 - smoothstep(0.08, 0.26, depth));
-  float lightEnergy = shaftLight * 1.12 + overexposedCore * 1.18 +
-    surfaceHotspot * 1.45;
+  float lightEnergy = shaftLight * 1.02 + overexposedCore * 0.86 +
+    surfaceHotspot;
   float alpha = lightEnergy * verticalFade * edgeFade * uOpacity *
     opacityPulse;
   vec3 color = mix(
@@ -293,7 +287,7 @@ void main() {
     vec3(1.0, 0.95, 0.82),
     pow(1.0 - depth, 0.72)
   );
-  color *= 1.08 + overexposedCore * 1.2 + surfaceHotspot * 1.75;
+  color *= 1.04 + overexposedCore * 0.9 + surfaceHotspot * 1.3;
   gl_FragColor = vec4(color, alpha);
 }
 `;
@@ -341,7 +335,7 @@ export class UnderwaterRenderer {
     this.#renderer.domElement.className = "underwater-canvas";
     this.#renderer.outputColorSpace = SRGBColorSpace;
     this.#renderer.toneMapping = ACESFilmicToneMapping;
-    this.#renderer.toneMappingExposure = 0.96;
+    this.#renderer.toneMappingExposure = 1.08;
     this.#renderer.setClearColor(0x021331, 1);
     host.prepend(this.#renderer.domElement);
 
@@ -579,7 +573,7 @@ export class UnderwaterRenderer {
     const material = new ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uOpacity: { value: 0.78 },
+        uOpacity: { value: 0.66 },
         uPrimaryShaftMap: { value: this.#surfaceLightShaftTextures[0] },
       },
       vertexShader: primaryVolumeLightVertexShader,
