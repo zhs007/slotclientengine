@@ -54,18 +54,20 @@ describe("editor scene-layout v7 contract", () => {
     const landscape = project.gameModes.modes[0]!.mainVariants.landscape;
     landscape.x = 24;
     landscape.y = -18;
-    landscape.focusRect = { x: -460, y: -300, width: 920, height: 600 };
+    landscape.focusOffsets = { left: 84, top: 42, right: 36, bottom: 78 };
     landscape.minFocusMargin.left = 12;
 
-    expect(
-      editorProjectToManifest(project).gameModes.modes[0]!.main.variants
-        .landscape,
-    ).toEqual({
+    const manifest = editorProjectToManifest(project);
+    expect(manifest.gameModes.modes[0]!.main.variants.landscape).toEqual({
       x: 24,
       y: -18,
       focusRect: { x: -460, y: -300, width: 920, height: 600 },
       minFocusMargin: { left: 12, right: 0, top: 0, bottom: 0 },
     });
+    expect(
+      manifestToEditorProject(manifest, new Map()).gameModes.modes[0]!
+        .mainVariants.landscape.focusOffsets,
+    ).toEqual({ left: 84, top: 42, right: 36, bottom: 78 });
   });
 
   it("exports one or two backgrounds as ordinary image layers", () => {

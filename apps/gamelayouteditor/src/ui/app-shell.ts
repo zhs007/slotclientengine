@@ -42,7 +42,6 @@ import {
   editorProjectToPreviewManifest,
   manifestToEditorProject,
   ordinaryLayerVariantIds,
-  updateVariantFocusFromReel,
   type EditorProject,
 } from "../model/editor-project.js";
 import {
@@ -655,9 +654,7 @@ export class GameLayoutEditorApp {
           const popupId = this.#selectedPopupId;
           const variant = input.dataset.popupPlacement as SceneLayoutVariantId;
           const field = input.dataset.popupPlacementField as
-            | "x"
-            | "y"
-            | "scale";
+            "x" | "y" | "scale";
           if (!popupId) {
             this.#store.setExternalError(
               new Error("尚未选择 popup dependency。"),
@@ -708,8 +705,7 @@ export class GameLayoutEditorApp {
       "change",
       (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          | "standard"
-          | "grid-cell";
+          "standard" | "grid-cell";
         this.runTransaction((draft) => {
           const mode = draft.gameModes.modes.find(
             (candidate) => candidate.id === this.#selectedGameMode,
@@ -1748,9 +1744,7 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLSelectElement>("[data-transition-kind]")
       ?.addEventListener("change", (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          | "none"
-          | "spine"
-          | "video";
+          "none" | "spine" | "video";
         this.runTransaction((draft) => {
           const transition = draft.gameModes.transitions.find(
             (candidate) =>
@@ -1808,9 +1802,7 @@ export class GameLayoutEditorApp {
           const variant = input.dataset
             .transitionPopupPlacement as SceneLayoutVariantId;
           const field = input.dataset.transitionPopupPlacementField as
-            | "x"
-            | "y"
-            | "scale";
+            "x" | "y" | "scale";
           this.runTransaction((draft) => {
             const transition = draft.gameModes.transitions.find(
               (candidate) =>
@@ -1954,11 +1946,7 @@ export class GameLayoutEditorApp {
     );
     status?.addEventListener("change", () => {
       this.#session.resourceStatus = status.value as
-        | "all"
-        | "referenced"
-        | "runtime"
-        | "unused"
-        | "error";
+        "all" | "referenced" | "runtime" | "unused" | "error";
       this.renderWorkspace(this.#store.getSnapshot());
     });
     panel
@@ -2281,11 +2269,6 @@ export class GameLayoutEditorApp {
           } else {
             setPath(draft, path, Number(input.value));
           }
-          if (path.startsWith("reel.")) {
-            for (const variant of activeVariantIds(draft)) {
-              updateVariantFocusFromReel(draft, variant);
-            }
-          }
         });
       }),
     );
@@ -2521,8 +2504,7 @@ export class GameLayoutEditorApp {
       .forEach((input) =>
         input.addEventListener("change", () => {
           const variant = input.dataset.pickerVariant as
-            | "landscape"
-            | "portrait";
+            "landscape" | "portrait";
           state.variants = input.checked
             ? [...new Set([...state.variants, variant])]
             : state.variants.filter((item) => item !== variant);

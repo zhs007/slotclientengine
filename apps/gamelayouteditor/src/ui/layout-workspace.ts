@@ -1,5 +1,6 @@
 import {
   activeVariantIds,
+  calculateEditorFocusRect,
   calculateReelSize,
   ordinaryLayerVariantIds,
   type EditorNodeDraft,
@@ -119,8 +120,9 @@ function reelInspector(
     .map((variant) => {
       if (variant === "default") return "";
       const value = mode.mainVariants[variant];
+      const focusRect = calculateEditorFocusRect(project, value);
       const prefix = `gameModes.modes.${modeIndex}.mainVariants.${variant}`;
-      return `<fieldset><legend>${variant} · 中心坐标</legend><div class="field-grid">${numberField("main x", `${prefix}.x`, value.x)}${numberField("main y", `${prefix}.y`, value.y)}${numberField("focus x", `${prefix}.focusRect.x`, value.focusRect.x)}${numberField("focus y", `${prefix}.focusRect.y`, value.focusRect.y)}${numberField("focus width", `${prefix}.focusRect.width`, value.focusRect.width)}${numberField("focus height", `${prefix}.focusRect.height`, value.focusRect.height)}</div><details><summary>min focus margins</summary><div class="field-grid">${numberField("left", `${prefix}.minFocusMargin.left`, value.minFocusMargin.left)}${numberField("right", `${prefix}.minFocusMargin.right`, value.minFocusMargin.right)}${numberField("top", `${prefix}.minFocusMargin.top`, value.minFocusMargin.top)}${numberField("bottom", `${prefix}.minFocusMargin.bottom`, value.minFocusMargin.bottom)}</div></details></fieldset>`;
+      return `<fieldset><legend>${variant} · 中心坐标</legend><div class="field-grid">${numberField("main x", `${prefix}.x`, value.x)}${numberField("main y", `${prefix}.y`, value.y)}</div><p class="derived">派生 focusRect ${focusRect.x}, ${focusRect.y}, ${focusRect.width} × ${focusRect.height}</p><p class="hint">focus 按 main 四边外扩；正数向外扩，负数向内缩。</p><div class="field-grid">${numberField("left", `${prefix}.focusOffsets.left`, value.focusOffsets.left)}${numberField("top", `${prefix}.focusOffsets.top`, value.focusOffsets.top)}${numberField("right", `${prefix}.focusOffsets.right`, value.focusOffsets.right)}${numberField("bottom", `${prefix}.focusOffsets.bottom`, value.focusOffsets.bottom)}</div><details><summary>min focus margins</summary><div class="field-grid">${numberField("left", `${prefix}.minFocusMargin.left`, value.minFocusMargin.left)}${numberField("right", `${prefix}.minFocusMargin.right`, value.minFocusMargin.right)}${numberField("top", `${prefix}.minFocusMargin.top`, value.minFocusMargin.top)}${numberField("bottom", `${prefix}.minFocusMargin.bottom`, value.minFocusMargin.bottom)}</div></details></fieldset>`;
     })
     .join("")}</section></div>`;
 }

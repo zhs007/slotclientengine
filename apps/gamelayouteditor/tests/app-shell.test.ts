@@ -173,6 +173,15 @@ describe("GameLayoutEditorApp current workspace", () => {
     ).click();
     expect(root.textContent).not.toContain("artSize");
     expect(root.querySelector("[data-toggle-coordinate-origin]")).toBeNull();
+    expect(
+      root.querySelector(
+        '[data-number="gameModes.modes.0.mainVariants.landscape.focusRect.x"]',
+      ),
+    ).toBeNull();
+    const focusLeft = root.querySelector(
+      '[data-number="gameModes.modes.0.mainVariants.landscape.focusOffsets.left"]',
+    ) as HTMLInputElement;
+    expect(focusLeft.value).toBe("60");
     const mainX = root.querySelector(
       '[data-number="gameModes.modes.0.mainVariants.landscape.x"]',
     ) as HTMLInputElement;
@@ -183,6 +192,27 @@ describe("GameLayoutEditorApp current workspace", () => {
     );
     expect(previewSpies.applyGeometryManifest).toHaveBeenLastCalledWith(
       expect.objectContaining({ version: 7 }),
+    );
+    focusLeft.value = "75";
+    focusLeft.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(previewSpies.applyGeometryManifest).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          gameModes: expect.objectContaining({
+            modes: expect.arrayContaining([
+              expect.objectContaining({
+                main: expect.objectContaining({
+                  variants: expect.objectContaining({
+                    landscape: expect.objectContaining({
+                      focusRect: expect.objectContaining({ x: -433 }),
+                    }),
+                  }),
+                }),
+              }),
+            ]),
+          }),
+        }),
+      ),
     );
     app.destroy();
   });
@@ -266,8 +296,7 @@ describe("GameLayoutEditorApp current workspace", () => {
 
     await vi.waitFor(() => {
       const lastCall = previewSpies.setLayout.mock.lastCall as unknown as
-        | [ReturnType<typeof editorProjectToManifest>]
-        | undefined;
+        [ReturnType<typeof editorProjectToManifest>] | undefined;
       const manifest = lastCall?.[0];
       expect(manifest?.nodes[0]?.scope).toEqual({
         BaseGame: ["landscape", "portrait"],

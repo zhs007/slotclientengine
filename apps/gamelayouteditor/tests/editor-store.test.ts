@@ -14,17 +14,40 @@ describe("EditorStore", () => {
     });
   });
 
-  it("classifies main placement and focus-rect edits as geometry", () => {
+  it("classifies main placement and focus-outset edits as geometry", () => {
     const store = new EditorStore(createNewEditorProject());
     store.transact((project) => {
       project.gameModes.modes[0]!.mainVariants.landscape.x = 40;
-      project.gameModes.modes[0]!.mainVariants.landscape.focusRect.x = -500;
+      project.gameModes.modes[0]!.mainVariants.landscape.focusOffsets.left = 100;
     });
     expect(store.getSnapshot()).toMatchObject({
       errors: [],
       revision: 1,
       changeKind: "geometry",
     });
+  });
+
+  it("preserves authored focus outsets when the main grid changes", () => {
+    const project = createNewEditorProject();
+    project.gameModes.modes[0]!.mainVariants.landscape.focusOffsets = {
+      left: 10,
+      top: 20,
+      right: 30,
+      bottom: 40,
+    };
+    const store = new EditorStore(project);
+
+    store.transact((draft) => {
+      draft.reel.columns = 6;
+    });
+
+    const snapshot = store.getSnapshot();
+    expect(
+      snapshot.project.gameModes.modes[0]!.mainVariants.landscape.focusOffsets,
+    ).toEqual({ left: 10, top: 20, right: 30, bottom: 40 });
+    expect(
+      snapshot.project.gameModes.modes[0]!.mainVariants.landscape,
+    ).not.toHaveProperty("focusRect");
   });
 
   it("classifies immutable main-grid edits as structural", () => {

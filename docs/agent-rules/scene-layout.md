@@ -53,7 +53,7 @@
 - Scene Layout 在组合 Popup/Symbol package 时才把 local effect name 编译为 `<binding>.<local>` route；程序只能播放/停止显式 allowlist route。cue delay 使用宿主 `update(deltaSeconds)` 时钟，stop、切状态、rollback 与 destroy 必须取消未触发播放并清理 owner-scoped instance。
 - rendercore 拥有 strict gameModes、plural symbolPackages、directed transition schema、exact dependency closure 和 production API。
 - canonical v7 只有中心坐标系，原点固定为 `(0,0)`；authored x/y 允许任意有限负数。legacy `top-left` / `center` 和 `artSize` 只存在于 v1–v6 strict parser/upgrader 输入，不能泄漏到 v7 snapshot、Editor draft 或 consumer API。
-- `focusRect` 与 main rect 不要求互相包含；parser、runtime 与 editor 不因越界自动裁切或修正。Editor 可用 main 四边 offset 编辑 focus，但导出保存 absolute center-plane rect。
+- `focusRect` 与 main rect 不要求互相包含；parser、runtime 与 editor 不因越界自动裁切或修正。Editor 必须用相对 main 的 `left/top/right/bottom` 四边外扩量编辑 focus，正数向外、负数向内；导入从 absolute rect 精确反算，导出保存 absolute center-plane rect。
 - runtime必须从current snapshot公开 main/visibleRect 九宫格 point 及 authored point↔opaque Anchor；Point/Rect是调用时快照，Anchor延迟解析，不得把logical visibleRect称为CSS/window/device坐标。
 - canonical layer ref只能由一个strict parser按stable、`node:` legacy、exact area suffix、canonical node顺序解析；unknown/ambiguous/unavailable显式失败，禁止alias或node/resource同名fallback。
 - scene node placement 的 `rotation` 使用角度，normalized `center` 默认 `0.5/0.5`；旧字段缺失分别按 `0` 与默认中心规范化。rendercore 统一应用 node position/scale/pivot/rotation matrix，Spine 的默认中心精确使用 authored origin `(0,0)`。editor/app 不复制 transform，不从 skeleton bounds、atlas texture 或当前动画帧猜另一套默认中心。Popup/transition 仍只用 `x/y/scale`，main reel 仍只用 `x/y`。

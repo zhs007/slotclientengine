@@ -5,8 +5,10 @@
 ## 中心坐标与 per-mode 可见性
 
 Scene Layout v7 固定使用中心坐标。root `main` 保存 grid，每个 mode 显式保存 `main.enabled` 以及
-landscape/portrait 的 main center、absolute focusRect 和可选 margin。背景没有专属类型、selector 或
-readiness；零个、一个或多个背景都作为普通 scene node 添加。
+landscape/portrait 的 main center、absolute focusRect 和可选 margin。Editor 以相对 main 四边的
+`left/top/right/bottom` 外扩量编辑 focus（正数外扩、负数内缩），导入时从 absolute focusRect 反算，
+导出时再派生 canonical absolute focusRect。背景没有专属类型、selector 或 readiness；零个、一个或
+多个背景都作为普通 scene node 添加。
 
 普通节点的 optional `scope` 精确声明 mode × orientation 可见性；字段缺失才表示所有 mode。Inspector
 提供显式全局开关和 mode × orientation 矩阵。最终显示要求当前 mode/orientation 命中 scope（或节点为
@@ -45,7 +47,7 @@ package/binding、transition kind等immutable structure变化才自动重建prev
 
 普通图层默认勾选“所有状态有效”，对应 v7 `scope` 缺失。取消后先绑定当前编辑 mode 的已有 placements，随后可在 mode × orientation 矩阵中精确增删上下文；至少保留一个有效上下文，scope 不能引用缺失的 placement。当前编辑 mode 或预览方向下不可见的图层在大纲灰显但仍可选中，隐藏不会删除节点或改变全局 `order`。合法旧 layout 先由 RenderCore shared upgrader 把单 `gameMode` 和 per-mode background binding 转为 v7 scope，Editor draft 不保留旧 `gameMode` 双轨。
 
-Editor draft 只保存中心坐标；legacy top-left/artSize 仅在 RenderCore upgrader 输入中存在，不进入 v7 preview 或导出。main reel 只提供横竖屏中心 `x/y`，不提供整体缩放；横竖屏适配通过各 mode 的 main/focus 与普通节点 placement 完成。
+Editor draft 只保存中心 main 坐标和 focus 四边外扩量；legacy top-left/artSize 仅在 RenderCore upgrader 输入中存在，不进入 v7 preview 或导出。main reel 只提供横竖屏中心 `x/y`，不提供整体缩放；横竖屏适配通过各 mode 的 main/focus 与普通节点 placement 完成。
 
 原始文件上传在任何资源解析前先整批校验 filename：只允许 ASCII 字母、数字、点、下划线和连字符，并统一转为小写。任一文件包含中文、空格、路径分隔符或其它非法字符，或多个文件小写化后重名，整批上传原子拒绝。普通资源合法同名不同 bytes 默认覆盖，引用不变；不建立 `dependencies/**` 目录。ImgNumber ZIP 以 manifest project id 为稳定前缀物化 root 与 glyph filename keys（例如 `digits.image-string.manifest.json`、`digits-0.png`），不同项目可在同一 workspace 并存，同 id 才进入替换流程。Symbols/Popup ZIP 同样先按 standalone schema 校验，再以 manifest id 为稳定前缀物化 root/leaf filename keys；相同物理 bytes 最终仍由 `assets.map.json` 的 SHA-256 payload 去重。同 id 替换只覆盖该 owner 的独占 keys，并在提交后回收无其它 owner 引用的旧 keys。SymbolsEditor 已验证合法的 owner-owned filename key（包括大小写）在 Layout 导入、替换、导出和重导时原样保留；若与其它 owner 形成大小写 alias 则显式失败。完整 Editor ZIP 验证 map/hash/size 后，只迁移 Layout-owned 旧 logical filename key：先做 Unicode NFKC，ASCII 合法字符转小写，空白和 ASCII 标点转 `-`，非 ASCII 字符按 `u<Unicode 十六进制>` 展开，连续分隔符合并并清理首尾；扩展名同样小写且必须能归一为字母数字。归一后不同 bytes 重名时按稳定源路径顺序添加 `-2/-3`，相同 bytes 复用同一 key；layout 及已识别的 VNI、image-string、Popup JSON 引用同步结构化改写，业务 id 和 atlas page logical name 不变。Symbols/Popup dependency 只保存业务 package id、root key、closure keys 与 placement；bytes 只存在全局 asset workspace。
 

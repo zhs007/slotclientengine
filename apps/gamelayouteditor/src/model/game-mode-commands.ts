@@ -5,7 +5,6 @@ import {
   activeVariantIds,
   activateEditorGameMode,
   createEditorGameModeDraft,
-  updateVariantFocusFromReel,
   validateEditorTransitionEvent,
   type EditorGameModeTransitionDraft,
   type EditorGameModeDraft,
@@ -115,12 +114,7 @@ export function setGameModeReelEnabled(
     throw new Error(
       `主状态 ${id} 已绑定 Symbols，关闭主转轮前必须先解除绑定。`,
     );
-  const activeModeId = project.gameModes.activeModeId;
   mode.mainEnabled = enabled;
-  activateEditorGameMode(project, id);
-  for (const variant of activeVariantIds(mode))
-    updateVariantFocusFromReel(project, variant);
-  activateEditorGameMode(project, activeModeId);
 }
 
 export function normalizeGameModeNodeOrders(project: EditorProject): void {

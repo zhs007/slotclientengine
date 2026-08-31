@@ -1,4 +1,7 @@
-import type { EditorProject } from "../model/editor-project.js";
+import {
+  calculateEditorFocusRect,
+  type EditorProject,
+} from "../model/editor-project.js";
 import { escapeHtml } from "./ui-markup.js";
 
 export interface StateManagerDialogOptions {
@@ -38,10 +41,10 @@ export function stateManagerDialogMarkup(
   const rows = options.project.gameModes.modes
     .map((mode) => {
       const initial = mode.id === options.project.gameModes.initialMode;
-      const complete = Object.values(mode.mainVariants).every(
-        (variant) =>
-          variant.focusRect.width > 0 && variant.focusRect.height > 0,
-      );
+      const complete = Object.values(mode.mainVariants).every((variant) => {
+        const focusRect = calculateEditorFocusRect(options.project, variant);
+        return focusRect.width > 0 && focusRect.height > 0;
+      });
       return `<button type="button" role="option" data-select-game-mode="${escapeHtml(mode.id)}" aria-selected="${mode.id === selectedModeId}"><span>${escapeHtml(mode.id)}</span><small><span class="mode-badge">${mode.mainEnabled ? "main" : "no main"}</span>${initial ? '<span class="mode-badge">initial</span>' : ""}<span class="mode-readiness ${complete ? "ready" : "incomplete"}">${complete ? "ready" : "incomplete"}</span></small></button>`;
     })
     .join("");

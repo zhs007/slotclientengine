@@ -58,10 +58,18 @@ export const DEFAULT_REEL_CELL_SIZE = 160;
 export const DEFAULT_REEL_ORDER = 999;
 export const DEFAULT_FOCUS_PADDING = 60;
 
+export interface EditorFocusOffsets {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export interface EditorVariantDraft {
   x: number;
   y: number;
-  focusRect: { x: number; y: number; width: number; height: number };
+  /** Positive values expand outwards from the corresponding main edge. */
+  focusOffsets: EditorFocusOffsets;
   minFocusMargin: { left: number; right: number; top: number; bottom: number };
 }
 
@@ -305,21 +313,6 @@ export function resetVariantGeometry(
     createEmptyVariant();
 }
 
-export function updateVariantFocusFromReel(
-  project: EditorProject,
-  variantId: SceneLayoutVariantId,
-): void {
-  const variant =
-    activeEditorGameMode(project).mainVariants[orientationVariant(variantId)];
-  const reelSize = calculateReelSize(project);
-  variant.focusRect = {
-    x: variant.x - reelSize.width / 2 - DEFAULT_FOCUS_PADDING,
-    y: variant.y - reelSize.height / 2 - DEFAULT_FOCUS_PADDING,
-    width: reelSize.width + DEFAULT_FOCUS_PADDING * 2,
-    height: reelSize.height + DEFAULT_FOCUS_PADDING * 2,
-  };
-}
-
 export function applySymbolPackageCellSize(
   project: EditorProject,
   cellSize: { readonly width: number; readonly height: number },
@@ -334,9 +327,6 @@ export function applySymbolPackageCellSize(
   }
   project.reel.cellWidth = cellSize.width;
   project.reel.cellHeight = cellSize.height;
-  for (const variantId of activeVariantIds(project)) {
-    updateVariantFocusFromReel(project, variantId);
-  }
 }
 
 export function resolveEditorNodeResource(
@@ -571,8 +561,8 @@ export function editorProjectToManifest(
         main: {
           enabled: mode.mainEnabled,
           variants: {
-            landscape: editorMainVariant(mode, "landscape"),
-            portrait: editorMainVariant(mode, "portrait"),
+            landscape: editorMainVariant(project, mode, "landscape"),
+            portrait: editorMainVariant(project, mode, "portrait"),
           },
         },
         nodeStates: {},
@@ -1084,8 +1074,14 @@ export function manifestToEditorProject(
         id: mode.id,
         mainEnabled: mode.main.enabled,
         mainVariants: {
-          landscape: fromCenteredMainVariant(mode.main.variants.landscape),
-          portrait: fromCenteredMainVariant(mode.main.variants.portrait),
+          landscape: fromCenteredMainVariant(
+            project,
+            mode.main.variants.landscape,
+          ),
+          portrait: fromCenteredMainVariant(
+            project,
+            mode.main.variants.portrait,
+          ),
         },
         nodeStates: { ...mode.nodeStates },
         symbols: mode.symbolPackage
@@ -1151,7 +1147,7 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
   return clone;
 }
 
-export function calculateReelSize(project: EditorProject): {
+export function calculateReelSize(project: Pick<EditorProject, "reel">): {
   width: number;
   height: number;
 } {
@@ -1161,6 +1157,23 @@ export function calculateReelSize(project: EditorProject): {
       reel.columns * reel.cellWidth + Math.max(0, reel.columns - 1) * reel.gapX,
     height:
       reel.rows * reel.cellHeight + Math.max(0, reel.rows - 1) * reel.gapY,
+  };
+}
+
+export function calculateEditorFocusRect(
+  project: Pick<EditorProject, "reel">,
+  variant: Pick<EditorVariantDraft, "x" | "y" | "focusOffsets">,
+): { x: number; y: number; width: number; height: number } {
+  const mainSize = calculateReelSize(project);
+  const mainLeft = variant.x - mainSize.width / 2;
+  const mainTop = variant.y - mainSize.height / 2;
+  return {
+    x: mainLeft - variant.focusOffsets.left,
+    y: mainTop - variant.focusOffsets.top,
+    width:
+      mainSize.width + variant.focusOffsets.left + variant.focusOffsets.right,
+    height:
+      mainSize.height + variant.focusOffsets.top + variant.focusOffsets.bottom,
   };
 }
 
@@ -1178,22 +1191,21 @@ export function resolveEditorReelTopLeft(
 }
 
 function createEmptyVariant(): EditorVariantDraft {
-  const mainWidth = DEFAULT_REEL_COLUMNS * DEFAULT_REEL_CELL_SIZE;
-  const mainHeight = DEFAULT_REEL_ROWS * DEFAULT_REEL_CELL_SIZE;
   return {
     x: 0,
     y: 0,
-    focusRect: {
-      x: -mainWidth / 2 - DEFAULT_FOCUS_PADDING,
-      y: -mainHeight / 2 - DEFAULT_FOCUS_PADDING,
-      width: mainWidth + DEFAULT_FOCUS_PADDING * 2,
-      height: mainHeight + DEFAULT_FOCUS_PADDING * 2,
+    focusOffsets: {
+      left: DEFAULT_FOCUS_PADDING,
+      top: DEFAULT_FOCUS_PADDING,
+      right: DEFAULT_FOCUS_PADDING,
+      bottom: DEFAULT_FOCUS_PADDING,
     },
     minFocusMargin: { left: 0, right: 0, top: 0, bottom: 0 },
   };
 }
 
 function editorMainVariant(
+  project: EditorProject,
   mode: EditorGameModeDraft,
   orientation: "landscape" | "portrait",
 ) {
@@ -1204,7 +1216,7 @@ function editorMainVariant(
   return {
     x: variant.x,
     y: variant.y,
-    focusRect: structuredClone(variant.focusRect),
+    focusRect: calculateEditorFocusRect(project, variant),
     ...(hasMargin
       ? { minFocusMargin: structuredClone(variant.minFocusMargin) }
       : {}),
@@ -1212,12 +1224,27 @@ function editorMainVariant(
 }
 
 function fromCenteredMainVariant(
+  project: Pick<EditorProject, "reel">,
   variant: SceneLayoutGameModeV7["main"]["variants"]["landscape"],
 ): EditorVariantDraft {
+  const mainSize = calculateReelSize(project);
+  const mainLeft = variant.x - mainSize.width / 2;
+  const mainTop = variant.y - mainSize.height / 2;
   return {
     x: variant.x,
     y: variant.y,
-    focusRect: { ...variant.focusRect },
+    focusOffsets: {
+      left: mainLeft - variant.focusRect.x,
+      top: mainTop - variant.focusRect.y,
+      right:
+        variant.focusRect.x +
+        variant.focusRect.width -
+        (mainLeft + mainSize.width),
+      bottom:
+        variant.focusRect.y +
+        variant.focusRect.height -
+        (mainTop + mainSize.height),
+    },
     minFocusMargin: {
       left: variant.minFocusMargin?.left ?? 0,
       right: variant.minFocusMargin?.right ?? 0,
