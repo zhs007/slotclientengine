@@ -534,6 +534,16 @@ describe("scene layout package runtime", () => {
       });
       const overlay = session.cells as RenderCellSpin;
       expect(overlay.parent).not.toBeNull();
+      const lifecycleEvents: Array<{ address: string; detail: unknown }> = [];
+      const lifecycleDisposers = [
+        "gamelayout:/reel/main/spin/cell-spin/lifecycle/started",
+        "gamelayout:/reel/main/spin/cell-spin/x/*/y/*/lifecycle/started",
+        "gamelayout:/reel/main/spin/cell-spin/x/*/y/*/lifecycle/stopped",
+        "gamelayout:/reel/main/spin/cell-spin/lifecycle/all-stopped",
+        "gamelayout:/reel/main/spin/cell-spin/lifecycle/ended",
+      ].map((address) =>
+        runtime.addresses.bind(address, (event) => lifecycleEvents.push(event)),
+      );
 
       const landings = [
         session.cells.roll({ x: 0, y: 0 }, { code: 0 }),
@@ -546,6 +556,34 @@ describe("scene layout package runtime", () => {
       expect(runtime.getReelArea("main").getSymbol({ x: 0, y: 1 }).code).toBe(
         1,
       );
+      expect(lifecycleEvents.map(({ address }) => address)).toEqual([
+        "gamelayout:/reel/main/spin/cell-spin/lifecycle/started",
+        "gamelayout:/reel/main/spin/cell-spin/x/0/y/0/lifecycle/started",
+        "gamelayout:/reel/main/spin/cell-spin/x/1/y/0/lifecycle/started",
+        "gamelayout:/reel/main/spin/cell-spin/x/0/y/0/lifecycle/stopped",
+        "gamelayout:/reel/main/spin/cell-spin/x/1/y/0/lifecycle/stopped",
+        "gamelayout:/reel/main/spin/cell-spin/lifecycle/all-stopped",
+        "gamelayout:/reel/main/spin/cell-spin/lifecycle/ended",
+      ]);
+      expect(lifecycleEvents.at(-2)).toMatchObject({
+        detail: {
+          eventFamily: "spin-lifecycle",
+          reelId: "main",
+          spin: "cell-spin",
+          lifecycle: "all-stopped",
+          unitCount: 2,
+        },
+      });
+      expect(lifecycleEvents.at(-1)).toMatchObject({
+        detail: {
+          eventFamily: "spin-lifecycle",
+          reelId: "main",
+          spin: "cell-spin",
+          lifecycle: "ended",
+          unitCount: 2,
+        },
+      });
+      for (const dispose of lifecycleDisposers) dispose();
 
       session.destroy();
       expect(overlay.parent).toBeNull();
@@ -1740,6 +1778,20 @@ describe("scene layout package runtime", () => {
       const runtime = createSceneLayoutPackageRuntime({
         resource,
         hostUpdatesMainReel: true,
+        reelPresentation: {
+          kind: "grid-cell",
+          version: 1,
+          direction: "forward",
+          order: "top-down-left-right",
+          timing: {
+            startStepMs: 0,
+            stopStepMs: 20,
+            settleAfterLastStartMs: 80,
+            minimumSpinCycles: 1,
+            speedSymbolsPerSecond: 20,
+          },
+          bounceStrength: 0,
+        },
       });
       await runtime.init({
         reels: {
@@ -1757,10 +1809,49 @@ describe("scene layout package runtime", () => {
       if (!(reel instanceof RenderGridCellReelSet))
         throw new Error("Expected a grid-cell main reel.");
       const update = vi.spyOn(reel, "update");
+      const lifecycle: string[] = [];
+      const disposers = [
+        "gamelayout:/reel/main/spin/grid-cell/lifecycle/started",
+        "gamelayout:/reel/main/spin/grid-cell/x/*/y/*/lifecycle/started",
+        "gamelayout:/reel/main/spin/grid-cell/x/*/y/*/lifecycle/stopped",
+        "gamelayout:/reel/main/spin/grid-cell/lifecycle/all-stopped",
+        "gamelayout:/reel/main/spin/grid-cell/lifecycle/ended",
+      ].map((address) =>
+        runtime.addresses.bind(address, (event) =>
+          lifecycle.push(event.address),
+        ),
+      );
+      runtime.spinMainReelToScene({
+        scene: [
+          [0, 1],
+          [1, 0],
+        ],
+        localPhaseYs: [0, 0],
+        random: () => 0,
+      });
 
       runtime.update(1 / 60);
 
       expect(update).not.toHaveBeenCalled();
+      expect(lifecycle).toEqual([
+        "gamelayout:/reel/main/spin/grid-cell/lifecycle/started",
+      ]);
+      reel.update(1);
+      expect(
+        lifecycle.filter(
+          (address) => address.includes("/x/") && address.endsWith("/started"),
+        ),
+      ).toHaveLength(4);
+      expect(
+        lifecycle.filter((address) => address.endsWith("/stopped")),
+      ).toHaveLength(4);
+      expect(lifecycle.at(-2)).toBe(
+        "gamelayout:/reel/main/spin/grid-cell/lifecycle/all-stopped",
+      );
+      expect(lifecycle.at(-1)).toBe(
+        "gamelayout:/reel/main/spin/grid-cell/lifecycle/ended",
+      );
+      for (const dispose of disposers) dispose();
       runtime.destroy();
     } finally {
       load.mockRestore();

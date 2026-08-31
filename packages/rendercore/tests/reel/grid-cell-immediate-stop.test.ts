@@ -8,6 +8,7 @@ import {
   type GridCellReelEffectPlanOptions,
 } from "../../src/reel/index.js";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
+import { observeSpinLifecycle } from "../../src/reel/spin-lifecycle.js";
 
 const INITIAL = Object.freeze([
   Object.freeze([1, 0, 2]),
@@ -28,6 +29,10 @@ describe("grid-cell immediate spin stop", () => {
     const reel = createReel();
     reel.resetToScene(INITIAL, [2, 1]);
     expect(() => reel.stopSpinImmediately()).toThrow(/target-aware spin/);
+    const lifecycle: string[] = [];
+    const dispose = observeSpinLifecycle(reel, (event) =>
+      lifecycle.push(event.lifecycle),
+    );
     reel.spin(createPlan());
 
     const landed = reel.stopSpinImmediately();
@@ -48,11 +53,24 @@ describe("grid-cell immediate spin stop", () => {
       reel.getSnapshot().cells.some((cell) => cell.requestedState === "appear"),
     ).toBe(true);
     expect(reel.getSnapshot().spinning).toBe(true);
+    expect(lifecycle).toEqual([
+      "spin-started",
+      "stopped",
+      "stopped",
+      "stopped",
+      "stopped",
+      "stopped",
+      "stopped",
+      "all-stopped",
+      "spin-ended",
+    ]);
 
     let result = reel.update(0.42);
     if (!result.completed) result = reel.update(0);
     expect(result.completed).toBe(true);
     expect(reel.getSnapshot().completed).toBe(true);
+    expect(lifecycle.at(-1)).toBe("spin-ended");
+    dispose();
   });
 
   it("preserves already-landed appearance and only returns remaining positions", () => {

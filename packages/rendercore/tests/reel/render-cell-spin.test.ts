@@ -7,6 +7,7 @@ import {
 } from "../../src/reel/index.js";
 import { createRenderObject } from "../../src/presentation/index.js";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
+import { observeSpinLifecycle } from "../../src/reel/spin-lifecycle.js";
 
 describe("RenderCellSpin", () => {
   it("uses only -1 as a hole marker", () => {
@@ -243,6 +244,52 @@ describe("RenderCellSpin", () => {
     spin.update(0.05);
     await second;
     expect(spin.getSymbol({ x: 1, y: 0 }).getValue()).toBe(7);
+  });
+
+  it("groups concurrent CellSpin landings into one all-stopped event", async () => {
+    const spin = createSpin();
+    const events: string[] = [];
+    const dispose = observeSpinLifecycle(spin, (event) => {
+      events.push(
+        event.lifecycle === "spin-started"
+          ? event.lifecycle
+          : event.lifecycle === "all-stopped" ||
+              event.lifecycle === "spin-ended"
+            ? `${event.lifecycle}:${event.unitCount}`
+            : `${event.lifecycle}:${event.unit.x},${event.unit.y}`,
+      );
+    });
+    const first = spin.roll(
+      { x: 0, y: 0 },
+      { code: 2 },
+      { durationMs: 100, minimumSpinCycles: 1 },
+    );
+    const second = spin.roll(
+      { x: 1, y: 0 },
+      { code: 1 },
+      { durationMs: 150, minimumSpinCycles: 1 },
+    );
+
+    spin.update(0.1);
+    await first;
+    expect(events).not.toContain("all-stopped:2");
+    spin.update(0.05);
+    await second;
+    expect(events).toEqual([
+      "spin-started",
+      "started:0,0",
+      "started:1,0",
+      "stopped:0,0",
+      "stopped:1,0",
+      "all-stopped:2",
+      "spin-ended:2",
+    ]);
+
+    events.length = 0;
+    spin.start({ x: 0, y: 1 });
+    spin.cancel({ x: 0, y: 1 });
+    expect(events).toEqual(["spin-started", "started:0,1"]);
+    dispose();
   });
 
   it("lands CellSpin on the shared empty symbol", async () => {

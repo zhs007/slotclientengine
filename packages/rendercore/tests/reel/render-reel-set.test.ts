@@ -8,6 +8,7 @@ import {
   createReelSpinPlan,
   createReelSymbolRegistry,
 } from "../../src/reel/index.js";
+import { observeSpinLifecycle } from "../../src/reel/spin-lifecycle.js";
 import type {
   AwaitableVisibleSymbolPresentationTarget,
   VisibleSymbolPresentationTarget,
@@ -23,6 +24,67 @@ import {
 } from "./helpers.js";
 
 describe("RenderReelSet", () => {
+  it("reports exact start, stop, and final-stop boundaries", () => {
+    const reels = createBasicReels();
+    const reelSet = new RenderReelSet({
+      reels,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reelSet.resetToVisibleScene(
+      [
+        [1, 2, 1],
+        [2, 1, 2],
+      ],
+      [0, 0],
+    );
+    const events: string[] = [];
+    const dispose = observeSpinLifecycle(reelSet, (event) => {
+      events.push(
+        event.lifecycle === "spin-started"
+          ? event.lifecycle
+          : event.lifecycle === "all-stopped" ||
+              event.lifecycle === "spin-ended"
+            ? `${event.lifecycle}:${event.unitCount}`
+            : `${event.lifecycle}:${event.unit.x}`,
+      );
+    });
+
+    reelSet.spin(
+      createReelSpinPlan({
+        reels,
+        finalYs: [2, 3],
+        visibleRows: 3,
+        minimumSpinCycles: 1,
+        baseDurationMs: 100,
+        speedSymbolsPerSecond: 100,
+        startDelayMs: 30,
+        stopDelayMs: 20,
+      }),
+    );
+    reelSet.update(0.5);
+
+    expect(events.filter((event) => event.startsWith("started:"))).toEqual([
+      "started:0",
+      "started:1",
+    ]);
+    expect(events.filter((event) => event.startsWith("stopped:"))).toEqual([
+      "stopped:0",
+      "stopped:1",
+    ]);
+    expect(events[0]).toBe("spin-started");
+    expect(events.slice(-2)).toEqual(["all-stopped:2", "spin-ended:2"]);
+
+    events.length = 0;
+    reelSet.startContinuous({
+      direction: "forward",
+      speedSymbolsPerSecond: 20,
+    });
+    reelSet.cancelContinuous();
+    expect(events).toEqual(["spin-started", "started:0", "started:1"]);
+    dispose();
+  });
+
   it("reuses the no-event update result while idle", () => {
     const reelSet = new RenderReelSet({
       reels: createBasicReels(),

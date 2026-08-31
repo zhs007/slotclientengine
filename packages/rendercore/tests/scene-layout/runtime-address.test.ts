@@ -213,6 +213,147 @@ describe("Game Layout runtime address", () => {
     controller.destroy();
   });
 
+  it("publishes spin lifecycle catalogs by render mode without duplicates", () => {
+    const createSource = (
+      symbolPackages: Record<
+        string,
+        { reel: "main"; reelSet: string; renderMode: "standard" | "grid-cell" }
+      >,
+    ) =>
+      ({
+        manifest: {
+          nodes: [],
+          main: { columns: 2, rows: 2 },
+          symbolPackages,
+          popups: {},
+          gameModes: { modes: [], transitions: [] },
+          runtimeResources: {},
+        },
+        symbolPackages: Object.fromEntries(
+          Object.keys(symbolPackages).map((id) => [
+            id,
+            { symbols: ["WL"], states: ["normal"] },
+          ]),
+        ),
+        popupManifests: {},
+      }) as any;
+
+    const standard = compileGameLayoutRuntimeEventCatalog(
+      createSource({
+        base: { reel: "main", reelSet: "base", renderMode: "standard" },
+        free: { reel: "main", reelSet: "free", renderMode: "standard" },
+      }),
+    );
+    const standardSpinAddresses = standard.entries
+      .filter(({ family }) => family === "spin-lifecycle")
+      .map(({ descriptor }) => descriptor.address);
+    expect(standardSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/reel-spin/x/*/lifecycle/started",
+    );
+    expect(standardSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/reel-spin/lifecycle/started",
+    );
+    expect(standardSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/reel-spin/lifecycle/ended",
+    );
+    expect(standardSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/reel-spin/lifecycle/all-stopped",
+    );
+    expect(standardSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/cell-spin/x/*/y/*/lifecycle/stopped",
+    );
+    expect(
+      standardSpinAddresses.some((address) =>
+        address.includes("/spin/grid-cell/"),
+      ),
+    ).toBe(false);
+    expect(new Set(standardSpinAddresses).size).toBe(
+      standardSpinAddresses.length,
+    );
+
+    const gridCell = compileGameLayoutRuntimeEventCatalog(
+      createSource({
+        base: { reel: "main", reelSet: "base", renderMode: "grid-cell" },
+      }),
+    );
+    const gridSpinAddresses = gridCell.entries
+      .filter(({ family }) => family === "spin-lifecycle")
+      .map(({ descriptor }) => descriptor.address);
+    expect(gridSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/grid-cell/x/1/y/*/lifecycle/started",
+    );
+    expect(gridSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/grid-cell/x/*/y/1/lifecycle/stopped",
+    );
+    expect(gridSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/grid-cell/lifecycle/started",
+    );
+    expect(gridSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/grid-cell/lifecycle/ended",
+    );
+    expect(gridSpinAddresses).toContain(
+      "gamelayout:/reel/main/spin/grid-cell/lifecycle/all-stopped",
+    );
+    expect(
+      gridSpinAddresses.some((address) => address.includes("/spin/reel-spin/")),
+    ).toBe(false);
+  });
+
+  it("dispatches exact spin occurrences to coordinate wildcards", () => {
+    const controller = createGameLayoutRuntimeAddresses(
+      {
+        manifest: {
+          nodes: [],
+          main: { columns: 2, rows: 2 },
+          symbolPackages: {
+            base: { reel: "main", reelSet: "base", renderMode: "grid-cell" },
+          },
+          gameModes: { modes: [], transitions: [] },
+        },
+        symbolPackages: {
+          base: {
+            symbolManifest: { symbols: { WL: {} } },
+            statePreset: {
+              defaultState: "normal",
+              states: [{ id: "normal", phase: "stable", playback: "loop" }],
+            },
+          },
+        },
+        popupPackages: {},
+      } as any,
+      {} as any,
+    );
+    const address = (x: number | "*", y: number | "*") =>
+      formatGameLayoutRuntimeAddress(
+        "reel",
+        "main",
+        "spin",
+        "grid-cell",
+        "x",
+        String(x),
+        "y",
+        String(y),
+        "lifecycle",
+        "stopped",
+      );
+    const exact = address(1, 0);
+    const received: string[] = [];
+    const disposers = [
+      exact,
+      address(1, "*"),
+      address("*", 0),
+      address("*", "*"),
+    ].map((candidate) =>
+      controller.addresses.bind(candidate, (event) =>
+        received.push(event.address),
+      ),
+    );
+    controller.emit(exact, { x: 1, y: 0 });
+    expect(received).toEqual([exact, exact, exact, exact]);
+    for (const dispose of disposers) dispose();
+    controller.destroy();
+  });
+
   it("uses the same pure event catalog as the runtime resolver", () => {
     const manifest = {
       nodes: [

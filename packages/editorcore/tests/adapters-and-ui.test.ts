@@ -446,6 +446,43 @@ describe("default adapters", () => {
     expect(catalog.entries.some(({ family }) => family === "variant")).toBe(
       true,
     );
+    expect(
+      catalog.entries.find(
+        ({ descriptor }) =>
+          descriptor.address ===
+          "gamelayout:/reel/main/spin/reel-spin/x/*/lifecycle/started",
+      ),
+    ).toMatchObject({
+      family: "spin-lifecycle",
+      facets: [
+        { key: "reel", value: "main" },
+        { key: "spin", value: "reel-spin" },
+        { key: "scope", value: "all" },
+        { key: "lifecycle", value: "started" },
+      ],
+    });
+    expect(
+      catalog.entries.some(
+        ({ descriptor }) =>
+          descriptor.address ===
+          "gamelayout:/reel/main/spin/cell-spin/lifecycle/all-stopped",
+      ),
+    ).toBe(true);
+    expect(
+      catalog.entries.find(
+        ({ descriptor }) =>
+          descriptor.address ===
+          "gamelayout:/reel/main/spin/reel-spin/lifecycle/started",
+      ),
+    ).toMatchObject({
+      family: "spin-lifecycle",
+      facets: [
+        { key: "reel", value: "main" },
+        { key: "spin", value: "reel-spin" },
+        { key: "scope", value: "spin" },
+        { key: "lifecycle", value: "started" },
+      ],
+    });
 
     const host = document.createElement("div");
     document.body.append(host);
@@ -465,6 +502,7 @@ describe("default adapters", () => {
     rootSelect.dispatchEvent(new Event("change", { bubbles: true }));
     await flush();
     click(required(host, '[data-event-action="add"]'));
+    expect(host.textContent).toContain("Spin 生命周期");
     expect(host.textContent).toContain("Symbol 状态");
     expect(host.textContent).toContain("批量图标状态");
     pickEventChoice(host, "symbol-state", "family");

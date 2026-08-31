@@ -282,6 +282,12 @@ gamelayout:/mode/<id>/state/<displayed|stable>/<entered|exited>
 gamelayout:/transition/<from>/<to>/lifecycle/<started|switched|ended|failed>
 gamelayout:/node/<id>/animation/lifecycle/<started|ended>
 gamelayout:/resource/spine/<key>/animation/lifecycle/<started|ended>
+gamelayout:/reel/main/spin/reel-spin/lifecycle/<started|ended>
+gamelayout:/reel/main/spin/reel-spin/x/<x|*>/lifecycle/<started|stopped>
+gamelayout:/reel/main/spin/reel-spin/lifecycle/all-stopped
+gamelayout:/reel/main/spin/<grid-cell|cell-spin>/lifecycle/<started|ended>
+gamelayout:/reel/main/spin/<grid-cell|cell-spin>/x/<x|*>/y/<y|*>/lifecycle/<started|stopped>
+gamelayout:/reel/main/spin/<grid-cell|cell-spin>/lifecycle/all-stopped
 ```
 
 mode 的 `displayed` 表示 target scene 已提交，`stable` 表示整个 transition 已结束。Spine `started`
@@ -289,6 +295,17 @@ mode 的 `displayed` 表示 target scene 已提交，`stable` 表示整个 trans
 Popup tier 名来自 exact manifest（例如 `bigwin`、`megawin`），shared runtime 不维护业务别名。
 
 package runtime 首次 `init()` 成功后也会为 initial mode 发布 `displayed/entered`，随后发布 `stable/entered`；失败或 rollback 不发布半初始化 occurrence。Scene Layout v5 的 event audio 只消费这份统一 catalog 和 occurrence，不反向生成 audio-track lifecycle event，因此不会形成递归触发族。解锁前的 loop start 保留 intent，once occurrence 不补播。
+
+无坐标的 Spin lifecycle `started` 在本批 spin 建立时发布一次；带坐标的 `started` 在对应轴或 cell
+真正进入滚动后发布，`stopped` 在 authoritative target 已经提交、对应 `getSymbol()` 可读时发布。
+`all-stopped` 紧跟本批最后一个参与单元的 `stopped`，无坐标 `ended` 随后发布；两者都不会等待
+grid-cell 的 landing appear、dimming 或其它收尾表现；cancel、reset、destroy 和失败不会伪造
+`stopped/all-stopped/ended`。standard Symbols binding 暴露 `reel-spin`，grid-cell binding 暴露
+`grid-cell`，任一 main Symbols binding 都暴露 `cell-spin`。同一 render mode 的多个 binding 只生成一份地址。
+
+ReelSpin 的 exact 轴 occurrence 同时派发到 `x/*`；GridCell/CellSpin exact cell occurrence 同时派发到
+`x/y`、`x/*`、`*/y`、`*/*`。通配符 listener 收到的 `event.address` 仍是实际 exact occurrence，
+`detail.x/detail.y` 也是实际坐标，不会改写为 `*`。
 
 Symbol instance 直接属于 address，不通过 `bind()`/`wait()` 的额外参数传递：
 
@@ -405,6 +422,8 @@ facets；该过程不创建 Pixi Application、player、texture、Object URL 或
 EditorCore 的 event group dialog 只把 catalog facets 用作渐进式筛选，最终保存的仍是 exact canonical address。
 Symbol 的全部、指定列、指定行和指定 cell 分别选择 catalog 已有的 `*/*`、`x/*`、`*/y`、`x/y` entry；selector
 不会变成 `bind()/wait()` 的额外参数，也不会生成 catalog 外的组合。
+Spin lifecycle 使用同一坐标筛选合同：ReelSpin 可选具体轴或全部轴，GridCell/CellSpin 可选具体 cell、列、行或
+全部 cell；`all-stopped` 是独立的全体边界，不与单元 `stopped` 合并。
 
 Symbol 状态包含两类互不替代的 event：
 

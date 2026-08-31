@@ -15,6 +15,9 @@ Game Layout event group 使用独立的 `mountEditorGameLayoutEventDialog()`。�
 `game-layout` root，并从该 root 的完整 ZIP closure 编译候选；具体 node、Symbol、state、Popup、mode、坐标和
 lifecycle 不由 EditorCore 预置。Dialog 左侧维护有序 event 列表，右侧一次只展开一个 catalog facet；候选较多时
 提供当前层搜索和可回退 breadcrumb，避免多层树状下拉。
+`spin-lifecycle` 与其它 family 一样完全来自 shared catalog；转轮类型、具体轴/cell、列/行/全体 wildcard 和
+单元 started/stopped、整体 started/ended、all-stopped 只按 catalog 的 reel/spin/scope/x/y/lifecycle facets 展示，
+不解析 address 猜测。
 
 只需要选择一个 exact event 的宿主使用 `mountEditorGameLayoutEventPickerDialog()`。它复用相同的 source、catalog
 和渐进 facet 选择器，但不显示 event 组列表；确认后只返回一个 immutable event item。

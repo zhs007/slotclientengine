@@ -133,6 +133,13 @@ active `ReelSpinSession` 的 `SpinningReel.setRollingSpeed()` 只调整仍处于
 单个 session reel 的 `land()` resolve 后，该列立即成为 settled occurrence，可在其它 session reels仍滚动时通过
 `getSymbol()`/`replaceSymbols()`读取或原子替换；replacement batch只要包含尚未落停的目标列就完整失败。
 
+Scene Layout 为 ReelSpin、legacy GridCell 与 CellSpin 统一发布 `spin-lifecycle` event。单元 `started`
+对应真实滚动开始，`stopped` 对应 authoritative target 已提交；最后一个参与单元落定后立即发布一次
+`all-stopped`，不等待 grid-cell 的 appear/dimming。无坐标的整体 `started` 在本批 spin 建立时发布一次，
+无坐标的 `ended` 紧随成功完成的 `all-stopped` 发布。ReelSpin 支持 exact 轴与 `x/*`，两类 cell spin
+支持 exact cell、列、行、全体通配；通配订阅收到的 occurrence 仍保留实际 exact address/坐标。
+取消、reset、destroy 或失败不会补发 stopped/all-stopped/ended。
+
 `getSymbolArea("main")` 返回 standard reel 与 Crave legacy grid-cell 共同的 `PresentableSymbolArea`，公开
 `getSymbol()`、`bottom|top|win` 安全图层和 `present(async context => ...)`。`getReelArea("main")` 只返回
 standard reel 的第一层 `ReelArea` façade，并额外公开最高优先级

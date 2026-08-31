@@ -64,7 +64,7 @@
 
 ## Game Layout Event
 
-- EditorCore 的 Game Layout event selector 直接消费 RenderCore shared catalog，并把 `symbol-state` 与 `symbols-state-batch` 显示为两个独立 family；Editordemo 与 Game Layout Editor 不维护 app-local event family 表或按 address 猜测标签。
+- EditorCore 的 Game Layout event selector 直接消费 RenderCore shared catalog，并把 `symbol-state`、`symbols-state-batch` 与 `spin-lifecycle` 显示为独立 family；Spin family 的整体/单元范围及 reel/spin/scope/x/y/lifecycle 只能来自 catalog facets。Editordemo 与 Game Layout Editor 不维护 app-local event family 表或按 address 猜测标签。
 
 ## Symbols Editor
 

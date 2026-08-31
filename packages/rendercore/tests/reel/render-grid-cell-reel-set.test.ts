@@ -18,6 +18,7 @@ import {
 import { createRenderObject } from "../../src/presentation/index.js";
 import { compileSlotCascadeFacts } from "@slotclientengine/logiccore";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
+import { observeSpinLifecycle } from "../../src/reel/spin-lifecycle.js";
 
 const INITIAL_SCENE = Object.freeze([
   Object.freeze([1, 0, 2]),
@@ -42,6 +43,36 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("RenderGridCellReelSet", () => {
+  it("reports cell landing before post-landing presentation completes", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const events: string[] = [];
+    const dispose = observeSpinLifecycle(reelSet, (event) => {
+      events.push(
+        event.lifecycle === "spin-started"
+          ? event.lifecycle
+          : event.lifecycle === "all-stopped" ||
+              event.lifecycle === "spin-ended"
+            ? `${event.lifecycle}:${event.unitCount}`
+            : `${event.lifecycle}:${event.unit.x},${event.unit.y}`,
+      );
+    });
+
+    reelSet.spin(createPlan());
+    const result = reelSet.update(1);
+
+    expect(events.filter((event) => event.startsWith("started:"))).toHaveLength(
+      6,
+    );
+    expect(events.filter((event) => event.startsWith("stopped:"))).toHaveLength(
+      6,
+    );
+    expect(events[0]).toBe("spin-started");
+    expect(events.slice(-2)).toEqual(["all-stopped:6", "spin-ended:6"]);
+    expect(result.landedCells).toHaveLength(6);
+    dispose();
+  });
+
   it("presents owned render objects through the shared symbol-area surface", async () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);

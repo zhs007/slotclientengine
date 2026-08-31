@@ -58,6 +58,10 @@ import {
   type RenderReelSymbolStateTransition,
 } from "../reel/index.js";
 import {
+  observeSpinLifecycle,
+  type SpinLifecycleEvent,
+} from "../reel/spin-lifecycle.js";
+import {
   createSymbolPackageReelRegistryFromCatalog,
   createSymbolPackageValueControllerFactory,
   type SymbolCatalogModel,
@@ -482,6 +486,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #mainReelSceneCommitted = false;
   readonly #mainReelOverlays = new Set<Container>();
   readonly #mainReelCellSpins = new Set<ActiveMainReelCellSpinSession>();
+  readonly #disposeSpinLifecycleObservers = new Set<() => void>();
   #activeSymbolPackageId: string | null = null;
   #stableSymbolPackageId: string | null = null;
   #targetSymbolPackageId: string | null = null;
@@ -814,6 +819,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
                     "Injected grid-cell reel requires a grid-cell symbol binding.",
                   );
                 this.#reel = this.#createGridCellReel!();
+                this.observeMainReelSpin(this.#reel, "grid-cell");
                 await this.prepareReelPresentation(this.#reel);
                 this.assertAlive();
               }),
@@ -1431,6 +1437,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     );
     let spin: RenderCellSpin | null = null;
     let detach: (() => void) | null = null;
+    let disposeSpinLifecycle: (() => void) | null = null;
     try {
       spin = createRenderCellSpin({
         reels,
@@ -1457,6 +1464,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           ? {}
           : { bounceStrength: options.bounceStrength }),
       });
+      disposeSpinLifecycle = this.observeMainReelSpin(spin, "cell-spin");
       detach = this.attachMainReelOverlay(spin);
       let active = true;
       const session: ActiveMainReelCellSpinSession = {
@@ -1465,6 +1473,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           if (!active) return;
           active = false;
           this.#mainReelCellSpins.delete(session);
+          disposeSpinLifecycle?.();
           detach?.();
           spin?.destroy();
         },
@@ -1475,6 +1484,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         destroy: session.destroy,
       });
     } catch (error) {
+      disposeSpinLifecycle?.();
       detach?.();
       spin?.destroy();
       throw asSceneLayoutError(error);
@@ -3030,6 +3040,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    for (const dispose of [...this.#disposeSpinLifecycleObservers]) dispose();
     this.#publishedVariantId = null;
     activeAwardSnapshotReaders.delete(this);
     gameModeSnapshotReaders.delete(this);
@@ -4574,7 +4585,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     );
     const symbolStateObserver = this.createSymbolStateObserver(bindingId);
     if (binding.renderMode === "standard") {
-      return new RenderReelSet({
+      const reel = new RenderReelSet({
         reels,
         registry,
         layout: createReelLayout({
@@ -4604,8 +4615,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             }
           : {}),
       });
+      this.observeMainReelSpin(reel, "reel-spin");
+      return reel;
     }
-    return new RenderGridCellReelSet({
+    const reel = new RenderGridCellReelSet({
       reels,
       registry,
       columns: geometry.columns,
@@ -4642,6 +4655,89 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       occurrenceEffectPlayerFactory:
         createSceneLayoutOccurrenceEffectPlayerFactory(this.#resource),
     });
+    this.observeMainReelSpin(reel, "grid-cell");
+    return reel;
+  }
+
+  private observeMainReelSpin(
+    owner: RenderReelSet | RenderGridCellReelSet | RenderCellSpin,
+    spin: "reel-spin" | "grid-cell" | "cell-spin",
+  ): () => void {
+    const disposeObserver = observeSpinLifecycle(owner, (event) =>
+      this.emitMainReelSpinLifecycle(spin, event),
+    );
+    let active = true;
+    const dispose = () => {
+      if (!active) return;
+      active = false;
+      this.#disposeSpinLifecycleObservers.delete(dispose);
+      disposeObserver();
+    };
+    this.#disposeSpinLifecycleObservers.add(dispose);
+    return dispose;
+  }
+
+  private emitMainReelSpinLifecycle(
+    spin: "reel-spin" | "grid-cell" | "cell-spin",
+    event: SpinLifecycleEvent,
+  ): void {
+    const segments = ["reel", "main", "spin", spin] as const;
+    if (
+      event.lifecycle === "spin-started" ||
+      event.lifecycle === "spin-ended"
+    ) {
+      const lifecycle =
+        event.lifecycle === "spin-started" ? "started" : "ended";
+      this.#addressController.emit(
+        formatGameLayoutRuntimeAddress(...segments, "lifecycle", lifecycle),
+        () => ({
+          eventFamily: "spin-lifecycle",
+          reelId: "main",
+          spin,
+          lifecycle,
+          ...(event.lifecycle === "spin-ended"
+            ? { unitCount: event.unitCount }
+            : {}),
+        }),
+      );
+      return;
+    }
+    const address =
+      event.lifecycle === "all-stopped"
+        ? formatGameLayoutRuntimeAddress(
+            ...segments,
+            "lifecycle",
+            event.lifecycle,
+          )
+        : event.unit.y === undefined
+          ? formatGameLayoutRuntimeAddress(
+              ...segments,
+              "x",
+              String(event.unit.x),
+              "lifecycle",
+              event.lifecycle,
+            )
+          : formatGameLayoutRuntimeAddress(
+              ...segments,
+              "x",
+              String(event.unit.x),
+              "y",
+              String(event.unit.y),
+              "lifecycle",
+              event.lifecycle,
+            );
+    this.#addressController.emit(address, () => ({
+      eventFamily: "spin-lifecycle",
+      reelId: "main",
+      spin,
+      lifecycle: event.lifecycle,
+      ...(event.lifecycle === "all-stopped"
+        ? { unitCount: event.unitCount }
+        : {
+            x: event.unit.x,
+            ...(event.unit.y === undefined ? {} : { y: event.unit.y }),
+          }),
+    }));
   }
 
   private async prepareTargetReelEntry(

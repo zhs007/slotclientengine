@@ -812,6 +812,7 @@ function facetLabel(value: string): string {
 const FAMILY_LABELS: Readonly<Record<string, string>> = Object.freeze({
   variant: "画面变体",
   "node-animation": "节点动画",
+  "spin-lifecycle": "Spin 生命周期",
   "symbol-state": "Symbol 状态",
   "symbols-state-batch": "批量图标状态",
   "mode-state": "游戏模式状态",
@@ -829,6 +830,8 @@ const FACET_LABELS: Readonly<Record<string, string>> = Object.freeze({
   event: "Event",
   node: "节点",
   animation: "动画",
+  reel: "转轮",
+  spin: "Spin 类型",
   lifecycle: "生命周期",
   "symbol-package": "Symbol 包",
   symbol: "Symbol",
