@@ -4,6 +4,8 @@
 
 资源工作区只有一个支持多文件和 ZIP 的“导入资源”入口。image、Spine、VNI、standalone ImgNumber ZIP 与已有 Symbols ZIP 都进入同一扁平 filename-key namespace；Picker 只提交明确的 filename key/typed descriptor，不从 symbol code 或文件名猜绑定。
 
+toolbar 的“新建（game config）”会建立全新项目；已有项目需要采用新的公开配置时，在“项目配置”中使用“更新 gameconfig.json”。更新会先 strict 解析完整 JSON，再按 exact symbol name 展示保留、新增、删除和 numeric code 变化，用户确认且项目 revision 未变化后才原子提交。同名 symbol 保留 state、resource、value、ImgNumber、cascade、include、scale 与 priority；新增 symbol 使用当前 cellSize 建立 explicit-empty normal；同 code 改名仍按删除旧名、增加新名处理，不猜 rename。删除项的资源 bytes 留在 library 供后续复用，但没有其它 typed owner 时不会进入导出 closure。project id、cellSize 和项目状态定义不从新文件名或 config 自动改写；ZIP 内唯一入口仍固定为 `gameconfig.json`。
+
 symbol code、state、lifecycle、scale、renderPriority、value/cascade 配置仍是业务身份。image state 引用图片 key；Spine 在 UI 中只选择 skeleton 与 atlas，atlas 的全部 page 图片由结构化引用自动确定；VNI 引用 project key；image-string dependency 只记录 root key、manifest 与 closure keys，真实 bytes 只存在全局 asset library。
 
 项目状态定义为每个 once state 显式编辑 `afterComplete`：`return-to-default` 完成后回 normal/default，`terminal` 保持终态；stable state 不显示该字段。打开旧 v1/v2 ZIP 时统一由 rendercore upgrader 迁移，新导出只写完整 v3。音乐音效统一由 Game Layout Event 驱动，因此 Symbols Editor 不再导入、配置或预览 package-local audio。含旧 effect/cue 的合法 ZIP 会先完整 strict 校验，再移除旧配置和仅由其引用的 bytes 并显示摘要；canonical v3 仍写 schema 要求的空 `audio.effects`，且不写任何 `audioCues`。

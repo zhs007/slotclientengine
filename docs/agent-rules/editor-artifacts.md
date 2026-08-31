@@ -68,6 +68,7 @@
 
 ## Symbols Editor
 
+- Symbols Editor 的项目页可用一份完整公开 game config 原子替换当前唯一 config：先走共享 strict parser，再按 exact symbol name review/确认；同名 draft 只更新 numeric code并保留全部 authoring，新增项建 canonical explicit-empty draft，删除或同 code 改名不猜迁移、不保留 tombstone。删除项原来使用的 library bytes 不自动 GC，无其它 typed owner 时由 exact export closure 排除；project id、cellSize 和状态定义不从新 config 或文件名派生。
 - 内层 symbol-state-textures manifest 的 canonical authoring 版本为 v3 并沿用 v2 state lifecycle。Symbols Editor 不拥有 audio asset、effect/cue draft 或 preview audio；打开含旧 audio 的合法 v1–v3 package 时必须先走 rendercore 的完整 strict parser/resource validation，再删除旧配置和仅由其引用的 bytes 并显示摘要。新导出恒写 v3，schema 必需的 `audio.effects` 恒为空且不写任何 `audioCues`。
 - Popup Editor 不拥有 tier/segment audio draft、audio import 或 preview audio。打开含旧 audio 的合法 v1–v9 package 时先完成 source schema、map/hash、exact closure 与资源 prepare，再删除旧 effect/cue 和仅由其引用的 bytes并显示摘要；新导出 latest schema 必需的 audio container恒为空。RenderCore/AudioCore 的历史 parser、upgrader 与 runtime compatibility 不因 owner editor 停止 authoring 而删除或放宽。
 - `apps/symbolseditor` 只拥有 browser editing/IO/UI、typed draft transaction、dependency library、资源引用图、per-symbol state assignment、value/cascade 表单和固定 all-symbol single-state preview。普通 symbol 的 shared ImgNumber slot 候选取全部 top-level Spine state skeleton slot 交集，value-managed symbol 取全部 tier skeleton 交集；每个 value-managed symbol 只有一个 preview value，由 threshold 自动命中档位。该值只属于 UI session，不得进入 manifest/ZIP。

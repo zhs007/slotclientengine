@@ -62,6 +62,14 @@ const gameConfig = {
   symbolCodes: { B: 2, A: 1 },
   reels: { main: [[1, 2]] },
 };
+const replacementGameConfig = {
+  paytable: {
+    "5": { code: 5, symbol: "A", pays: [2] },
+    "2": { code: 2, symbol: "C", pays: [3] },
+  },
+  symbolCodes: { A: 5, C: 2 },
+  reels: { replacement: [[2, 5]] },
+};
 
 describe("symbols editor app shell", () => {
   let root: HTMLElement;
@@ -636,6 +644,113 @@ describe("symbols editor app shell", () => {
     ).not.toBeNull();
   });
 
+  it("updates game config from the project workspace after an exact review", async () => {
+    await createProject(root);
+    click(root, '[data-workspace-tab][data-tab-value="symbols"]');
+    click(root, '[data-edit-symbol="B"]');
+    click(root, '[data-workspace-tab][data-tab-value="project"]');
+    expect(root.textContent).toContain("test-game.json · 2 symbols");
+    expect(root.querySelector("[data-update-game-config]")).not.toBeNull();
+    const confirm = vi.fn((_message: string) => true);
+    vi.stubGlobal("confirm", confirm);
+
+    await selectGameConfigUpdate(
+      root,
+      replacementGameConfig,
+      "replacement.json",
+    );
+
+    expect(confirm).toHaveBeenCalledOnce();
+    const review = String(confirm.mock.calls[0]?.[0]);
+    expect(review).toContain("新增 (1)：C");
+    expect(review).toContain("删除 (1)：B");
+    expect(review).toContain("A: 1 → 5");
+    expect(root.querySelector("[data-feedback]")?.textContent).toContain(
+      "gameconfig.json 已更新",
+    );
+    expect(root.textContent).toContain("replacement.json · 2 symbols");
+
+    click(root, '[data-workspace-tab][data-tab-value="symbols"]');
+    expect(root.querySelector('[data-edit-symbol="B"]')).toBeNull();
+    expect(root.querySelector('[data-edit-symbol="C"]')).not.toBeNull();
+    expect(
+      root
+        .querySelector('[data-edit-symbol="A"] .symbol-code')
+        ?.textContent?.trim(),
+    ).toBe("5");
+    expect(
+      root
+        .querySelector('[data-edit-symbol="C"]')
+        ?.getAttribute("aria-current"),
+    ).toBe("true");
+  });
+
+  it("keeps the current game config when update review is cancelled or invalid", async () => {
+    await createProject(root);
+    click(root, '[data-workspace-tab][data-tab-value="project"]');
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+
+    await selectGameConfigUpdate(
+      root,
+      replacementGameConfig,
+      "cancelled.json",
+      "已取消 gameconfig.json 更新",
+    );
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(root.textContent).toContain("test-game.json · 2 symbols");
+
+    await selectGameConfigUpdate(
+      root,
+      "{not-json",
+      "invalid.json",
+      "Expected property",
+    );
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(root.textContent).toContain("test-game.json · 2 symbols");
+  });
+
+  it("rejects a stale game config update after the project revision changes", async () => {
+    await createProject(root);
+    click(root, '[data-workspace-tab][data-tab-value="project"]');
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
+    let resolveText!: (value: string) => void;
+    const file = new File(["pending"], "stale.json", {
+      type: "application/json",
+    });
+    vi.spyOn(file, "text").mockReturnValue(
+      new Promise((resolve) => {
+        resolveText = resolve;
+      }),
+    );
+    const input = root.querySelector<HTMLInputElement>(
+      "[data-update-game-config-input]",
+    )!;
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [file],
+    });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    const projectId =
+      root.querySelector<HTMLInputElement>("[data-project-id]")!;
+    projectId.value = "edited-while-reading";
+    projectId.dispatchEvent(new Event("change", { bubbles: true }));
+    resolveText(JSON.stringify(replacementGameConfig));
+
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-errors]")?.textContent).toContain(
+        "项目已变化",
+      ),
+    );
+    expect(root.textContent).toContain("test-game.json · 2 symbols");
+    expect(
+      root.querySelector<HTMLInputElement>("[data-project-id]")?.value,
+    ).toBe("edited-while-reading");
+  });
+
   it("keeps Value and Cascade compact until explicitly enabled", async () => {
     await createProject(root);
     click(root, '[data-workspace-tab][data-tab-value="symbols"]');
@@ -931,6 +1046,28 @@ async function createProject(root: HTMLElement): Promise<void> {
     expect(
       root.querySelector('[data-workspace-tab][aria-selected="true"]'),
     ).not.toBeNull(),
+  );
+}
+
+async function selectGameConfigUpdate(
+  root: HTMLElement,
+  value: unknown,
+  fileName: string,
+  expectedFeedback = "gameconfig.json 已更新",
+): Promise<void> {
+  const input = root.querySelector<HTMLInputElement>(
+    "[data-update-game-config-input]",
+  )!;
+  const contents = typeof value === "string" ? value : JSON.stringify(value);
+  Object.defineProperty(input, "files", {
+    configurable: true,
+    value: [new File([contents], fileName, { type: "application/json" })],
+  });
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await vi.waitFor(() =>
+    expect(
+      `${root.querySelector("[data-feedback]")?.textContent ?? ""}${root.querySelector("[data-errors]")?.textContent ?? ""}`,
+    ).toContain(expectedFeedback),
   );
 }
 

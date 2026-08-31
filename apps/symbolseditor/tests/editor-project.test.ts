@@ -14,6 +14,7 @@ import {
   getAssetReferences,
   getGameConfigSymbols,
   moveSymbolState,
+  prepareGameConfigUpdate,
   removeSymbolState,
   replaceAsset,
   setAllSymbolsIncluded,
@@ -184,6 +185,91 @@ describe("symbol editor typed project", () => {
         (definition: any) => definition.id === "remove",
       ),
     ).toMatchObject({ afterComplete: "terminal" });
+  });
+
+  it("prepares an exact-name game config update without discarding project resources", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "old-game.json",
+    });
+    project.id = "kept-project";
+    project.cellSize = { width: 192, height: 208 };
+    const kept = project.symbols.get("A")!;
+    kept.scale = 1.25;
+    kept.renderPriority = 7;
+    kept.included = false;
+    addSymbolState(project, "A", "win");
+    uploadAssetBatch(project, [{ path: "B.png", bytes: imageBytes() }]);
+    setStateVisual(project, "B", "normal", {
+      kind: "image",
+      imagePath: "B.png",
+    });
+    const updatedGameConfig = {
+      paytable: {
+        "7": { code: 7, symbol: "A", pays: [2] },
+        "2": { code: 2, symbol: "C", pays: [3] },
+      },
+      symbolCodes: { A: 7, C: 2 },
+      reels: { replacement: [[2, 7]] },
+    };
+
+    const prepared = prepareGameConfigUpdate(project, {
+      rawGameConfig: updatedGameConfig,
+      fileName: "replacement.json",
+    });
+
+    expect(prepared.summary).toEqual({
+      kept: ["A"],
+      added: ["C"],
+      removed: ["B"],
+      codeChanged: [{ symbol: "A", previousCode: 1, nextCode: 7 }],
+    });
+    expect(prepared.project).toMatchObject({
+      id: "kept-project",
+      cellSize: { width: 192, height: 208 },
+      gameConfigFileName: "replacement.json",
+      rawGameConfig: updatedGameConfig,
+    });
+    expect(prepared.project.symbols.get("A")).toMatchObject({
+      code: 7,
+      symbol: "A",
+      included: false,
+      scale: 1.25,
+      renderPriority: 7,
+      stateOrder: ["normal", "win"],
+    });
+    expect(prepared.project.symbols.get("C")).toMatchObject({
+      code: 2,
+      symbol: "C",
+      included: true,
+      scale: 1,
+      renderPriority: 0,
+      stateOrder: ["normal"],
+      states: new Map([["normal", { kind: "empty", width: 192, height: 208 }]]),
+    });
+    expect(prepared.project.symbols.has("B")).toBe(false);
+    expect(prepared.project.assetLibrary.records.has("B.png")).toBe(true);
+    expect(exportSnapshot(prepared.project).packageManifest.resources).toEqual(
+      [],
+    );
+    expect(project.gameConfigFileName).toBe("old-game.json");
+    expect(project.symbols.get("A")?.code).toBe(1);
+    expect(project.symbols.has("B")).toBe(true);
+  });
+
+  it("rejects an invalid replacement game config before changing the project", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "old-game.json",
+    });
+    expect(() =>
+      prepareGameConfigUpdate(project, {
+        rawGameConfig: { symbolCodes: { A: 1 } },
+        fileName: "invalid.json",
+      }),
+    ).toThrow();
+    expect(project.gameConfigFileName).toBe("old-game.json");
+    expect([...project.symbols.keys()]).toEqual(["A", "B"]);
   });
 
   it("compiles VNI playback from normal, once and loop state lifecycles", () => {
