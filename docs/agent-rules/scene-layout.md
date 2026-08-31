@@ -74,6 +74,7 @@
 - shared code 不硬编码 BaseGame/FreeGame/BonusGame、BG/FG、animation/event 名或业务字段。
 - production runtime 与 editor package inspection 必须共用唯一的纯 Game Layout event catalog compiler。editor inspector 只从 strict Layout、Symbols、Popup 和 audio manifest closure 返回 frozen descriptor/family/facets，不创建 renderer/player/browser resource；EditorCore 和 app 不解析 canonical address 重建第二份 event 语义表。
 - event catalog 必须把逐 occurrence `symbol-state` 与每 request 一次的 `symbols-state-batch` 作为两个可见 family；EditorCore、Editordemo 与 Game Layout Editor 均直接显示共享 catalog family，不按 address 字符串合并、隐藏或猜测 batch identity。
+- event catalog 的 `spin-lifecycle` family 只按实际 main Symbols render mode 暴露 ReelSpin 或 GridCell，并始终为可创建的 CellSpin 暴露整体 started/ended、exact/wildcard started/stopped 与 all-stopped；多 Symbols binding 不得重复地址。Editor 只消费 reel/spin/scope/x/y/lifecycle facets，不从 canonical address 反向猜事件语义。
 - event catalog 只暴露可驱动表现与音频的业务状态、动画和生命周期边界；mode BGM 与 audio music 自身的 started/stopped 不作为 event，不得形成音频驱动音频的递归触发族。`mode/<id>/state/stable/entered|exited` 是 event BGM 的标准开始/结束边界。
 
 ## Resource lifecycle

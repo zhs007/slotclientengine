@@ -107,16 +107,22 @@ describe("demo host", () => {
 });
 
 describe("demo Game Layout event dialog", () => {
-  it("shows occurrence and batch symbol-state as distinct event families", async () => {
+  it("shows symbol-state and spin lifecycle as distinct event families", async () => {
     const root = document.createElement("div");
     document.body.append(root);
-    const entry = (family: "symbol-state" | "symbols-state-batch") => {
+    const entry = (
+      family: "symbol-state" | "symbols-state-batch" | "spin-lifecycle",
+    ) => {
       const ownerAddress: `gamelayout:/${string}` =
-        "gamelayout:/symbol-package/base";
+        family === "spin-lifecycle"
+          ? "gamelayout:/reel/main"
+          : "gamelayout:/symbol-package/base";
       const address: `gamelayout:/${string}` =
-        family === "symbol-state"
-          ? "gamelayout:/symbol-package/base/symbol/A/instance/reel/main/x/0/y/0/state/win/entered"
-          : "gamelayout:/symbol-package/base/symbolsstatebatch/A/win";
+        family === "spin-lifecycle"
+          ? "gamelayout:/reel/main/spin/reel-spin/lifecycle/started"
+          : family === "symbol-state"
+            ? "gamelayout:/symbol-package/base/symbol/A/instance/reel/main/x/0/y/0/state/win/entered"
+            : "gamelayout:/symbol-package/base/symbolsstatebatch/A/win";
       return {
         descriptor: {
           address,
@@ -127,11 +133,19 @@ describe("demo Game Layout event dialog", () => {
           detail: { eventFamily: family },
         },
         family,
-        facets: [
-          { key: "symbol-package", value: "base" },
-          { key: "symbol", value: "A" },
-          { key: "state", value: "win" },
-        ],
+        facets:
+          family === "spin-lifecycle"
+            ? [
+                { key: "reel", value: "main" },
+                { key: "spin", value: "reel-spin" },
+                { key: "scope", value: "spin" },
+                { key: "lifecycle", value: "started" },
+              ]
+            : [
+                { key: "symbol-package", value: "base" },
+                { key: "symbol", value: "A" },
+                { key: "state", value: "win" },
+              ],
         dispatchAddresses: [address],
       };
     };
@@ -140,7 +154,11 @@ describe("demo Game Layout event dialog", () => {
       sources: [{ key: "layout.manifest.json", label: "Demo Layout" }],
       inspectCatalog: () => ({
         rootKey: "layout.manifest.json",
-        entries: [entry("symbol-state"), entry("symbols-state-batch")],
+        entries: [
+          entry("symbol-state"),
+          entry("symbols-state-batch"),
+          entry("spin-lifecycle"),
+        ],
       }),
       onConfirm() {},
     });
@@ -150,10 +168,11 @@ describe("demo Game Layout event dialog", () => {
       root.querySelector<HTMLSelectElement>("[data-event-root]")!;
     sourceSelect.value = "layout.manifest.json";
     sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
-    await expect.poll(() => root.textContent).toContain("2 个可侦听 event");
+    await expect.poll(() => root.textContent).toContain("3 个可侦听 event");
     root.querySelector<HTMLButtonElement>('[data-event-action="add"]')!.click();
     expect(root.textContent).toContain("Symbol 状态");
     expect(root.textContent).toContain("批量图标状态");
+    expect(root.textContent).toContain("Spin 生命周期");
     dialog.destroy();
   });
 });

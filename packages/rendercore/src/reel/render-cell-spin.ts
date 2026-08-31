@@ -20,6 +20,7 @@ import { ReelError } from "./errors.js";
 import { createReelLayout } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
 import { createSymbolPlayerPool } from "./symbol-player-pool.js";
+import { SpinLifecycleTracker } from "./spin-lifecycle.js";
 import type {
   SymbolArea,
   SymbolPosition,
@@ -193,6 +194,7 @@ export class RenderCellSpin extends Container implements CellSpin {
   readonly #pool: SymbolPlayerPool | null;
   readonly #cells: readonly RuntimeCell[];
   readonly #active = new Map<string, ActiveCell>();
+  readonly #spinLifecycle = new SpinLifecycleTracker(this);
   readonly #motionLayer = new Container();
   #activeMotion: ActiveCellMotion | null = null;
   readonly #occurrenceGenerations = new WeakMap<
@@ -520,6 +522,7 @@ export class RenderCellSpin extends Container implements CellSpin {
   ): Promise<void> {
     const cell = this.prepareCell(position, options.signal);
     const promise = this.createCompletion(cell, "roll", options.signal);
+    this.#spinLifecycle.begin([position]);
     try {
       this.bumpCellOccurrenceGeneration(cell);
       cell.reel.start(this.createAxisPlan(cell, options), {
@@ -527,7 +530,9 @@ export class RenderCellSpin extends Container implements CellSpin {
         targetVisiblePresentationValues: [target.value ?? null],
         ...(target.state ? { targetVisibleStates: [target.state] } : {}),
       });
+      this.#spinLifecycle.started(position);
     } catch (error) {
+      this.#spinLifecycle.cancel(position);
       this.failActive(cell, toError(error));
     }
     return promise;
@@ -536,6 +541,7 @@ export class RenderCellSpin extends Container implements CellSpin {
   start(position: SymbolPosition, options: CellRollStartOptions = {}): void {
     const cell = this.prepareCell(position, options.signal);
     const active = this.createActive(cell, "continuous", options.signal);
+    this.#spinLifecycle.begin([position]);
     try {
       this.bumpCellOccurrenceGeneration(cell);
       cell.reel.startContinuous({
@@ -548,7 +554,9 @@ export class RenderCellSpin extends Container implements CellSpin {
           ? {}
           : { localPhaseY: options.localPhaseY }),
       });
+      this.#spinLifecycle.started(position);
     } catch (error) {
+      this.#spinLifecycle.cancel(position);
       this.detachActive(active);
       throw error;
     }
@@ -579,6 +587,7 @@ export class RenderCellSpin extends Container implements CellSpin {
       });
     } catch (error) {
       if (cell.reel.isContinuousSpinning()) cell.reel.cancelContinuous();
+      this.#spinLifecycle.cancel(position);
       this.failActive(cell, toError(error));
     }
     return promise;
@@ -601,6 +610,7 @@ export class RenderCellSpin extends Container implements CellSpin {
         `Cell spin at (${position.x},${position.y}) was cancelled.`,
       ),
     );
+    this.#spinLifecycle.cancel(position);
   }
 
   getCell(position: SymbolPosition): CellRender {
@@ -842,6 +852,15 @@ export class RenderCellSpin extends Container implements CellSpin {
   }
 
   update(deltaSeconds: number): void {
+    try {
+      this.updateFrame(deltaSeconds);
+    } catch (error) {
+      this.#spinLifecycle.cancel();
+      throw error;
+    }
+  }
+
+  private updateFrame(deltaSeconds: number): void {
     this.assertAlive();
     assertValidDeltaSeconds(deltaSeconds);
     this.updateMotion(deltaSeconds);
@@ -851,11 +870,15 @@ export class RenderCellSpin extends Container implements CellSpin {
       try {
         result = cell.reel.update(deltaSeconds);
       } catch (error) {
-        if (active) this.failActive(cell, toError(error));
+        if (active) {
+          this.#spinLifecycle.cancel(cell.position);
+          this.failActive(cell, toError(error));
+        }
         throw error;
       }
       if (active && active.mode !== "continuous" && result.landed) {
         this.detachActive(active);
+        this.#spinLifecycle.stopped(cell.position);
         active.resolve?.();
       }
     }
@@ -863,6 +886,7 @@ export class RenderCellSpin extends Container implements CellSpin {
 
   override destroy(): void {
     if (this.#destroyed) return;
+    this.#spinLifecycle.cancel();
     this.cancelMotion(new ReelError("Cell occurrence motion was destroyed."));
     for (const active of [...this.#active.values()]) {
       this.detachActive(active);

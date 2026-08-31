@@ -2,6 +2,7 @@ import { Container, Graphics } from "pixi.js";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import { ReelError } from "./errors.js";
 import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
+import { SpinLifecycleTracker } from "./spin-lifecycle.js";
 import {
   normalizeGridCellReelOffsetMatrix,
   normalizeGridCellReelPhaseMatrix,
@@ -271,6 +272,7 @@ export class RenderGridCellReelSet
   readonly #startedCellsScratch: GridCellCoordinate[] = [];
   readonly #landedCellsScratch: GridCellCoordinate[] = [];
   readonly #activationCellsScratch: GridCellCoordinate[] = [];
+  readonly #spinLifecycle = new SpinLifecycleTracker(this);
   #spinPlan: GridCellReelSpinPlan | null = null;
   #spinReels: LogicReels | null = null;
   #continuousSpin: ActiveContinuousSpin | null = null;
@@ -433,6 +435,7 @@ export class RenderGridCellReelSet
       this.#columns,
       this.#rows,
     );
+    this.#spinLifecycle.cancel();
     this.#spinPlan = null;
     this.#spinReels = null;
     this.#continuousSpin = null;
@@ -575,6 +578,9 @@ export class RenderGridCellReelSet
       this.setCellClipMask(cell, false);
       this.syncCellRenderOrder(cell);
     }
+    this.#spinLifecycle.begin(
+      plan.cells.map(({ x, y }) => Object.freeze({ x, y })),
+    );
   }
 
   startContinuous(options: GridCellContinuousSpinOptions): void {
@@ -680,6 +686,9 @@ export class RenderGridCellReelSet
     };
     this.#spinStoppedImmediately = false;
     this.#elapsedMs = 0;
+    this.#spinLifecycle.begin(
+      positions.map(({ x, y }) => Object.freeze({ x, y })),
+    );
   }
 
   settleContinuous(
@@ -837,6 +846,7 @@ export class RenderGridCellReelSet
     this.#continuousSpin = null;
     this.#spinReels = null;
     this.#elapsedMs = 0;
+    this.#spinLifecycle.cancel();
   }
 
   isContinuousSpinning(): boolean {
@@ -881,6 +891,7 @@ export class RenderGridCellReelSet
       resetReelSlotSymbolsAndRequestLandingState(cell);
       cell.phase = "landed";
       cell.hasLandedThisSpin = true;
+      this.#spinLifecycle.stopped(cell.coordinate);
       cell.fadeOutElapsedMs = 0;
       cell.fadeOutStartAlpha = 0;
     }
@@ -946,6 +957,15 @@ export class RenderGridCellReelSet
   }
 
   update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
+    try {
+      return this.updateFrame(deltaSeconds);
+    } catch (error) {
+      this.#spinLifecycle.cancel();
+      throw error;
+    }
+  }
+
+  private updateFrame(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
     if (this.#areaPresentationFailure) {
       const failure = this.#areaPresentationFailure;
@@ -1007,6 +1027,7 @@ export class RenderGridCellReelSet
             });
             cell.phase = "spinning";
             cell.hasStartedThisSpin = true;
+            this.#spinLifecycle.started(cell.coordinate);
             this.setCellClipMask(cell, true);
             started.push(cell.coordinate);
           }
@@ -2814,6 +2835,7 @@ export class RenderGridCellReelSet
   }
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    this.#spinLifecycle.cancel();
     this.interruptAreaPresentation();
     for (const controller of this.#areaLayerControllers.values())
       controller.detachAll();
@@ -3272,7 +3294,10 @@ export class RenderGridCellReelSet
         }
       }
       this.updateCell(cell, previousElapsedMs, elapsedMs);
-      if (!hadStarted && cell.hasStartedThisSpin) started.push(cell.coordinate);
+      if (!hadStarted && cell.hasStartedThisSpin) {
+        started.push(cell.coordinate);
+        this.#spinLifecycle.started(cell.coordinate);
+      }
       if (!hadLanded && cell.hasLandedThisSpin) {
         if (effect) {
           const key = createEffectKey(
@@ -3287,6 +3312,7 @@ export class RenderGridCellReelSet
           }
         }
         landed.push(cell.coordinate);
+        this.#spinLifecycle.stopped(cell.coordinate);
         if (
           plan.activationGate &&
           cell.coordinate.x === plan.activationGate.x &&

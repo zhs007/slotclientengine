@@ -5,6 +5,7 @@ import { assertLayoutMatchesReels } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
 import { createSymbolPlayerPool } from "./symbol-player-pool.js";
 import { startSymbolStatePlaybackBatch } from "./symbol-state-playback.js";
+import { SpinLifecycleTracker } from "./spin-lifecycle.js";
 import { getRenderObjectAdapter } from "../presentation/render-object.js";
 import {
   createContainerRenderAnchor,
@@ -60,6 +61,7 @@ import type {
   RenderReelSetSpinOptions,
   RenderReelSetSnapshot,
   RenderReelSetUpdateResult,
+  RenderReelUpdateResult,
   SymbolPlayerPoolStats,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
@@ -154,6 +156,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   #startedAxesSnapshot: readonly number[] = EMPTY_REEL_AXES;
   #startedAxesSnapshotDirty = false;
   readonly #stoppedAxesScratch: number[] = [];
+  readonly #spinLifecycle = new SpinLifecycleTracker(this);
   #stableUpdateResult: RenderReelSetUpdateResult = IDLE_REEL_SET_UPDATE_RESULT;
   #stableUpdateStartedAxes: readonly number[] = EMPTY_REEL_AXES;
   #stableUpdateSpinning = false;
@@ -329,6 +332,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     if (this.#destroyed) return;
     this.bumpVisibleOccurrenceGenerations();
     this.#destroyed = true;
+    this.#spinLifecycle.cancel();
     this.interruptPresentation();
     for (const active of [...this.#atomicActive.values()])
       this.failAtomic(active, new ReelError("ReelSpin was destroyed."));
@@ -384,6 +388,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#elapsedMs = 0;
     this.replaceStartedAxes();
     this.#settlingContinuous = false;
+    this.#spinLifecycle.begin(plan.axes.map(({ x }) => ({ x })));
   }
 
   startContinuous(options: RenderReelSetContinuousSpinOptions): void {
@@ -414,6 +419,9 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.replaceStartedAxes(this.reels.map((reel) => reel.xIndex));
     this.#continuousSpinActive = true;
     this.#settlingContinuous = false;
+    this.#spinLifecycle.begin(this.reels.map(({ xIndex: x }) => ({ x })));
+    for (const reel of this.reels)
+      this.#spinLifecycle.started({ x: reel.xIndex });
     for (const symbol of previousSymbols) this.bumpOccurrenceGeneration(symbol);
   }
 
@@ -482,6 +490,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#settlingContinuous = false;
     this.#elapsedMs = 0;
     this.replaceStartedAxes();
+    this.#spinLifecycle.cancel();
   }
 
   isContinuousSpinning(): boolean {
@@ -489,6 +498,15 @@ export class RenderReelSet extends Container implements ReelSpin {
   }
 
   update(deltaSeconds: number): RenderReelSetUpdateResult {
+    try {
+      return this.updateFrame(deltaSeconds);
+    } catch (error) {
+      this.#spinLifecycle.cancel();
+      throw error;
+    }
+  }
+
+  private updateFrame(deltaSeconds: number): RenderReelSetUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
     if (this.#presentationFailure) {
       const failure = this.#presentationFailure;
@@ -534,7 +552,13 @@ export class RenderReelSet extends Container implements ReelSpin {
         const activeEnd = Math.min(this.#elapsedMs, axisPlan.stopAtMs);
         reelDeltaSeconds = Math.max(0, activeEnd - activeStart) / 1000;
       }
-      const result = reel.update(reelDeltaSeconds);
+      let result: RenderReelUpdateResult;
+      try {
+        result = reel.update(reelDeltaSeconds);
+      } catch (error) {
+        this.#spinLifecycle.cancel();
+        throw error;
+      }
       const atomic = this.#atomicActive.get(reel.xIndex);
       if (atomic && atomic.mode !== "continuous" && result.landed) {
         this.detachAtomic(atomic);
@@ -542,6 +566,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       }
       if (result.landed) {
         stoppedAxes.push(reel.xIndex);
+        this.#spinLifecycle.stopped({ x: reel.xIndex });
       }
     }
 
@@ -577,6 +602,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#settlingContinuous = false;
     this.#elapsedMs = 0;
     this.replaceStartedAxes();
+    this.#spinLifecycle.cancel();
     for (const [x, y] of finalYs.entries()) {
       this.reels[x].resetToY(y);
     }
@@ -601,6 +627,7 @@ export class RenderReelSet extends Container implements ReelSpin {
     this.#settlingContinuous = false;
     this.#elapsedMs = 0;
     this.replaceStartedAxes();
+    this.#spinLifecycle.cancel();
     for (const [x, column] of visibleScene.entries()) {
       this.reels[x].resetToVisibleSymbols(column, finalYs?.[x] ?? 0);
     }
@@ -1604,10 +1631,13 @@ export class RenderReelSet extends Container implements ReelSpin {
     const reel = this.prepareAtomicReel(x, options.signal);
     const parsed = this.parseAtomicTarget(reel, target);
     const promise = this.createAtomicCompletion(x, "roll", options.signal);
+    this.#spinLifecycle.begin([{ x }]);
     try {
       this.bumpReelOccurrenceGenerations(reel);
       reel.start(this.createAtomicAxisPlan(reel, options), parsed);
+      this.#spinLifecycle.started({ x });
     } catch (error) {
+      this.#spinLifecycle.cancel({ x });
       this.failAtomic(this.#atomicActive.get(x)!, toReelError(error));
     }
     return promise;
@@ -1616,6 +1646,7 @@ export class RenderReelSet extends Container implements ReelSpin {
   start(x: number, options: ReelRollStartOptions = {}): void {
     const reel = this.prepareAtomicReel(x, options.signal);
     const active = this.createAtomic(x, "continuous", options.signal);
+    this.#spinLifecycle.begin([{ x }]);
     try {
       this.bumpReelOccurrenceGenerations(reel);
       reel.startContinuous({
@@ -1626,7 +1657,9 @@ export class RenderReelSet extends Container implements ReelSpin {
           "speedSymbolsPerSecond",
         ),
       });
+      this.#spinLifecycle.started({ x });
     } catch (error) {
+      this.#spinLifecycle.cancel({ x });
       this.detachAtomic(active);
       throw error;
     }
@@ -1662,6 +1695,7 @@ export class RenderReelSet extends Container implements ReelSpin {
       reel.settleContinuous(this.createAtomicAxisPlan(reel, options), parsed);
     } catch (error) {
       if (reel.isContinuousSpinning()) reel.cancelContinuous();
+      this.#spinLifecycle.cancel({ x });
       this.failAtomic(this.#atomicActive.get(x)!, toReelError(error));
     }
     return promise;
@@ -1679,6 +1713,7 @@ export class RenderReelSet extends Container implements ReelSpin {
         reel.getVisiblePresentationValues(),
       );
     this.failAtomic(active, new ReelError(`Reel spin ${x} was cancelled.`));
+    this.#spinLifecycle.cancel({ x });
   }
 
   getReel(x: number): ReelRender {
@@ -2004,14 +2039,20 @@ export class RenderReelSet extends Container implements ReelSpin {
       ) {
         continue;
       }
-      this.reels[axis.x].start(axis, {
-        targetVisibleSymbols: this.#spinOptions?.targetVisibleScene?.[axis.x],
-        targetVisiblePresentationValues:
-          this.#spinOptions?.targetVisiblePresentationValues?.[axis.x],
-        targetVisibleStates: this.#spinOptions?.targetVisibleStates?.[axis.x],
-      });
+      try {
+        this.reels[axis.x].start(axis, {
+          targetVisibleSymbols: this.#spinOptions?.targetVisibleScene?.[axis.x],
+          targetVisiblePresentationValues:
+            this.#spinOptions?.targetVisiblePresentationValues?.[axis.x],
+          targetVisibleStates: this.#spinOptions?.targetVisibleStates?.[axis.x],
+        });
+      } catch (error) {
+        this.#spinLifecycle.cancel();
+        throw error;
+      }
       this.#startedAxes.add(axis.x);
       this.#startedAxesSnapshotDirty = true;
+      this.#spinLifecycle.started({ x: axis.x });
     }
   }
 

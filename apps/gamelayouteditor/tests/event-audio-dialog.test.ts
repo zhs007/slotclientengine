@@ -105,8 +105,31 @@ describe("project event audio dialog", () => {
     );
     expect(add).not.toBeNull();
     add!.click();
+    expect(dialog.element.textContent).toContain("Spin 生命周期");
     expect(dialog.element.textContent).toContain("Symbol 状态");
     expect(dialog.element.textContent).toContain("批量图标状态");
+    const choose = (action: "family" | "pick", value: string) => {
+      const button = [
+        ...dialog.element.querySelectorAll<HTMLButtonElement>(
+          `[data-event-action="${action}"]`,
+        ),
+      ].find((candidate) => candidate.dataset.value === value);
+      if (!button) throw new Error(`missing ${action} choice: ${value}`);
+      button.click();
+    };
+    choose("family", "spin-lifecycle");
+    for (const value of ["main", "reel-spin", "spin", "started"])
+      choose("pick", value);
+    expect(
+      dialog.element.querySelector<HTMLSelectElement>(
+        '[data-event-audio-field="category"]',
+      )?.value,
+    ).toBe("effect");
+    expect(
+      dialog.element.querySelector<HTMLSelectElement>(
+        '[data-event-audio-field="playback"]',
+      )?.value,
+    ).toBe("once");
     expect(project.assets.has("assets/unbound.mp3")).toBe(true);
     dialog.destroy();
   });

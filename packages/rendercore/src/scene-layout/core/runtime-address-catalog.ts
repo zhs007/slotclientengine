@@ -10,6 +10,7 @@ import {
 export type GameLayoutRuntimeEventFamily =
   | "variant"
   | "node-animation"
+  | "spin-lifecycle"
   | "symbol-state"
   | "symbols-state-batch"
   | "mode-state"
@@ -142,10 +143,36 @@ export function compileGameLayoutRuntimeEventCatalog(
     throw new SceneLayoutError(
       `Cannot derive legacy symbol package event binding: ${source.manifest.symbolPackage.manifest}.`,
     );
-  const symbolBindingIds = legacySymbolBindingId
-    ? [legacySymbolBindingId]
-    : Object.keys(source.manifest.symbolPackages ?? {});
-  for (const bindingId of symbolBindingIds.sort(compare)) {
+  const symbolBindings = legacySymbolBindingId
+    ? ([[legacySymbolBindingId, source.manifest.symbolPackage!]] as const)
+    : Object.entries(source.manifest.symbolPackages ?? {});
+  if (mainReel && symbolBindings.length > 0) {
+    const renderModes = new Set(
+      symbolBindings.map(([, binding]) => binding.renderMode),
+    );
+    if (renderModes.has("standard"))
+      addSpinLifecycleAddresses({
+        add,
+        spin: "reel-spin",
+        columns: mainReel.columns,
+      });
+    if (renderModes.has("grid-cell"))
+      addSpinLifecycleAddresses({
+        add,
+        spin: "grid-cell",
+        columns: mainReel.columns,
+        rows: mainReel.rows,
+      });
+    addSpinLifecycleAddresses({
+      add,
+      spin: "cell-spin",
+      columns: mainReel.columns,
+      rows: mainReel.rows,
+    });
+  }
+  for (const bindingId of symbolBindings
+    .map(([bindingId]) => bindingId)
+    .sort(compare)) {
     if (!mainReel)
       throw new SceneLayoutError(
         `Symbol package "${bindingId}" requires the main reel.`,
@@ -347,6 +374,177 @@ export function compileGameLayoutRuntimeEventCatalog(
   }
 
   return Object.freeze({ entries: Object.freeze(entries) });
+}
+
+function addSpinLifecycleAddresses(options: {
+  readonly add: (options: {
+    readonly segments: readonly string[];
+    readonly owner?: readonly string[];
+    readonly family: GameLayoutRuntimeEventFamily;
+    readonly facets: readonly (readonly [string, string])[];
+    readonly detail?: Readonly<
+      Record<string, string | number | boolean | null>
+    >;
+    readonly dispatchAddresses?: readonly GameLayoutRuntimeAddress[];
+  }) => GameLayoutRuntimeAddress;
+  readonly spin: "reel-spin" | "grid-cell" | "cell-spin";
+  readonly columns: number;
+  readonly rows?: number;
+}): void {
+  const owner = ["reel", "main"];
+  const base = [...owner, "spin", options.spin];
+  for (const lifecycle of ["started", "ended"] as const)
+    options.add({
+      segments: [...base, "lifecycle", lifecycle],
+      owner,
+      family: "spin-lifecycle",
+      facets: [
+        ["reel", "main"],
+        ["spin", options.spin],
+        ["scope", "spin"],
+        ["lifecycle", lifecycle],
+      ],
+      detail: {
+        eventFamily: "spin-lifecycle",
+        reelId: "main",
+        spin: options.spin,
+        lifecycle,
+      },
+    });
+  for (const lifecycle of ["started", "stopped"] as const) {
+    if (options.rows === undefined) {
+      const wildcard = options.add({
+        segments: [...base, "x", "*", "lifecycle", lifecycle],
+        owner,
+        family: "spin-lifecycle",
+        facets: [
+          ["reel", "main"],
+          ["spin", options.spin],
+          ["scope", "all"],
+          ["lifecycle", lifecycle],
+        ],
+        detail: {
+          eventFamily: "spin-lifecycle",
+          reelId: "main",
+          spin: options.spin,
+          x: "*",
+          lifecycle,
+        },
+      });
+      for (let x = 0; x < options.columns; x += 1) {
+        const exact = formatGameLayoutRuntimeAddress(
+          ...base,
+          "x",
+          String(x),
+          "lifecycle",
+          lifecycle,
+        );
+        options.add({
+          segments: [...base, "x", String(x), "lifecycle", lifecycle],
+          owner,
+          family: "spin-lifecycle",
+          facets: [
+            ["reel", "main"],
+            ["spin", options.spin],
+            ["scope", "axis"],
+            ["x", String(x)],
+            ["lifecycle", lifecycle],
+          ],
+          detail: {
+            eventFamily: "spin-lifecycle",
+            reelId: "main",
+            spin: options.spin,
+            x,
+            lifecycle,
+          },
+          dispatchAddresses: [exact, wildcard],
+        });
+      }
+      continue;
+    }
+
+    const coordinates = new Map<string, GameLayoutRuntimeAddress>();
+    const addCoordinate = (x: number | "*", y: number | "*") => {
+      const scope =
+        x === "*" && y === "*"
+          ? "all"
+          : x === "*"
+            ? "row"
+            : y === "*"
+              ? "column"
+              : "cell";
+      const address = options.add({
+        segments: [
+          ...base,
+          "x",
+          String(x),
+          "y",
+          String(y),
+          "lifecycle",
+          lifecycle,
+        ],
+        owner,
+        family: "spin-lifecycle",
+        facets: [
+          ["reel", "main"],
+          ["spin", options.spin],
+          ["scope", scope],
+          ...(x === "*" ? [] : ([["x", String(x)]] as const)),
+          ...(y === "*" ? [] : ([["y", String(y)]] as const)),
+          ["lifecycle", lifecycle],
+        ],
+        detail: {
+          eventFamily: "spin-lifecycle",
+          reelId: "main",
+          spin: options.spin,
+          x: String(x),
+          y: String(y),
+          lifecycle,
+        },
+        ...(x === "*" || y === "*"
+          ? {}
+          : {
+              dispatchAddresses: [
+                formatGameLayoutRuntimeAddress(
+                  ...base,
+                  "x",
+                  String(x),
+                  "y",
+                  String(y),
+                  "lifecycle",
+                  lifecycle,
+                ),
+                coordinates.get(`${String(x)}\u0000*`)!,
+                coordinates.get(`*\u0000${String(y)}`)!,
+                coordinates.get("*\u0000*")!,
+              ],
+            }),
+      });
+      coordinates.set(`${String(x)}\u0000${String(y)}`, address);
+    };
+    addCoordinate("*", "*");
+    for (let x = 0; x < options.columns; x += 1) addCoordinate(x, "*");
+    for (let y = 0; y < options.rows; y += 1) addCoordinate("*", y);
+    for (let x = 0; x < options.columns; x += 1)
+      for (let y = 0; y < options.rows; y += 1) addCoordinate(x, y);
+  }
+  options.add({
+    segments: [...base, "lifecycle", "all-stopped"],
+    owner,
+    family: "spin-lifecycle",
+    facets: [
+      ["reel", "main"],
+      ["spin", options.spin],
+      ["scope", "all"],
+      ["lifecycle", "all-stopped"],
+    ],
+    detail: {
+      eventFamily: "spin-lifecycle",
+      reelId: "main",
+      spin: options.spin,
+      lifecycle: "all-stopped",
+    },
+  });
 }
 
 function addSymbolAddresses(options: {

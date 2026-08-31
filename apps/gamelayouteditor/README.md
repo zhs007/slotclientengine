@@ -31,6 +31,9 @@ SymbolsEditor 编辑。
 Assets 工具栏另有明确的“导入 JSON data”动作，可原子导入一个或多个顶层为 object/array 的 `.json` 文件。它们是 opaque、program-only assets：不会进入画布、背景或资源 Picker，也没有 preview 和渲染地址。只有设置唯一程序键后才进入 production ZIP，runtime 通过 `SceneLayoutPackageResource.loadJsonData(key)` 读取；取消绑定后，无其它引用的数据恢复为不导出。替换要求保持同一 filename key 并重新严格校验，导出、重导和 optimizer 都保留原始 JSON bytes，不扫描或改写其中看似资源路径的字符串。
 
 MP3、OGG、WAV、M4A、AAC 和 WebM 音频先作为未绑定 asset 导入；扩展名、signature 和显式 MIME 必须一致，`.mp4` 固定保留给视频。项目页的“编辑音乐音效”是唯一音频 authoring 入口，只能把已导入 asset 绑定到 exact Event；音频不会创建 scene node，也不使用通用 `runtimeResources` 程序键。预览必须先点“启用声音”，随后 Event 播放只走同一个 production package runtime；preview 重建会把已解锁会话应用到新 runtime。打开含 mode BGM、root effect 的旧 Layout 时先完整 strict 校验，再移除旧配置和仅由其引用的 audio bytes，并显示迁移摘要。
+Event 选择器会按当前 Symbols render mode 显示 ReelSpin、GridCell 与 CellSpin 的整体 started/ended、
+单元 started/stopped 和 all-stopped；具体轴/cell、列、行和全体 wildcard 均来自 RenderCore shared catalog。
+Spin event 默认创建为单次音效，仍可在同一配置中改为音乐或循环播放。
 
 node/transition 直接引用 filename key 或 typed key 组合。node id、package id、mode id 仍是业务身份，但不是第二个资源 id。多个普通节点可引用同一 `BG.jpg`，覆盖一次即可更新全部 bytes，同时各自的稳定 node id、scope 与 placement 保持独立。
 
