@@ -1,14 +1,15 @@
 import {
   AnimationMixer,
   Box3,
+  DataTexture,
   Group,
   LoopRepeat,
   Mesh,
   MeshStandardMaterial,
-  Texture,
   Vector3,
   type Material,
   type Object3D,
+  type Texture,
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
@@ -17,6 +18,13 @@ const modelUrl = new URL(
   "../assets/models/20260829155447_d0c3ff02-rigged.glb",
   import.meta.url,
 ).href;
+
+function createNeutralTexture(): Texture {
+  const texture = new DataTexture(new Uint8Array([128, 128, 128, 128]), 1, 1);
+  texture.name = "pufferfish-caustic-neutral-placeholder";
+  texture.needsUpdate = true;
+  return texture;
+}
 
 export interface PufferfishSymbolPlacement {
   readonly name: string;
@@ -146,7 +154,7 @@ export class PufferfishActor {
   #lastUpdateTime = 0;
   #loadError: Error | null = null;
   #disposed = false;
-  readonly #causticPlaceholder = new Texture();
+  readonly #causticPlaceholder = createNeutralTexture();
   readonly #causticUniforms = {
     texture: { value: this.#causticPlaceholder },
     time: { value: 0 },

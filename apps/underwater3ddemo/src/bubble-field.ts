@@ -260,7 +260,16 @@ export class BubbleField {
       const visibleHeight = 2 * Math.tan(halfFov) * distance;
       const visibleWidth = visibleHeight * camera.aspect;
       const rise = bubble.normalizedY + time * bubble.riseSpeed;
-      const wrappedY = ((((rise + 1.2) % 2.4) + 2.4) % 2.4) - 1.2;
+      const lowerLimit = -1.18;
+      const upperLimit = 0.52;
+      const verticalSpan = upperLimit - lowerLimit;
+      const wrappedY =
+        ((((rise - lowerLimit) % verticalSpan) + verticalSpan) % verticalSpan) +
+        lowerLimit;
+      const surfaceFade = Math.max(
+        0,
+        Math.min(1, 1 - (wrappedY - 0.3) / (upperLimit - 0.3)),
+      );
       const driftX =
         bubble.normalizedX +
         Math.sin(time * bubble.swaySpeed + bubble.phase) * bubble.sway;
@@ -273,9 +282,9 @@ export class BubbleField {
       );
       this.#dummy.rotation.set(0, time * 0.08 + bubble.phase, 0);
       this.#dummy.scale.set(
-        bubble.radius * (1 + squash),
-        bubble.radius * (1 - squash),
-        bubble.radius * (1 + squash * 0.35),
+        bubble.radius * (1 + squash) * surfaceFade,
+        bubble.radius * (1 - squash) * surfaceFade,
+        bubble.radius * (1 + squash * 0.35) * surfaceFade,
       );
       this.#dummy.updateMatrix();
       this.mesh.setMatrixAt(index, this.#dummy.matrix);

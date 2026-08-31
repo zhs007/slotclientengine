@@ -1,4 +1,5 @@
 import {
+  HalfFloatType,
   LinearFilter,
   Mesh,
   OrthographicCamera,
@@ -32,6 +33,12 @@ float hash21(vec2 point) {
   return fract(point.x * point.y);
 }
 
+vec3 extractHighlight(vec2 uv) {
+  vec3 sampleColor = texture2D(tScene, clamp(uv, 0.0, 1.0)).rgb;
+  float energy = max(sampleColor.r, max(sampleColor.g, sampleColor.b));
+  return sampleColor * smoothstep(0.92, 1.75, energy);
+}
+
 void main() {
   vec2 uv = vUv;
   float aspect = uResolution.x / max(uResolution.y, 1.0);
@@ -47,15 +54,57 @@ void main() {
     smoothstep(0.0, 0.08, uv.y) *
     smoothstep(0.0, 0.08, 1.0 - uv.y);
   vec2 refractedUv = clamp(
-    uv + vec2(horizontal * 0.00042, vertical * 0.00028) * edgeFade,
+    uv + vec2(horizontal * 0.00014, vertical * 0.00009) * edgeFade,
     0.0,
     1.0
   );
   vec3 color = texture2D(tScene, refractedUv).rgb;
 
   float depthGrade = smoothstep(0.15, 0.96, uv.y);
-  color *= mix(vec3(0.86, 0.96, 1.08), vec3(0.91, 1.04, 1.11), depthGrade);
-  color = mix(color, color * vec3(0.82, 1.02, 1.12), 0.22);
+  vec3 gradedColor = color * mix(
+    vec3(0.86, 0.96, 1.08),
+    vec3(0.91, 1.04, 1.11),
+    depthGrade
+  );
+  gradedColor = mix(
+    gradedColor,
+    gradedColor * vec3(0.82, 1.02, 1.12),
+    0.22
+  );
+  float highlightEnergy = max(color.r, max(color.g, color.b));
+  float highlightProtection = smoothstep(0.72, 1.85, highlightEnergy);
+  color = mix(gradedColor, color, highlightProtection * 0.88);
+
+  vec2 bloomRadius = vec2(9.0) / max(uResolution, vec2(1.0));
+  vec3 highlightBloom = extractHighlight(refractedUv) * 0.18;
+  highlightBloom += extractHighlight(refractedUv + vec2(bloomRadius.x, 0.0)) * 0.11;
+  highlightBloom += extractHighlight(refractedUv - vec2(bloomRadius.x, 0.0)) * 0.11;
+  highlightBloom += extractHighlight(refractedUv + vec2(0.0, bloomRadius.y)) * 0.11;
+  highlightBloom += extractHighlight(refractedUv - vec2(0.0, bloomRadius.y)) * 0.11;
+  highlightBloom += extractHighlight(refractedUv + bloomRadius) * 0.07;
+  highlightBloom += extractHighlight(refractedUv - bloomRadius) * 0.07;
+  highlightBloom += extractHighlight(
+    refractedUv + vec2(bloomRadius.x, -bloomRadius.y)
+  ) * 0.07;
+  highlightBloom += extractHighlight(
+    refractedUv + vec2(-bloomRadius.x, bloomRadius.y)
+  ) * 0.07;
+  float surfaceGlowFade = smoothstep(0.56, 0.94, uv.y);
+  color += highlightBloom * vec3(1.04, 0.99, 0.88) *
+    surfaceGlowFade * 0.34;
+
+  float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  vec3 saturatedColor = mix(vec3(luminance), color, 1.18);
+  vec3 contrastedColor = max(
+    (saturatedColor - vec3(0.18)) * 1.09 + vec3(0.18),
+    vec3(0.0)
+  );
+  float hdrHighlight = smoothstep(
+    0.9,
+    2.2,
+    max(color.r, max(color.g, color.b))
+  );
+  color = mix(contrastedColor, color, hdrHighlight * 0.82);
 
   float grain = hash21(gl_FragCoord.xy + floor(uTime * 12.0)) - 0.5;
   color += grain * 0.012;
@@ -74,6 +123,7 @@ export class UnderwaterPass {
   readonly #target = new WebGLRenderTarget(1, 1, {
     minFilter: LinearFilter,
     magFilter: LinearFilter,
+    type: HalfFloatType,
     depthBuffer: true,
     stencilBuffer: false,
   });
