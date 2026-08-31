@@ -1,7 +1,16 @@
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import sharp from "sharp";
-import { describe, expect, it, vi } from "vitest";
-import { buildSceneLayoutDelivery } from "../src/delivery-builder.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  buildSceneLayoutDelivery,
+  checkSceneLayoutDeliveryDirectory,
+  commitSceneLayoutDeliveryDirectory,
+  type BuiltSceneLayoutDelivery,
+} from "../src/delivery-builder.js";
 import { validateLayoutPackageBytes } from "../src/package-reader.js";
 import type { CwebpRunner } from "../src/types.js";
 import {
@@ -9,6 +18,13 @@ import {
   layoutFixture,
   logicalFixtureFiles,
 } from "./fixtures.js";
+
+const roots: string[] = [];
+
+afterEach(async () => {
+  for (const root of roots) await rm(root, { recursive: true, force: true });
+  roots.length = 0;
+});
 
 describe("Scene Layout CDN delivery builder", () => {
   it("owns assets by earliest mode, atlases before WebP and preserves media bytes", async () => {
@@ -75,7 +91,39 @@ describe("Scene Layout CDN delivery builder", () => {
 
     const initialChunk = delivery.manifest.chunks[0]!.metadata;
     expect(initialChunk?.mediaType).toBe("application/zip");
-    expect(delivery.files.has("delivery.manifest.json")).toBe(true);
+    expect(delivery.manifest.version).toBe(2);
+    expect(delivery.manifestFilename).toMatch(
+      /^delivery\.[0-9a-f]{64}\.json$/u,
+    );
+    expect(delivery.files.has(delivery.manifestFilename)).toBe(true);
+    for (const [filename, bytes] of delivery.files) {
+      expect(filename).not.toContain("/");
+      const expectedHash = createHash("sha256").update(bytes).digest("hex");
+      const declaredHash = filename.startsWith("delivery.")
+        ? filename.slice("delivery.".length, -".json".length)
+        : filename.slice(0, filename.indexOf("."));
+      expect(declaredHash).toBe(expectedHash);
+    }
+
+    const repeated = await buildSceneLayoutDelivery({
+      source,
+      quality: 80,
+      cwebpExecutable: "cwebp",
+      cwebpRunner: runner,
+      maxAtlasSize: 256,
+      atlasPadding: 2,
+      atlasExtrude: 1,
+    });
+    expect(repeated.manifestFilename).toBe(delivery.manifestFilename);
+    expect([...repeated.files]).toEqual([...delivery.files]);
+
+    const initialEntries = chunkMetadataEntries(delivery, "initial");
+    const assetsMapBytes = initialEntries.get("assets.map.json");
+    if (!assetsMapBytes) throw new Error("Expected assets.map.json.");
+    const assetsMap = JSON.parse(new TextDecoder().decode(assetsMapBytes));
+    expect(assetsMap.files["alpha.png"].path).toMatch(
+      /^assets\/[0-9a-f]{64}\.webp$/u,
+    );
   });
 
   it("stores content-identical metadata aliases only in the earliest owner chunk", async () => {
@@ -144,6 +192,73 @@ describe("Scene Layout CDN delivery builder", () => {
     expect(initialEntries.has(alphaRoute.entry)).toBe(true);
     expect(betaEntries.has(alphaRoute.entry)).toBe(false);
   });
+
+  it("publishes into an append-only flat pool and reuses byte-equal files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gamelayout-delivery-pool-"));
+    roots.push(root);
+    const outputDirectory = join(root, "pool");
+    const delivery = fakeDelivery();
+
+    await expect(
+      commitSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
+    ).resolves.toEqual({ createdFileCount: 2, reusedFileCount: 0 });
+    await expect(
+      commitSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
+    ).resolves.toEqual({ createdFileCount: 0, reusedFileCount: 2 });
+
+    const partialDirectory = join(root, "partial-pool");
+    await mkdir(partialDirectory);
+    const payload = [...delivery.files].find(
+      ([filename]) => filename !== delivery.manifestFilename,
+    )!;
+    await writeFile(join(partialDirectory, payload[0]), payload[1]);
+    await expect(
+      commitSceneLayoutDeliveryDirectory({
+        outputDirectory: partialDirectory,
+        delivery,
+      }),
+    ).resolves.toEqual({ createdFileCount: 1, reusedFileCount: 1 });
+
+    const oldBytes = new Uint8Array([8]);
+    const oldHash = createHash("sha256").update(oldBytes).digest("hex");
+    await writeFile(join(outputDirectory, `${oldHash}.bin`), oldBytes);
+    await expect(
+      checkSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
+    ).resolves.toBeUndefined();
+
+    await writeFile(join(outputDirectory, "README.txt"), "invalid");
+    await expect(
+      checkSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
+    ).rejects.toThrow(/非法文件名/);
+  });
+
+  it("rejects corrupt collisions and nested pool entries without overwriting", async () => {
+    const root = await mkdtemp(join(tmpdir(), "gamelayout-delivery-corrupt-"));
+    roots.push(root);
+    const delivery = fakeDelivery();
+    const outputDirectory = join(root, "pool");
+    await mkdir(outputDirectory);
+    const payloadFilename = [...delivery.files.keys()].find(
+      (filename) => filename !== delivery.manifestFilename,
+    )!;
+    await writeFile(
+      join(outputDirectory, payloadFilename),
+      new Uint8Array([9]),
+    );
+
+    await expect(
+      commitSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
+    ).rejects.toThrow(/同名文件内容不一致/);
+    await expect(
+      readFile(join(outputDirectory, payloadFilename)),
+    ).resolves.toEqual(Buffer.from([9]));
+
+    await rm(outputDirectory, { recursive: true, force: true });
+    await mkdir(join(outputDirectory, "nested"), { recursive: true });
+    await expect(
+      commitSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
+    ).rejects.toThrow(/扁平普通文件/);
+  });
 });
 
 function spineNode(id: string, gameMode: string, prefix: string) {
@@ -165,6 +280,25 @@ function spineNode(id: string, gameMode: string, prefix: string) {
 
 function textBytes(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value));
+}
+
+function fakeDelivery(): BuiltSceneLayoutDelivery {
+  const payload = new Uint8Array([1, 2, 3]);
+  const payloadHash = createHash("sha256").update(payload).digest("hex");
+  const manifestBytes = new TextEncoder().encode('{"version":2}\n');
+  const manifestHash = createHash("sha256").update(manifestBytes).digest("hex");
+  const manifestFilename = `delivery.${manifestHash}.json`;
+  return {
+    manifest: {} as BuiltSceneLayoutDelivery["manifest"],
+    manifestFilename,
+    files: new Map([
+      [`${payloadHash}.zip`, payload],
+      [manifestFilename, manifestBytes],
+    ]),
+    atlasCount: 0,
+    atlasFrameCount: 0,
+    externalAssetCount: 0,
+  };
 }
 
 function chunkMetadataEntries(

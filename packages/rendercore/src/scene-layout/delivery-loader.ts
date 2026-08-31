@@ -2,13 +2,14 @@ import {
   assertCanonicalPackagePath,
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
+import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
 import { Assets, Cache, Rectangle, Texture } from "pixi.js";
 import {
+  parseSceneLayoutDeliveryManifestFilename,
   parseSceneLayoutDeliveryManifest,
-  SCENE_LAYOUT_DELIVERY_MANIFEST,
+  type SceneLayoutDeliveryManifest,
   type SceneLayoutDeliveryAtlasV1,
   type SceneLayoutDeliveryChunkV1,
-  type SceneLayoutDeliveryManifestV1,
 } from "./data/delivery.js";
 import { SCENE_LAYOUT_PRODUCTION_ZIP_LIMITS } from "./data/package-limits.js";
 import { SceneLayoutError } from "./errors.js";
@@ -18,7 +19,8 @@ import type { SceneLayoutPackageResource } from "./types.js";
 let nextDeliveryInstance = 1;
 
 export async function loadSceneLayoutDeliveryFromUrl(options: {
-  readonly manifestUrl: string | URL;
+  readonly urlPrefix: string | URL;
+  readonly manifestFilename: string;
   readonly manifestBytes?: Uint8Array;
   readonly fetchImpl?: typeof fetch;
   readonly loadSymbolTextures?: boolean;
@@ -28,18 +30,22 @@ export async function loadSceneLayoutDeliveryFromUrl(options: {
     throw new SceneLayoutError(
       "fetchImpl is required to load a Scene Layout delivery URL.",
     );
-  const manifestUrl = new URL(options.manifestUrl);
-  if (!/^https?:$/u.test(manifestUrl.protocol))
-    throw new SceneLayoutError(
-      "Scene Layout delivery manifest URL must use http or https.",
-    );
+  const expectedVersion = parseSceneLayoutDeliveryManifestFilename(
+    options.manifestFilename,
+  );
+  const urlPrefix = parseDeliveryUrlPrefix(options.urlPrefix);
+  const manifestUrl = containedDeliveryUrl(urlPrefix, options.manifestFilename);
   const manifestBytes =
     options.manifestBytes?.slice() ??
     (await fetchDeliveryBytes(fetchImpl, manifestUrl));
   const manifest = parseSceneLayoutDeliveryManifest(
-    parseJson(manifestBytes, SCENE_LAYOUT_DELIVERY_MANIFEST),
+    parseJson(manifestBytes, options.manifestFilename),
   );
-  const delivery = new DeliveryChunkLoader(fetchImpl, manifestUrl, manifest);
+  if (manifest.version !== expectedVersion)
+    throw new SceneLayoutError(
+      `Scene Layout delivery manifest filename version ${expectedVersion} does not match manifest version ${manifest.version}.`,
+    );
+  const delivery = new DeliveryChunkLoader(fetchImpl, urlPrefix, manifest);
   const files = await delivery.loadInitial();
   materializeExternalPlaceholders(files, manifest);
   try {
@@ -90,8 +96,8 @@ export async function loadSceneLayoutDeliveryFromUrl(options: {
 
 class DeliveryChunkLoader {
   readonly #fetchImpl: typeof fetch;
-  readonly #manifestUrl: URL;
-  readonly #manifest: SceneLayoutDeliveryManifestV1;
+  readonly #urlPrefix: URL;
+  readonly #manifest: SceneLayoutDeliveryManifest;
   readonly #chunks: ReadonlyMap<string, SceneLayoutDeliveryChunkV1>;
   readonly #entryOwners = new Map<string, string>();
   readonly #loads = new Map<string, Promise<ReadonlyMap<string, Uint8Array>>>();
@@ -105,17 +111,17 @@ class DeliveryChunkLoader {
 
   constructor(
     fetchImpl: typeof fetch,
-    manifestUrl: URL,
-    manifest: SceneLayoutDeliveryManifestV1,
+    urlPrefix: URL,
+    manifest: SceneLayoutDeliveryManifest,
   ) {
     this.#fetchImpl = fetchImpl;
-    this.#manifestUrl = manifestUrl;
+    this.#urlPrefix = urlPrefix;
     this.#manifest = manifest;
     this.#chunks = new Map(manifest.chunks.map((chunk) => [chunk.id, chunk]));
     for (const asset of Object.values(manifest.assets))
       if (asset.kind === "metadata")
         this.#entryOwners.set(asset.entry, asset.owner);
-    this.#textures = new DeliveryTextures(fetchImpl, manifestUrl, manifest);
+    this.#textures = new DeliveryTextures(fetchImpl, urlPrefix, manifest);
   }
 
   resolve(logicalKey: string): string | undefined {
@@ -259,7 +265,7 @@ class DeliveryChunkLoader {
     if (!chunk.metadata) return new Map();
     const bytes = await fetchDeliveryBytes(
       this.#fetchImpl,
-      containedDeliveryUrl(this.#manifestUrl, chunk.metadata.path),
+      containedDeliveryUrl(this.#urlPrefix, chunk.metadata.path),
     );
     let archive: ReadonlyMap<string, Uint8Array>;
     try {
@@ -287,18 +293,36 @@ class DeliveryChunkLoader {
 
 function materializeExternalPlaceholders(
   files: Map<string, Uint8Array>,
-  manifest: SceneLayoutDeliveryManifestV1,
+  manifest: SceneLayoutDeliveryManifest,
 ): void {
-  for (const atlas of manifest.atlases)
-    files.set(atlas.image.path, new Uint8Array([0]));
-  for (const asset of Object.values(manifest.assets))
-    if (asset.kind === "external") files.set(asset.path, new Uint8Array([0]));
+  const mapBytes = files.get("assets.map.json");
+  if (!mapBytes)
+    throw new SceneLayoutError(
+      "Scene Layout initial delivery chunk must contain assets.map.json.",
+    );
+  let assetsMap: ReturnType<typeof decodeEditorAssetsMap>;
+  try {
+    assetsMap = decodeEditorAssetsMap(mapBytes);
+  } catch (error) {
+    throw new SceneLayoutError(
+      `Scene Layout delivery assets.map.json is invalid: ${formatError(error)}`,
+    );
+  }
+  for (const [logicalKey, asset] of Object.entries(manifest.assets)) {
+    if (asset.kind !== "atlas-frame" && asset.kind !== "external") continue;
+    const mapped = assetsMap.files[logicalKey];
+    if (!mapped)
+      throw new SceneLayoutError(
+        `Scene Layout delivery asset route has no mapped package path: ${logicalKey}.`,
+      );
+    files.set(mapped.path, new Uint8Array([0]));
+  }
 }
 
 class DeliveryTextures {
   readonly #fetchImpl: typeof fetch;
-  readonly #manifestUrl: URL;
-  readonly #manifest: SceneLayoutDeliveryManifestV1;
+  readonly #urlPrefix: URL;
+  readonly #manifest: SceneLayoutDeliveryManifest;
   readonly #prefix: string;
   readonly #urls = new Map<string, string>();
   readonly #frames = new Map<string, Texture>();
@@ -309,11 +333,11 @@ class DeliveryTextures {
 
   constructor(
     fetchImpl: typeof fetch,
-    manifestUrl: URL,
-    manifest: SceneLayoutDeliveryManifestV1,
+    urlPrefix: URL,
+    manifest: SceneLayoutDeliveryManifest,
   ) {
     this.#fetchImpl = fetchImpl;
-    this.#manifestUrl = manifestUrl;
+    this.#urlPrefix = urlPrefix;
     this.#manifest = manifest;
     this.#atlases = new Map(manifest.atlases.map((atlas) => [atlas.id, atlas]));
     this.#prefix = `scene-layout-delivery:${nextDeliveryInstance++}:`;
@@ -321,7 +345,7 @@ class DeliveryTextures {
       if (asset.kind === "atlas-frame")
         this.#urls.set(key, `${this.#prefix}${key}`);
       else if (asset.kind === "external")
-        this.#urls.set(key, containedDeliveryUrl(manifestUrl, asset.path).href);
+        this.#urls.set(key, containedDeliveryUrl(urlPrefix, asset.path).href);
     }
   }
 
@@ -390,7 +414,7 @@ class DeliveryTextures {
 
   async #loadAtlas(atlas: SceneLayoutDeliveryAtlasV1): Promise<void> {
     const pageUrl = containedDeliveryUrl(
-      this.#manifestUrl,
+      this.#urlPrefix,
       atlas.image.path,
     ).href;
     const page = (await Assets.load({
@@ -457,14 +481,41 @@ async function fetchDeliveryBytes(
   return new Uint8Array(await response.arrayBuffer());
 }
 
-function containedDeliveryUrl(manifestUrl: URL, path: string): URL {
+function parseDeliveryUrlPrefix(value: string | URL): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch (error) {
+    throw new SceneLayoutError(
+      `Scene Layout delivery URL prefix is invalid: ${formatError(error)}`,
+    );
+  }
+  if (!/^https?:$/u.test(url.protocol))
+    throw new SceneLayoutError(
+      "Scene Layout delivery URL prefix must use http or https.",
+    );
+  if (
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    !url.pathname.endsWith("/")
+  )
+    throw new SceneLayoutError(
+      "Scene Layout delivery URL prefix must be a credential-free directory URL without query or hash.",
+    );
+  return url;
+}
+
+function containedDeliveryUrl(urlPrefix: URL, path: string): URL {
   assertCanonicalPackagePath(path, { requireLowercase: true });
-  const url = new URL(path, manifestUrl);
-  const root = manifestUrl.pathname.slice(
-    0,
-    manifestUrl.pathname.lastIndexOf("/") + 1,
-  );
-  if (url.origin !== manifestUrl.origin || !url.pathname.startsWith(root))
+  const url = new URL(path, urlPrefix);
+  if (
+    url.origin !== urlPrefix.origin ||
+    !url.pathname.startsWith(urlPrefix.pathname) ||
+    url.search ||
+    url.hash
+  )
     throw new SceneLayoutError(
       `Scene Layout delivery path escapes its root: ${path}.`,
     );

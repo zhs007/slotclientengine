@@ -1,7 +1,18 @@
 import { assertCanonicalPackagePath } from "@slotclientengine/browserartifactio";
 import { SceneLayoutError } from "../errors.js";
 
-export const SCENE_LAYOUT_DELIVERY_MANIFEST = "delivery.manifest.json";
+export const SCENE_LAYOUT_DELIVERY_MANIFEST_V1 = "delivery.manifest.json";
+export const SCENE_LAYOUT_DELIVERY_MANIFEST = SCENE_LAYOUT_DELIVERY_MANIFEST_V1;
+
+const SHA256_PATTERN = "[0-9a-f]{64}";
+const CONTENT_FILENAME_PATTERN = new RegExp(
+  `^(${SHA256_PATTERN})\\.([a-z0-9]+)$`,
+  "u",
+);
+const MANIFEST_V2_FILENAME_PATTERN = new RegExp(
+  `^delivery\\.(${SHA256_PATTERN})\\.json$`,
+  "u",
+);
 
 export interface SceneLayoutDeliveryFileV1 {
   readonly path: string;
@@ -63,6 +74,12 @@ export type SceneLayoutDeliveryAssetV1 =
       readonly sourceByteLength: number;
     } & SceneLayoutDeliveryFileV1);
 
+export type SceneLayoutDeliveryFileV2 = SceneLayoutDeliveryFileV1;
+export type SceneLayoutDeliveryFrameV2 = SceneLayoutDeliveryFrameV1;
+export type SceneLayoutDeliveryAtlasV2 = SceneLayoutDeliveryAtlasV1;
+export type SceneLayoutDeliveryChunkV2 = SceneLayoutDeliveryChunkV1;
+export type SceneLayoutDeliveryAssetV2 = SceneLayoutDeliveryAssetV1;
+
 export interface SceneLayoutDeliveryManifestV1 {
   readonly version: 1;
   readonly kind: "scene-layout-delivery";
@@ -74,9 +91,76 @@ export interface SceneLayoutDeliveryManifestV1 {
   readonly assets: Readonly<Record<string, SceneLayoutDeliveryAssetV1>>;
 }
 
+export interface SceneLayoutDeliveryManifestV2 {
+  readonly version: 2;
+  readonly kind: "scene-layout-delivery";
+  readonly layoutId: string;
+  readonly initialMode: string;
+  readonly initialChunk: string;
+  readonly chunks: readonly SceneLayoutDeliveryChunkV2[];
+  readonly atlases: readonly SceneLayoutDeliveryAtlasV2[];
+  readonly assets: Readonly<Record<string, SceneLayoutDeliveryAssetV2>>;
+}
+
+export type SceneLayoutDeliveryManifest =
+  | SceneLayoutDeliveryManifestV1
+  | SceneLayoutDeliveryManifestV2;
+
+export interface SceneLayoutDeliveryPoolFilename {
+  readonly kind: "content" | "manifest";
+  readonly sha256: string;
+  readonly extension: string;
+}
+
+export function createSceneLayoutDeliveryContentFilename(options: {
+  readonly sha256: string;
+  readonly extension: string;
+}): string {
+  const sha256 = hash(options.sha256, "delivery content sha256");
+  if (!/^[a-z0-9]+$/u.test(options.extension))
+    fail("delivery content extension must be lowercase alphanumeric");
+  return `${sha256}.${options.extension}`;
+}
+
+export function createSceneLayoutDeliveryManifestFilename(
+  sha256: string,
+): string {
+  return `delivery.${hash(sha256, "delivery manifest sha256")}.json`;
+}
+
+export function parseSceneLayoutDeliveryPoolFilename(
+  value: string,
+): SceneLayoutDeliveryPoolFilename {
+  if (typeof value !== "string" || value.includes("/"))
+    fail("delivery pool filename must be one path segment");
+  const manifest = MANIFEST_V2_FILENAME_PATTERN.exec(value);
+  if (manifest)
+    return Object.freeze({
+      kind: "manifest",
+      sha256: manifest[1]!,
+      extension: "json",
+    });
+  const content = CONTENT_FILENAME_PATTERN.exec(value);
+  if (content)
+    return Object.freeze({
+      kind: "content",
+      sha256: content[1]!,
+      extension: content[2]!,
+    });
+  fail(`delivery pool filename is invalid: ${value}`);
+}
+
+export function parseSceneLayoutDeliveryManifestFilename(value: string): 1 | 2 {
+  if (value === SCENE_LAYOUT_DELIVERY_MANIFEST_V1) return 1;
+  const parsed = parseSceneLayoutDeliveryPoolFilename(value);
+  if (parsed.kind !== "manifest")
+    fail(`delivery manifest filename is invalid: ${value}`);
+  return 2;
+}
+
 export function parseSceneLayoutDeliveryManifest(
   value: unknown,
-): SceneLayoutDeliveryManifestV1 {
+): SceneLayoutDeliveryManifest {
   const root = record(value, "Scene Layout delivery manifest");
   known(
     root,
@@ -92,12 +176,18 @@ export function parseSceneLayoutDeliveryManifest(
     ],
     "Scene Layout delivery manifest",
   );
-  if (root.version !== 1 || root.kind !== "scene-layout-delivery")
-    fail('must declare version=1 and kind="scene-layout-delivery"');
+  if (
+    (root.version !== 1 && root.version !== 2) ||
+    root.kind !== "scene-layout-delivery"
+  )
+    fail('must declare version=1|2 and kind="scene-layout-delivery"');
+  const version = root.version;
   const layoutId = nonEmpty(root.layoutId, "layoutId");
   const initialMode = nonEmpty(root.initialMode, "initialMode");
   const initialChunk = nonEmpty(root.initialChunk, "initialChunk");
-  const chunks = array(root.chunks, "chunks").map(parseChunk);
+  const chunks = array(root.chunks, "chunks").map((chunk, index) =>
+    parseChunk(chunk, index, version),
+  );
   unique(
     chunks.map((chunk) => chunk.id),
     "chunk id",
@@ -121,7 +211,9 @@ export function parseSceneLayoutDeliveryManifest(
       else if (dependency === chunk.id)
         fail(`${chunk.id} must not depend on itself`);
   assertAcyclicChunks(chunks);
-  const atlases = array(root.atlases, "atlases").map(parseAtlas);
+  const atlases = array(root.atlases, "atlases").map((atlas, index) =>
+    parseAtlas(atlas, index, version),
+  );
   unique(
     atlases.map((atlas) => atlas.id),
     "atlas id",
@@ -147,7 +239,7 @@ export function parseSceneLayoutDeliveryManifest(
   const assets: Record<string, SceneLayoutDeliveryAssetV1> = {};
   for (const [key, asset] of Object.entries(assetsValue)) {
     safeLogicalPath(key, `asset key ${key}`);
-    assets[key] = parseAsset(asset, key, chunkIds, atlasIds);
+    assets[key] = parseAsset(asset, key, chunkIds, atlasIds, version);
   }
   for (const atlas of atlases)
     for (const key of Object.keys(atlas.frames)) {
@@ -193,7 +285,7 @@ export function parseSceneLayoutDeliveryManifest(
   if (declaredExternal.length !== externalCount)
     fail("every external asset must be declared by exactly one chunk");
   return Object.freeze({
-    version: 1,
+    version,
     kind: "scene-layout-delivery",
     layoutId,
     initialMode,
@@ -201,7 +293,7 @@ export function parseSceneLayoutDeliveryManifest(
     chunks: Object.freeze(chunks),
     atlases: Object.freeze(atlases),
     assets: Object.freeze(assets),
-  });
+  }) as SceneLayoutDeliveryManifest;
 }
 
 function assertAcyclicChunks(
@@ -221,7 +313,11 @@ function assertAcyclicChunks(
   for (const chunk of chunks) visit(chunk.id);
 }
 
-function parseChunk(value: unknown, index: number): SceneLayoutDeliveryChunkV1 {
+function parseChunk(
+  value: unknown,
+  index: number,
+  version: 1 | 2,
+): SceneLayoutDeliveryChunkV1 {
   const item = record(value, `chunks[${index}]`);
   known(
     item,
@@ -235,7 +331,7 @@ function parseChunk(value: unknown, index: number): SceneLayoutDeliveryChunkV1 {
     metadata:
       item.metadata === null
         ? null
-        : parseFile(item.metadata, `chunks[${index}].metadata`),
+        : parseFile(item.metadata, `chunks[${index}].metadata`, version, "zip"),
     atlases: strings(item.atlases, `chunks[${index}].atlases`),
     externalAssets: strings(
       item.externalAssets,
@@ -244,7 +340,11 @@ function parseChunk(value: unknown, index: number): SceneLayoutDeliveryChunkV1 {
   });
 }
 
-function parseAtlas(value: unknown, index: number): SceneLayoutDeliveryAtlasV1 {
+function parseAtlas(
+  value: unknown,
+  index: number,
+  version: 1 | 2,
+): SceneLayoutDeliveryAtlasV1 {
   const item = record(value, `atlases[${index}]`);
   known(item, ["id", "owner", "image", "frames"], `atlases[${index}]`);
   const imageValue = record(item.image, `atlases[${index}].image`);
@@ -284,7 +384,7 @@ function parseAtlas(value: unknown, index: number): SceneLayoutDeliveryAtlasV1 {
     id: nonEmpty(item.id, `atlases[${index}].id`),
     owner: nonEmpty(item.owner, `atlases[${index}].owner`),
     image: Object.freeze({
-      ...parseFile(imageValue, `atlases[${index}].image`),
+      ...parseFile(imageValue, `atlases[${index}].image`, version, "webp"),
       mediaType: "image/webp",
       width: integer(imageValue.width, `atlases[${index}].image.width`),
       height: integer(imageValue.height, `atlases[${index}].image.height`),
@@ -298,6 +398,7 @@ function parseAsset(
   key: string,
   chunks: ReadonlySet<string>,
   atlases: ReadonlySet<string>,
+  version: 1 | 2,
 ): SceneLayoutDeliveryAssetV1 {
   const item = record(value, `asset ${key}`);
   const kind = item.kind;
@@ -374,20 +475,52 @@ function parseAsset(
         `asset ${key}.sourceByteLength`,
         true,
       ),
-      ...parseFile(item, `asset ${key}`),
+      ...parseFile(
+        item,
+        `asset ${key}`,
+        version,
+        version === 2
+          ? externalExtension(key, String(item.mediaType))
+          : undefined,
+      ),
     });
   }
   fail(`asset ${key}.kind is invalid`);
 }
 
-function parseFile(value: unknown, label: string): SceneLayoutDeliveryFileV1 {
+function parseFile(
+  value: unknown,
+  label: string,
+  version: 1 | 2,
+  requiredExtension?: string,
+): SceneLayoutDeliveryFileV1 {
   const item = record(value, label);
+  const sha256 = hash(item.sha256, `${label}.sha256`);
+  const path = safePath(nonEmpty(item.path, `${label}.path`), `${label}.path`);
+  if (version === 2) {
+    const parsed = parseSceneLayoutDeliveryPoolFilename(path);
+    if (parsed.kind !== "content")
+      fail(`${label}.path must be a content filename`);
+    if (parsed.sha256 !== sha256)
+      fail(`${label}.path hash must equal ${label}.sha256`);
+    if (requiredExtension && parsed.extension !== requiredExtension)
+      fail(`${label}.path extension must be ${requiredExtension}`);
+  }
   return Object.freeze({
-    path: safePath(nonEmpty(item.path, `${label}.path`), `${label}.path`),
-    sha256: hash(item.sha256, `${label}.sha256`),
+    path,
+    sha256,
     byteLength: integer(item.byteLength, `${label}.byteLength`, true),
     mediaType: nonEmpty(item.mediaType, `${label}.mediaType`),
   });
+}
+
+function externalExtension(key: string, mediaType: string): string {
+  if (mediaType === "image/webp") return "webp";
+  const index = key.lastIndexOf(".");
+  const extension = index < 0 ? "" : key.slice(index + 1).toLowerCase();
+  if (!/^[a-z0-9]+$/u.test(extension))
+    fail(`external asset ${key} must have a canonical extension`);
+  return extension;
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {

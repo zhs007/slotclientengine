@@ -36,6 +36,10 @@ export async function runGamelayoutPkgCli(
       console.log(
         `Atlas ${result.atlasCount} 张、合图帧 ${result.atlasFrameCount} 个、外置资源 ${result.externalAssetCount} 个。`,
       );
+      console.log(`Delivery manifest：${result.manifestFilename}`);
+      console.log(
+        `CDN 文件新增 ${result.createdFileCount} 个、复用 ${result.reusedFileCount} 个。`,
+      );
       return;
     }
     const result = await optimizeLayoutPackageFile(options);
@@ -187,9 +191,12 @@ export async function publishSceneLayoutDeliveryFile(
   cwebpRunner: CwebpRunner = nodeCwebpRunner,
 ): Promise<{
   readonly outputDirectory: string;
+  readonly manifestFilename: string;
   readonly atlasCount: number;
   readonly atlasFrameCount: number;
   readonly externalAssetCount: number;
+  readonly createdFileCount: number;
+  readonly reusedFileCount: number;
 }> {
   if (!options.deliveryDirectory)
     throw new Error("CDN 交付模式必须提供 --delivery-dir。");
@@ -203,21 +210,29 @@ export async function publishSceneLayoutDeliveryFile(
     atlasPadding: options.atlasPadding,
     atlasExtrude: options.atlasExtrude,
   });
+  let createdFileCount = 0;
+  let reusedFileCount = delivery.files.size;
   if (options.check)
     await checkSceneLayoutDeliveryDirectory({
       outputDirectory: options.deliveryDirectory,
       delivery,
     });
-  else
-    await commitSceneLayoutDeliveryDirectory({
+  else {
+    const published = await commitSceneLayoutDeliveryDirectory({
       outputDirectory: options.deliveryDirectory,
       delivery,
     });
+    createdFileCount = published.createdFileCount;
+    reusedFileCount = published.reusedFileCount;
+  }
   return Object.freeze({
     outputDirectory: options.deliveryDirectory,
+    manifestFilename: delivery.manifestFilename,
     atlasCount: delivery.atlasCount,
     atlasFrameCount: delivery.atlasFrameCount,
     externalAssetCount: delivery.externalAssetCount,
+    createdFileCount,
+    reusedFileCount,
   });
 }
 
