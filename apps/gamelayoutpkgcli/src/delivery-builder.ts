@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -24,9 +25,9 @@ import {
 } from "@slotclientengine/editorresource";
 import {
   createSceneLayoutDeliveryContentFilename,
-  createSceneLayoutDeliveryManifestFilename,
   parseSceneLayoutDeliveryPoolFilename,
   parseSceneLayoutDeliveryManifest,
+  SCENE_LAYOUT_DELIVERY_MANIFEST,
   type SceneLayoutDeliveryAssetV1,
   type SceneLayoutDeliveryAtlasV1,
   type SceneLayoutDeliveryChunkV1,
@@ -68,6 +69,7 @@ export interface BuildSceneLayoutDeliveryOptions {
 export interface BuiltSceneLayoutDelivery {
   readonly manifest: SceneLayoutDeliveryManifestV2;
   readonly manifestFilename: string;
+  readonly manifestBytes: Uint8Array;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly atlasCount: number;
   readonly atlasFrameCount: number;
@@ -401,13 +403,10 @@ export async function buildSceneLayoutDelivery(
     );
   const manifest = parsedManifest;
   const manifestBytes = encodeStableJson(manifest);
-  const manifestFilename = createSceneLayoutDeliveryManifestFilename(
-    await sha256Hex(manifestBytes),
-  );
-  setDeliveryFile(files, manifestFilename, manifestBytes);
   return Object.freeze({
     manifest,
-    manifestFilename,
+    manifestFilename: SCENE_LAYOUT_DELIVERY_MANIFEST,
+    manifestBytes,
     files: new Map(files),
     atlasCount: atlasRecords.length,
     atlasFrameCount: Object.values(assetRoutes).filter(
@@ -423,10 +422,11 @@ export async function commitSceneLayoutDeliveryDirectory(options: {
 }): Promise<{
   readonly createdFileCount: number;
   readonly reusedFileCount: number;
+  readonly manifestChanged: boolean;
 }> {
   await ensureDeliveryPoolDirectory(options.outputDirectory);
   const existing = await inspectDeliveryPoolDirectory(options.outputDirectory);
-  const candidates = orderedDeliveryFiles(options.delivery);
+  const candidates = orderedPayloadFiles(options.delivery);
   let reusedFileCount = 0;
   for (const [filename, bytes] of candidates) {
     if (!existing.has(filename)) continue;
@@ -437,6 +437,16 @@ export async function commitSceneLayoutDeliveryDirectory(options: {
     );
     reusedFileCount += 1;
   }
+  const manifestTarget = join(
+    options.outputDirectory,
+    options.delivery.manifestFilename,
+  );
+  const manifestChanged =
+    !existing.has(options.delivery.manifestFilename) ||
+    !equalBytes(
+      new Uint8Array(await readFile(manifestTarget)),
+      options.delivery.manifestBytes,
+    );
   const stage = await mkdtemp(
     join(dirname(options.outputDirectory), ".gamelayout-delivery-"),
   );
@@ -457,10 +467,21 @@ export async function commitSceneLayoutDeliveryDirectory(options: {
         reusedFileCount += 1;
       }
     }
+    if (manifestChanged) {
+      const stagedManifest = join(stage, options.delivery.manifestFilename);
+      await writeFile(stagedManifest, options.delivery.manifestBytes, {
+        flag: "wx",
+      });
+      await rename(stagedManifest, manifestTarget);
+    }
   } finally {
     await rm(stage, { recursive: true, force: true }).catch(() => undefined);
   }
-  return Object.freeze({ createdFileCount, reusedFileCount });
+  return Object.freeze({
+    createdFileCount,
+    reusedFileCount,
+    manifestChanged,
+  });
 }
 
 export async function checkSceneLayoutDeliveryDirectory(options: {
@@ -468,7 +489,7 @@ export async function checkSceneLayoutDeliveryDirectory(options: {
   readonly delivery: BuiltSceneLayoutDelivery;
 }): Promise<void> {
   const actual = await inspectDeliveryPoolDirectory(options.outputDirectory);
-  for (const [filename, bytes] of orderedDeliveryFiles(options.delivery)) {
+  for (const [filename, bytes] of orderedPayloadFiles(options.delivery)) {
     if (!actual.has(filename))
       throw new Error(`交付目录缺少当前 delivery 文件：${filename}`);
     await assertDeliveryFileEquals(
@@ -477,6 +498,15 @@ export async function checkSceneLayoutDeliveryDirectory(options: {
       bytes,
     );
   }
+  if (!actual.has(options.delivery.manifestFilename))
+    throw new Error(
+      `交付目录缺少项目 manifest：${options.delivery.manifestFilename}`,
+    );
+  await assertDeliveryFileEquals(
+    join(options.outputDirectory, options.delivery.manifestFilename),
+    options.delivery.manifestFilename,
+    options.delivery.manifestBytes,
+  );
 }
 
 async function ensureDeliveryPoolDirectory(root: string): Promise<void> {
@@ -497,33 +527,26 @@ async function inspectDeliveryPoolDirectory(
   for (const entry of entries) {
     if (!entry.isFile())
       throw new Error(`交付目录只能包含扁平普通文件：${entry.name}`);
-    try {
-      parseSceneLayoutDeliveryPoolFilename(entry.name);
-    } catch (error) {
-      throw new Error(
-        `交付目录包含非法文件名 ${entry.name}：${error instanceof Error ? error.message : String(error)}`,
-      );
+    if (entry.name !== SCENE_LAYOUT_DELIVERY_MANIFEST) {
+      try {
+        parseSceneLayoutDeliveryPoolFilename(entry.name);
+      } catch (error) {
+        throw new Error(
+          `交付目录包含非法文件名 ${entry.name}：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     }
     files.add(entry.name);
   }
   return files;
 }
 
-function orderedDeliveryFiles(
+function orderedPayloadFiles(
   delivery: BuiltSceneLayoutDelivery,
 ): readonly (readonly [string, Uint8Array])[] {
-  const payload = [...delivery.files]
-    .filter(([filename]) => filename !== delivery.manifestFilename)
-    .sort(([left], [right]) => compare(left, right));
-  const manifestBytes = delivery.files.get(delivery.manifestFilename);
-  if (!manifestBytes)
-    throw new Error(
-      `delivery files 缺少 manifest：${delivery.manifestFilename}`,
-    );
-  return Object.freeze([
-    ...payload,
-    [delivery.manifestFilename, manifestBytes] as const,
-  ]);
+  return Object.freeze(
+    [...delivery.files].sort(([left], [right]) => compare(left, right)),
+  );
 }
 
 async function assertDeliveryFileEquals(

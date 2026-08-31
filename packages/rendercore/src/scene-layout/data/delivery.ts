@@ -9,10 +9,6 @@ const CONTENT_FILENAME_PATTERN = new RegExp(
   `^(${SHA256_PATTERN})\\.([a-z0-9]+)$`,
   "u",
 );
-const MANIFEST_V2_FILENAME_PATTERN = new RegExp(
-  `^delivery\\.(${SHA256_PATTERN})\\.json$`,
-  "u",
-);
 
 export interface SceneLayoutDeliveryFileV1 {
   readonly path: string;
@@ -107,7 +103,7 @@ export type SceneLayoutDeliveryManifest =
   | SceneLayoutDeliveryManifestV2;
 
 export interface SceneLayoutDeliveryPoolFilename {
-  readonly kind: "content" | "manifest";
+  readonly kind: "content";
   readonly sha256: string;
   readonly extension: string;
 }
@@ -122,24 +118,11 @@ export function createSceneLayoutDeliveryContentFilename(options: {
   return `${sha256}.${options.extension}`;
 }
 
-export function createSceneLayoutDeliveryManifestFilename(
-  sha256: string,
-): string {
-  return `delivery.${hash(sha256, "delivery manifest sha256")}.json`;
-}
-
 export function parseSceneLayoutDeliveryPoolFilename(
   value: string,
 ): SceneLayoutDeliveryPoolFilename {
   if (typeof value !== "string" || value.includes("/"))
     fail("delivery pool filename must be one path segment");
-  const manifest = MANIFEST_V2_FILENAME_PATTERN.exec(value);
-  if (manifest)
-    return Object.freeze({
-      kind: "manifest",
-      sha256: manifest[1]!,
-      extension: "json",
-    });
   const content = CONTENT_FILENAME_PATTERN.exec(value);
   if (content)
     return Object.freeze({
@@ -148,14 +131,6 @@ export function parseSceneLayoutDeliveryPoolFilename(
       extension: content[2]!,
     });
   fail(`delivery pool filename is invalid: ${value}`);
-}
-
-export function parseSceneLayoutDeliveryManifestFilename(value: string): 1 | 2 {
-  if (value === SCENE_LAYOUT_DELIVERY_MANIFEST_V1) return 1;
-  const parsed = parseSceneLayoutDeliveryPoolFilename(value);
-  if (parsed.kind !== "manifest")
-    fail(`delivery manifest filename is invalid: ${value}`);
-  return 2;
 }
 
 export function parseSceneLayoutDeliveryManifest(
@@ -499,8 +474,6 @@ function parseFile(
   const path = safePath(nonEmpty(item.path, `${label}.path`), `${label}.path`);
   if (version === 2) {
     const parsed = parseSceneLayoutDeliveryPoolFilename(path);
-    if (parsed.kind !== "content")
-      fail(`${label}.path must be a content filename`);
     if (parsed.sha256 !== sha256)
       fail(`${label}.path hash must equal ${label}.sha256`);
     if (requiredExtension && parsed.extension !== requiredExtension)

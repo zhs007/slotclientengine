@@ -73,7 +73,6 @@ describe("Scene Layout delivery loader", () => {
 
     const resource = await loadSceneLayoutDeliveryFromUrl({
       urlPrefix: "https://cdn.example/game/",
-      manifestFilename: "delivery.manifest.json",
       manifestBytes: new TextEncoder().encode(JSON.stringify(manifest())),
       fetchImpl,
     });
@@ -112,26 +111,28 @@ describe("Scene Layout delivery loader", () => {
     await resource.destroy();
   });
 
-  it("loads v2 from an explicit asset prefix and rejects filename/version or prefix drift", async () => {
+  it("loads the project manifest and v2 payload from independent URLs", async () => {
     const requested: string[] = [];
+    const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest(2)));
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       requested.push(url);
+      if (url === "https://game.example/releases/delivery.manifest.json")
+        return new Response(manifestBytes, { status: 200 });
       if (url.endsWith(`${"a".repeat(64)}.zip`)) return response([1]);
       if (url.endsWith(`${"b".repeat(64)}.zip`)) return response([2]);
       if (url.endsWith(`${"c".repeat(64)}.zip`)) return response([3]);
       if (url.endsWith(`${"d".repeat(64)}.mp4`)) return response([9]);
       throw new Error(`unexpected URL: ${url}`);
     }) as unknown as typeof fetch;
-    const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest(2)));
     const resource = await loadSceneLayoutDeliveryFromUrl({
+      manifestUrl: "https://game.example/releases/delivery.manifest.json",
       urlPrefix: "https://assets.example/cdn/layouts/",
-      manifestFilename: `delivery.${"e".repeat(64)}.json`,
-      manifestBytes,
       fetchImpl,
     });
 
-    expect(requested.slice(0, 3)).toEqual([
+    expect(requested.slice(0, 4)).toEqual([
+      "https://game.example/releases/delivery.manifest.json",
       `https://assets.example/cdn/layouts/${"a".repeat(64)}.zip`,
       `https://assets.example/cdn/layouts/${"b".repeat(64)}.zip`,
       `https://assets.example/cdn/layouts/${"c".repeat(64)}.zip`,
@@ -140,16 +141,22 @@ describe("Scene Layout delivery loader", () => {
 
     await expect(
       loadSceneLayoutDeliveryFromUrl({
+        manifestUrl: "file:///delivery.manifest.json",
         urlPrefix: "https://assets.example/cdn/layouts/",
-        manifestFilename: "delivery.manifest.json",
         manifestBytes,
         fetchImpl,
       }),
-    ).rejects.toThrow(/filename version 1.*manifest version 2/);
+    ).rejects.toThrow(/manifest URL must use http or https/);
     await expect(
       loadSceneLayoutDeliveryFromUrl({
+        urlPrefix: "https://assets.example/cdn/layouts/",
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/manifestUrl or manifestBytes/);
+    await expect(
+      loadSceneLayoutDeliveryFromUrl({
+        manifestUrl: "https://game.example/releases/delivery.manifest.json",
         urlPrefix: "https://assets.example/cdn/layouts",
-        manifestFilename: `delivery.${"e".repeat(64)}.json`,
         manifestBytes,
         fetchImpl,
       }),

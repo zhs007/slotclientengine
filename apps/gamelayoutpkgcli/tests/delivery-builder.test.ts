@@ -92,16 +92,12 @@ describe("Scene Layout CDN delivery builder", () => {
     const initialChunk = delivery.manifest.chunks[0]!.metadata;
     expect(initialChunk?.mediaType).toBe("application/zip");
     expect(delivery.manifest.version).toBe(2);
-    expect(delivery.manifestFilename).toMatch(
-      /^delivery\.[0-9a-f]{64}\.json$/u,
-    );
-    expect(delivery.files.has(delivery.manifestFilename)).toBe(true);
+    expect(delivery.manifestFilename).toBe("delivery.manifest.json");
+    expect(delivery.files.has(delivery.manifestFilename)).toBe(false);
     for (const [filename, bytes] of delivery.files) {
       expect(filename).not.toContain("/");
       const expectedHash = createHash("sha256").update(bytes).digest("hex");
-      const declaredHash = filename.startsWith("delivery.")
-        ? filename.slice("delivery.".length, -".json".length)
-        : filename.slice(0, filename.indexOf("."));
+      const declaredHash = filename.slice(0, filename.indexOf("."));
       expect(declaredHash).toBe(expectedHash);
     }
 
@@ -115,6 +111,7 @@ describe("Scene Layout CDN delivery builder", () => {
       atlasExtrude: 1,
     });
     expect(repeated.manifestFilename).toBe(delivery.manifestFilename);
+    expect(repeated.manifestBytes).toEqual(delivery.manifestBytes);
     expect([...repeated.files]).toEqual([...delivery.files]);
 
     const initialEntries = chunkMetadataEntries(delivery, "initial");
@@ -201,34 +198,65 @@ describe("Scene Layout CDN delivery builder", () => {
 
     await expect(
       commitSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
-    ).resolves.toEqual({ createdFileCount: 2, reusedFileCount: 0 });
+    ).resolves.toEqual({
+      createdFileCount: 1,
+      reusedFileCount: 0,
+      manifestChanged: true,
+    });
     await expect(
       commitSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
-    ).resolves.toEqual({ createdFileCount: 0, reusedFileCount: 2 });
+    ).resolves.toEqual({
+      createdFileCount: 0,
+      reusedFileCount: 1,
+      manifestChanged: false,
+    });
 
     const partialDirectory = join(root, "partial-pool");
     await mkdir(partialDirectory);
-    const payload = [...delivery.files].find(
-      ([filename]) => filename !== delivery.manifestFilename,
-    )!;
+    const payload = [...delivery.files][0]!;
     await writeFile(join(partialDirectory, payload[0]), payload[1]);
     await expect(
       commitSceneLayoutDeliveryDirectory({
         outputDirectory: partialDirectory,
         delivery,
       }),
-    ).resolves.toEqual({ createdFileCount: 1, reusedFileCount: 1 });
+    ).resolves.toEqual({
+      createdFileCount: 0,
+      reusedFileCount: 1,
+      manifestChanged: true,
+    });
+
+    const updated = fakeDelivery('{"version":2,"revision":2}\n');
+    await expect(
+      commitSceneLayoutDeliveryDirectory({
+        outputDirectory,
+        delivery: updated,
+      }),
+    ).resolves.toEqual({
+      createdFileCount: 0,
+      reusedFileCount: 1,
+      manifestChanged: true,
+    });
+    await expect(
+      readFile(join(outputDirectory, updated.manifestFilename), "utf8"),
+    ).resolves.toBe('{"version":2,"revision":2}\n');
 
     const oldBytes = new Uint8Array([8]);
     const oldHash = createHash("sha256").update(oldBytes).digest("hex");
     await writeFile(join(outputDirectory, `${oldHash}.bin`), oldBytes);
     await expect(
-      checkSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
+      checkSceneLayoutDeliveryDirectory({
+        outputDirectory,
+        delivery: updated,
+      }),
     ).resolves.toBeUndefined();
 
     await writeFile(join(outputDirectory, "README.txt"), "invalid");
     await expect(
-      checkSceneLayoutDeliveryDirectory({ outputDirectory, delivery }),
+      checkSceneLayoutDeliveryDirectory({
+        outputDirectory,
+        delivery: updated,
+      }),
     ).rejects.toThrow(/非法文件名/);
   });
 
@@ -238,9 +266,7 @@ describe("Scene Layout CDN delivery builder", () => {
     const delivery = fakeDelivery();
     const outputDirectory = join(root, "pool");
     await mkdir(outputDirectory);
-    const payloadFilename = [...delivery.files.keys()].find(
-      (filename) => filename !== delivery.manifestFilename,
-    )!;
+    const payloadFilename = [...delivery.files.keys()][0]!;
     await writeFile(
       join(outputDirectory, payloadFilename),
       new Uint8Array([9]),
@@ -282,19 +308,18 @@ function textBytes(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value));
 }
 
-function fakeDelivery(): BuiltSceneLayoutDelivery {
+function fakeDelivery(
+  manifestText = '{"version":2}\n',
+): BuiltSceneLayoutDelivery {
   const payload = new Uint8Array([1, 2, 3]);
   const payloadHash = createHash("sha256").update(payload).digest("hex");
-  const manifestBytes = new TextEncoder().encode('{"version":2}\n');
-  const manifestHash = createHash("sha256").update(manifestBytes).digest("hex");
-  const manifestFilename = `delivery.${manifestHash}.json`;
+  const manifestBytes = new TextEncoder().encode(manifestText);
+  const manifestFilename = "delivery.manifest.json";
   return {
     manifest: {} as BuiltSceneLayoutDelivery["manifest"],
     manifestFilename,
-    files: new Map([
-      [`${payloadHash}.zip`, payload],
-      [manifestFilename, manifestBytes],
-    ]),
+    manifestBytes,
+    files: new Map([[`${payloadHash}.zip`, payload]]),
     atlasCount: 0,
     atlasFrameCount: 0,
     externalAssetCount: 0,

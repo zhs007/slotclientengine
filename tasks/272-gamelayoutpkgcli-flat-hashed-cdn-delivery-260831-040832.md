@@ -2,6 +2,17 @@
 
 UTC：2026-08-31T04:08:32Z
 
+## 2026-08-31 后续需求调整
+
+- 用户确认 manifest 随 pixicrave 等游戏项目 import/发布，因此撤销 manifest 自身 content address：最终项目文件固定为
+  `delivery.manifest.json`，CLI 输出其绝对路径并在 payload 全部就绪后原子更新。
+- append-only CDN pool 最终只包含 `<sha256>.<ext>` payload；旧 hashed payload 继续保留和复用，manifest 不作为 immutable
+  CDN 对象上传。
+- RenderCore 最终 public options 分离为项目侧 `manifestUrl`（或已 import 的 `manifestBytes`）与 payload CDN
+  `urlPrefix`。manifest 不再从 payload prefix 推导，JS/manifest 与资产可以独立部署。
+- 下文“最终实现”保留首次执行时的历史证据；本节是最终合同，优先于其中 hashed manifest、`manifestFilename` 和同 prefix
+  的描述。后续自动化复验结果将在本报告末尾追加。
+
 ## 最终实现
 
 - `gamelayoutpkgcli --delivery-dir` 新输出 `scene-layout-delivery` version 2。metadata ZIP、WebP atlas 与外置媒体均以
@@ -57,3 +68,14 @@ UTC：2026-08-31T04:08:32Z
   管理。
 - `loadSceneLayoutDeliveryFromUrl()` 的 TypeScript 参数是明确 breaking change；仓库内没有 source consumer，仓库外调用方需按
   README 迁移到 `urlPrefix + manifestFilename`。
+
+## 后续调整自动化复验
+
+- `pnpm --filter @slotclientengine/rendercore --filter gamelayoutpkgcli typecheck`：通过。
+- RenderCore delivery 定向 Vitest：2 files / 8 tests 通过；覆盖 import bytes、独立 manifest URL、独立 payload prefix 与
+  非法 URL/prefix。
+- gamelayoutpkgcli 定向 Vitest：2 files / 8 tests 通过；覆盖固定 manifest 原子更新、相同 manifest 不重写、partial pool、
+  hashed payload 复用与冲突失败。
+- `pnpm --filter @slotclientengine/rendercore --filter gamelayoutpkgcli build`：通过。
+- 上述 breaking change 的最终迁移方式是 `manifestUrl + urlPrefix`，或 `manifestBytes + urlPrefix`；首次报告中的
+  `urlPrefix + manifestFilename` 已由本次确认替代。

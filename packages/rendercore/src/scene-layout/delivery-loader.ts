@@ -5,7 +5,6 @@ import {
 import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
 import { Assets, Cache, Rectangle, Texture } from "pixi.js";
 import {
-  parseSceneLayoutDeliveryManifestFilename,
   parseSceneLayoutDeliveryManifest,
   type SceneLayoutDeliveryManifest,
   type SceneLayoutDeliveryAtlasV1,
@@ -19,8 +18,8 @@ import type { SceneLayoutPackageResource } from "./types.js";
 let nextDeliveryInstance = 1;
 
 export async function loadSceneLayoutDeliveryFromUrl(options: {
+  readonly manifestUrl?: string | URL;
   readonly urlPrefix: string | URL;
-  readonly manifestFilename: string;
   readonly manifestBytes?: Uint8Array;
   readonly fetchImpl?: typeof fetch;
   readonly loadSymbolTextures?: boolean;
@@ -30,21 +29,23 @@ export async function loadSceneLayoutDeliveryFromUrl(options: {
     throw new SceneLayoutError(
       "fetchImpl is required to load a Scene Layout delivery URL.",
     );
-  const expectedVersion = parseSceneLayoutDeliveryManifestFilename(
-    options.manifestFilename,
-  );
+  const manifestUrl =
+    options.manifestUrl === undefined
+      ? null
+      : parseDeliveryManifestUrl(options.manifestUrl);
   const urlPrefix = parseDeliveryUrlPrefix(options.urlPrefix);
-  const manifestUrl = containedDeliveryUrl(urlPrefix, options.manifestFilename);
-  const manifestBytes =
-    options.manifestBytes?.slice() ??
-    (await fetchDeliveryBytes(fetchImpl, manifestUrl));
+  let manifestBytes: Uint8Array;
+  if (options.manifestBytes) manifestBytes = options.manifestBytes.slice();
+  else {
+    if (!manifestUrl)
+      throw new SceneLayoutError(
+        "Scene Layout delivery requires manifestUrl or manifestBytes.",
+      );
+    manifestBytes = await fetchDeliveryBytes(fetchImpl, manifestUrl);
+  }
   const manifest = parseSceneLayoutDeliveryManifest(
-    parseJson(manifestBytes, options.manifestFilename),
+    parseJson(manifestBytes, manifestUrl?.pathname ?? "delivery.manifest.json"),
   );
-  if (manifest.version !== expectedVersion)
-    throw new SceneLayoutError(
-      `Scene Layout delivery manifest filename version ${expectedVersion} does not match manifest version ${manifest.version}.`,
-    );
   const delivery = new DeliveryChunkLoader(fetchImpl, urlPrefix, manifest);
   const files = await delivery.loadInitial();
   materializeExternalPlaceholders(files, manifest);
@@ -479,6 +480,22 @@ async function fetchDeliveryBytes(
       `Scene Layout delivery fetch failed for ${url.href}: HTTP ${response.status}.`,
     );
   return new Uint8Array(await response.arrayBuffer());
+}
+
+function parseDeliveryManifestUrl(value: string | URL): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch (error) {
+    throw new SceneLayoutError(
+      `Scene Layout delivery manifest URL is invalid: ${formatError(error)}`,
+    );
+  }
+  if (!/^https?:$/u.test(url.protocol))
+    throw new SceneLayoutError(
+      "Scene Layout delivery manifest URL must use http or https.",
+    );
+  return url;
 }
 
 function parseDeliveryUrlPrefix(value: string | URL): URL {
