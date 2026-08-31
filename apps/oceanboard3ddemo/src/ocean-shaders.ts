@@ -167,6 +167,8 @@ uniform vec3 uShallowColor;
 uniform sampler2D uUnderwaterTexture;
 uniform sampler2D uWaterHeight;
 uniform float uWaterHeightMix;
+uniform sampler2D uOceanSunpath;
+uniform float uOceanSunpathMix;
 uniform vec2 uResolution;
 varying vec3 vWorldPosition;
 varying vec3 vWorldNormal;
@@ -290,11 +292,89 @@ void main() {
   );
   color = mix(color, vec3(0.115, 0.525, 0.655), horizonFade * 0.78);
 
+  float waterDepthUv = clamp((0.845 - screenUv.y) / 0.845, 0.0, 1.0);
+  vec2 sunpathDrift = vec2(
+    sin(uTime * 0.17) * 0.003,
+    cos(uTime * 0.13) * 0.004
+  );
+  float farPathExpansion = mix(
+    0.48,
+    1.0,
+    smoothstep(0.05, 0.48, waterDepthUv)
+  );
+  float pathDistanceFade = 1.0 - smoothstep(0.36, 0.54, waterDepthUv);
+  vec2 sunpathUv = vec2(
+    0.5 +
+      (screenUv.x - 0.5) * farPathExpansion +
+      detailSlope.x * 0.028,
+    waterDepthUv + detailSlope.y * 0.012
+  ) + sunpathDrift;
+  float authoredPathPrimary = texture2D(
+    uOceanSunpath,
+    clamp(sunpathUv, vec2(0.002), vec2(0.998))
+  ).r * uOceanSunpathMix * pathDistanceFade;
+  vec2 sunpathEchoUv = vec2(0.5) +
+    (sunpathUv - vec2(0.5)) * vec2(1.035, 0.992) +
+    vec2(-sunpathDrift.x * 1.7, sunpathDrift.y * 0.6);
+  float authoredPathEcho = texture2D(
+    uOceanSunpath,
+    clamp(sunpathEchoUv, vec2(0.002), vec2(0.998))
+  ).r * uOceanSunpathMix * pathDistanceFade;
+  float authoredPath = max(authoredPathPrimary, authoredPathEcho * 0.48);
+  float pathBreakup = smoothstep(
+    0.38,
+    0.7,
+    glitterField * 0.62 + glitterDetail * 0.38
+  );
+  float pathSparkle = pathBreakup * pathBreakup;
+  float ridgeFragments = smoothstep(0.2, 0.62, slopeEnergy) *
+    smoothstep(0.48, 0.74, max(glitterField, glitterDetail));
+  float specularPeaks = smoothstep(
+    0.78,
+    0.94,
+    max(glitterField, glitterDetail)
+  );
+  float softPath = smoothstep(0.018, 0.34, authoredPath);
+  float brightPath = smoothstep(0.18, 0.78, authoredPath);
+  float waveFragments = clamp(
+    pathBreakup * 0.42 +
+      pathSparkle * 0.28 +
+      ridgeFragments * 0.34 +
+      specularPeaks * 0.52,
+    0.0,
+    1.0
+  );
+  float pathEnergy = softPath *
+      (0.035 +
+        broadGlint * 0.08 +
+        lineGlint * fragmentedGlitter * 0.2 +
+        sharpGlint * sparseGlitter * 0.48 +
+        waveFragments * 0.38) +
+    brightPath * (pathSparkle * 0.14 + specularPeaks * 0.22);
+  vec3 pathColor = vec3(1.0, 0.84, 0.42);
+  color += pathColor * pathEnergy * 0.62;
+  color = mix(
+    color,
+    vec3(1.0, 0.985, 0.86),
+    smoothstep(0.24, 0.72, pathEnergy) * 0.08
+  );
+  float postToneHighlight = clamp(
+    softPath * waveFragments * 0.12 +
+      brightPath * (pathSparkle * 0.08 + specularPeaks * 0.12),
+    0.0,
+    0.16
+  );
+
   float microVariation = hash21(gl_FragCoord.xy + floor(uTime * 10.0)) - 0.5;
   color += microVariation * 0.008;
 
   gl_FragColor = vec4(color, 1.0);
   #include <tonemapping_fragment>
+  gl_FragColor.rgb = mix(
+    gl_FragColor.rgb,
+    vec3(1.0, 0.91, 0.56),
+    postToneHighlight
+  );
   #include <colorspace_fragment>
 }
 `;

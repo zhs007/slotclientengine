@@ -56,6 +56,10 @@ const skySunlightTextureUrl = new URL(
   "../assets/textures/sky-sunlight-v3.ktx2",
   import.meta.url,
 ).href;
+const oceanSunpathTextureUrl = new URL(
+  "../assets/textures/ocean-sunpath-v1.ktx2",
+  import.meta.url,
+).href;
 
 export class OceanSurfaceRenderer {
   readonly #renderer: WebGLRenderer;
@@ -79,11 +83,13 @@ export class OceanSurfaceRenderer {
   #cloudBankTexture = new Texture();
   #smallCloudTexture = new Texture();
   #skySunlightTexture = new Texture();
+  #oceanSunpathTexture = new Texture();
   #waterHeightReady = false;
   #seabedCausticReady = false;
   #cloudBankReady = false;
   #smallCloudReady = false;
   #skySunlightReady = false;
+  #oceanSunpathReady = false;
   #textureLoadError: Error | null = null;
   #destroyed = false;
 
@@ -155,6 +161,8 @@ export class OceanSurfaceRenderer {
         uResolution: { value: new Vector2(1, 1) },
         uWaterHeight: { value: this.#waterHeightTexture },
         uWaterHeightMix: { value: 0 },
+        uOceanSunpath: { value: this.#oceanSunpathTexture },
+        uOceanSunpathMix: { value: 0 },
       },
       vertexShader: oceanVertexShader,
       fragmentShader: oceanFragmentShader,
@@ -174,6 +182,7 @@ export class OceanSurfaceRenderer {
     this.#loadCloudBankTexture();
     this.#loadSmallCloudTexture();
     this.#loadSkySunlightTexture();
+    this.#loadOceanSunpathTexture();
 
     this.#camera.position.set(0, 5.8, 14);
     this.resize(host.clientWidth, host.clientHeight);
@@ -218,6 +227,7 @@ export class OceanSurfaceRenderer {
     this.#cloudBankTexture.dispose();
     this.#smallCloudTexture.dispose();
     this.#skySunlightTexture.dispose();
+    this.#oceanSunpathTexture.dispose();
     this.#ktx2Loader.dispose();
     this.#renderer.dispose();
     this.#renderer.domElement.remove();
@@ -245,6 +255,10 @@ export class OceanSurfaceRenderer {
       ? 1
       : 0;
     this.#skyMaterial.uniforms.uSkySunlightMix.value = this.#skySunlightReady
+      ? 1
+      : 0;
+    this.#oceanMaterial.uniforms.uOceanSunpathMix.value = this
+      .#oceanSunpathReady
       ? 1
       : 0;
     this.#sky.position.copy(this.#camera.position);
@@ -374,6 +388,31 @@ export class OceanSurfaceRenderer {
       (cause) => {
         this.#textureLoadError = new Error(
           `Failed to load sky sunlight texture: ${skySunlightTextureUrl}`,
+          { cause },
+        );
+      },
+    );
+  }
+
+  #loadOceanSunpathTexture(): void {
+    this.#ktx2Loader.load(
+      oceanSunpathTextureUrl,
+      (texture) => {
+        if (this.#destroyed) {
+          texture.dispose();
+          return;
+        }
+        const placeholder = this.#oceanSunpathTexture;
+        this.#configureLightmapTexture(texture, "ocean-sunpath-v1-data");
+        this.#oceanSunpathTexture = texture;
+        this.#oceanMaterial.uniforms.uOceanSunpath.value = texture;
+        placeholder.dispose();
+        this.#oceanSunpathReady = true;
+      },
+      undefined,
+      (cause) => {
+        this.#textureLoadError = new Error(
+          `Failed to load ocean sunpath texture: ${oceanSunpathTextureUrl}`,
           { cause },
         );
       },
