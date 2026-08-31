@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import {
+  link,
   lstat,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
-  rename,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -23,12 +23,15 @@ import {
   type EditorAssetsMapV1,
 } from "@slotclientengine/editorresource";
 import {
+  createSceneLayoutDeliveryContentFilename,
+  createSceneLayoutDeliveryManifestFilename,
+  parseSceneLayoutDeliveryPoolFilename,
   parseSceneLayoutDeliveryManifest,
   type SceneLayoutDeliveryAssetV1,
   type SceneLayoutDeliveryAtlasV1,
   type SceneLayoutDeliveryChunkV1,
   type SceneLayoutDeliveryFrameV1,
-  type SceneLayoutDeliveryManifestV1,
+  type SceneLayoutDeliveryManifestV2,
 } from "@slotclientengine/rendercore/scene-layout/data";
 import { inspectSymbolSpineAtlas } from "@slotclientengine/rendercore/symbol/data";
 import { MaxRectsPacker } from "maxrects-packer/dist/maxrects-packer.mjs";
@@ -63,7 +66,8 @@ export interface BuildSceneLayoutDeliveryOptions {
 }
 
 export interface BuiltSceneLayoutDelivery {
-  readonly manifest: SceneLayoutDeliveryManifestV1;
+  readonly manifest: SceneLayoutDeliveryManifestV2;
+  readonly manifestFilename: string;
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly atlasCount: number;
   readonly atlasFrameCount: number;
@@ -254,16 +258,20 @@ export async function buildSceneLayoutDelivery(
         const webp = new Uint8Array(await readFile(webpPath));
         assertWebp(webp, atlasId);
         const sha256 = await sha256Hex(webp);
-        const path = allocateContentAddressedPath({
+        const packagePath = allocateContentAddressedPath({
           digest: sha256,
           extension: "webp",
         });
-        files.set(path, webp);
+        const path = createSceneLayoutDeliveryContentFilename({
+          sha256,
+          extension: "webp",
+        });
+        setDeliveryFile(files, path, webp);
         const frames: Record<string, SceneLayoutDeliveryFrameV1> = {};
         for (const frame of rendered.frames) {
           frames[frame.key] = frame.frame;
           mapEntries[frame.key] = {
-            path,
+            path: packagePath,
             sha256,
             mediaType: "image/webp",
             byteLength: webp.byteLength,
@@ -301,10 +309,17 @@ export async function buildSceneLayoutDelivery(
   for (const [key, value] of external) {
     const sha256 = await sha256Hex(value.bytes);
     const extension = extensionForMedia(key, value.mediaType);
-    const path = allocateContentAddressedPath({ digest: sha256, extension });
-    files.set(path, value.bytes);
+    const packagePath = allocateContentAddressedPath({
+      digest: sha256,
+      extension,
+    });
+    const path = createSceneLayoutDeliveryContentFilename({
+      sha256,
+      extension,
+    });
+    setDeliveryFile(files, path, value.bytes);
     mapEntries[key] = {
-      path,
+      path: packagePath,
       sha256,
       mediaType: value.mediaType,
       byteLength: value.bytes.byteLength,
@@ -344,8 +359,11 @@ export async function buildSceneLayoutDelivery(
         pathPolicy: { requireLowercase: true },
       });
       const sha256 = await sha256Hex(zip);
-      const path = `chunks/${ownerSlug(owner)}.${sha256}.zip`;
-      files.set(path, zip);
+      const path = createSceneLayoutDeliveryContentFilename({
+        sha256,
+        extension: "zip",
+      });
+      setDeliveryFile(files, path, zip);
       metadataFile = Object.freeze({
         path,
         sha256,
@@ -365,8 +383,8 @@ export async function buildSceneLayoutDelivery(
       }),
     );
   }
-  const manifest = parseSceneLayoutDeliveryManifest({
-    version: 1,
+  const parsedManifest = parseSceneLayoutDeliveryManifest({
+    version: 2,
     kind: "scene-layout-delivery",
     layoutId: options.source.manifest.id,
     initialMode: options.source.manifest.gameModes!.initialMode,
@@ -377,9 +395,19 @@ export async function buildSceneLayoutDelivery(
       Object.entries(assetRoutes).sort(([a], [b]) => compare(a, b)),
     ),
   });
-  files.set("delivery.manifest.json", encodeStableJson(manifest));
+  if (parsedManifest.version !== 2)
+    throw new Error(
+      "内部错误：CDN delivery builder 未生成 version 2 manifest。",
+    );
+  const manifest = parsedManifest;
+  const manifestBytes = encodeStableJson(manifest);
+  const manifestFilename = createSceneLayoutDeliveryManifestFilename(
+    await sha256Hex(manifestBytes),
+  );
+  setDeliveryFile(files, manifestFilename, manifestBytes);
   return Object.freeze({
     manifest,
+    manifestFilename,
     files: new Map(files),
     atlasCount: atlasRecords.length,
     atlasFrameCount: Object.values(assetRoutes).filter(
@@ -392,70 +420,142 @@ export async function buildSceneLayoutDelivery(
 export async function commitSceneLayoutDeliveryDirectory(options: {
   readonly outputDirectory: string;
   readonly delivery: BuiltSceneLayoutDelivery;
-}): Promise<void> {
-  try {
-    await lstat(options.outputDirectory);
-    throw new Error(`交付目录已经存在：${options.outputDirectory}`);
-  } catch (error) {
-    if ((error as { readonly code?: string }).code !== "ENOENT") throw error;
+}): Promise<{
+  readonly createdFileCount: number;
+  readonly reusedFileCount: number;
+}> {
+  await ensureDeliveryPoolDirectory(options.outputDirectory);
+  const existing = await inspectDeliveryPoolDirectory(options.outputDirectory);
+  const candidates = orderedDeliveryFiles(options.delivery);
+  let reusedFileCount = 0;
+  for (const [filename, bytes] of candidates) {
+    if (!existing.has(filename)) continue;
+    await assertDeliveryFileEquals(
+      join(options.outputDirectory, filename),
+      filename,
+      bytes,
+    );
+    reusedFileCount += 1;
   }
-  await mkdir(dirname(options.outputDirectory), { recursive: true });
   const stage = await mkdtemp(
     join(dirname(options.outputDirectory), ".gamelayout-delivery-"),
   );
+  let createdFileCount = 0;
   try {
-    for (const [path, bytes] of options.delivery.files) {
-      const target = join(stage, path);
-      await mkdir(dirname(target), { recursive: true });
-      await writeFile(target, bytes, { flag: "wx" });
+    for (const [filename, bytes] of candidates) {
+      if (existing.has(filename)) continue;
+      const staged = join(stage, filename);
+      await writeFile(staged, bytes, { flag: "wx" });
+      const target = join(options.outputDirectory, filename);
+      try {
+        await link(staged, target);
+        createdFileCount += 1;
+      } catch (error) {
+        if ((error as { readonly code?: string }).code !== "EEXIST")
+          throw error;
+        await assertDeliveryFileEquals(target, filename, bytes);
+        reusedFileCount += 1;
+      }
     }
-    await rename(stage, options.outputDirectory);
-  } catch (error) {
-    await rm(stage, { recursive: true, force: true });
-    throw error;
+  } finally {
+    await rm(stage, { recursive: true, force: true }).catch(() => undefined);
   }
+  return Object.freeze({ createdFileCount, reusedFileCount });
 }
 
 export async function checkSceneLayoutDeliveryDirectory(options: {
   readonly outputDirectory: string;
   readonly delivery: BuiltSceneLayoutDelivery;
 }): Promise<void> {
-  const actualPaths = await collectDirectoryFiles(options.outputDirectory);
-  const expectedPaths = [...options.delivery.files.keys()].sort(compare);
-  if (
-    actualPaths.length !== expectedPaths.length ||
-    actualPaths.some((path, index) => path !== expectedPaths[index])
-  )
-    throw new Error(
-      `交付目录文件集合不一致；expected=${expectedPaths.join(",")}, actual=${actualPaths.join(",")}。`,
+  const actual = await inspectDeliveryPoolDirectory(options.outputDirectory);
+  for (const [filename, bytes] of orderedDeliveryFiles(options.delivery)) {
+    if (!actual.has(filename))
+      throw new Error(`交付目录缺少当前 delivery 文件：${filename}`);
+    await assertDeliveryFileEquals(
+      join(options.outputDirectory, filename),
+      filename,
+      bytes,
     );
-  for (const path of expectedPaths) {
-    const actual = new Uint8Array(
-      await readFile(join(options.outputDirectory, path)),
-    );
-    const expected = options.delivery.files.get(path)!;
-    if (
-      actual.byteLength !== expected.byteLength ||
-      actual.some((byte, index) => byte !== expected[index])
-    )
-      throw new Error(`交付目录文件内容不一致：${path}`);
   }
 }
 
-async function collectDirectoryFiles(
+async function ensureDeliveryPoolDirectory(root: string): Promise<void> {
+  await mkdir(root, { recursive: true });
+  const info = await lstat(root);
+  if (!info.isDirectory() || info.isSymbolicLink())
+    throw new Error(`交付路径必须是普通目录：${root}`);
+}
+
+async function inspectDeliveryPoolDirectory(
   root: string,
-  prefix = "",
-): Promise<string[]> {
-  const entries = await readdir(join(root, prefix), { withFileTypes: true });
-  const files: string[] = [];
+): Promise<ReadonlySet<string>> {
+  const info = await lstat(root);
+  if (!info.isDirectory() || info.isSymbolicLink())
+    throw new Error(`交付路径必须是普通目录：${root}`);
+  const entries = await readdir(root, { withFileTypes: true });
+  const files = new Set<string>();
   for (const entry of entries) {
-    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.isDirectory())
-      files.push(...(await collectDirectoryFiles(root, path)));
-    else if (entry.isFile()) files.push(path);
-    else throw new Error(`交付目录包含不支持的文件类型：${path}`);
+    if (!entry.isFile())
+      throw new Error(`交付目录只能包含扁平普通文件：${entry.name}`);
+    try {
+      parseSceneLayoutDeliveryPoolFilename(entry.name);
+    } catch (error) {
+      throw new Error(
+        `交付目录包含非法文件名 ${entry.name}：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    files.add(entry.name);
   }
-  return files.sort(compare);
+  return files;
+}
+
+function orderedDeliveryFiles(
+  delivery: BuiltSceneLayoutDelivery,
+): readonly (readonly [string, Uint8Array])[] {
+  const payload = [...delivery.files]
+    .filter(([filename]) => filename !== delivery.manifestFilename)
+    .sort(([left], [right]) => compare(left, right));
+  const manifestBytes = delivery.files.get(delivery.manifestFilename);
+  if (!manifestBytes)
+    throw new Error(
+      `delivery files 缺少 manifest：${delivery.manifestFilename}`,
+    );
+  return Object.freeze([
+    ...payload,
+    [delivery.manifestFilename, manifestBytes] as const,
+  ]);
+}
+
+async function assertDeliveryFileEquals(
+  target: string,
+  filename: string,
+  expected: Uint8Array,
+): Promise<void> {
+  const info = await lstat(target);
+  if (!info.isFile() || info.isSymbolicLink())
+    throw new Error(`交付文件不是普通文件：${filename}`);
+  const actual = new Uint8Array(await readFile(target));
+  if (!equalBytes(actual, expected))
+    throw new Error(`交付目录同名文件内容不一致：${filename}`);
+}
+
+function setDeliveryFile(
+  files: Map<string, Uint8Array>,
+  filename: string,
+  bytes: Uint8Array,
+): void {
+  parseSceneLayoutDeliveryPoolFilename(filename);
+  const existing = files.get(filename);
+  if (existing && !equalBytes(existing, bytes))
+    throw new Error(`delivery physical filename collision：${filename}`);
+  if (!existing) files.set(filename, bytes);
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return (
+    left.byteLength === right.byteLength &&
+    left.every((byte, index) => byte === right[index])
+  );
 }
 
 function createIdentityAssetGroups(

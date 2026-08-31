@@ -2,7 +2,7 @@
 
 `apps/gamelayoutpkgcli` 是本地 Scene Layout production ZIP 后处理工具，提供两种显式输出：
 
-- `--delivery-dir` 生成 runtime/CDN 直接消费的 versioned delivery 目录。它从 typed dependency graph
+- `--delivery-dir` 生成 runtime/CDN 直接消费的 versioned delivery 扁平文件池。它从 typed dependency graph
   推导 `initial` 与各 GameMode 的唯一 physical owner；非 Spine 图片先用 MaxRects（允许 rotation）合图，
   再把整张 atlas 单次转换成 WebP；JSON、VNI project、Spine `.atlas` 等元数据进入 owner ZIP；
   Spine page 保持独立图片；音频和视频保持输入 bytes 与格式不变并作为独立 CDN 文件。
@@ -10,7 +10,8 @@
   并输出 asset-groups JSON。
 
 两种模式都不修改美术源 ZIP。CDN delivery 由 RenderCore 的
-`loadSceneLayoutDeliveryFromUrl()` 直接加载，不要求 game app 维护逐文件 import 表。
+`loadSceneLayoutDeliveryFromUrl({ urlPrefix, manifestFilename })` 直接加载，不要求 game app 维护逐文件 import 表；
+URL prefix 由部署环境提供，因此 JS 与资产可以位于不同 origin 或路径。
 CLI 可 strict 读取并结构化改写 Scene Layout v1–v6；输入是 v6 时保持其方向 placement 与 allocation v2。
 
 ## 前置条件
@@ -82,8 +83,9 @@ pnpm --filter gamelayoutpkgcli dev -- \
 参数：
 
 - `--input <zip>`：必填，源 Scene Layout ZIP。
-- `--delivery-dir <directory>`：启用 CDN delivery 模式；目标必须不存在，工具以 staging directory
-  原子提交。配合 `--check` 时目标必须存在且不会写入。
+- `--delivery-dir <directory>`：启用 CDN delivery 模式；目标不存在时创建，已存在时作为 append-only 的 hashed
+  文件池复用。工具只写入缺失文件，已有同名文件必须 byte-equal；payload 先发布，hashed manifest 最后发布。
+  配合 `--check` 时目标必须存在且不会写入。
 - `--check`：重新执行同一 deterministic pipeline，并逐文件校验现有 delivery 目录。
 - `--atlas-max-size <256..8192>`：atlas 最大边长，默认 `4096`。
 - `--atlas-padding <0..32>`：frame 间距，默认 `4`。
@@ -101,11 +103,21 @@ pnpm --filter gamelayoutpkgcli dev -- \
 
 legacy 模式的输入、ZIP 输出和 JSON 输出必须是三个不同路径。任何输出已存在时工具都会拒绝覆盖；
 ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一个文件。delivery 模式的输入与目标目录
-也必须不同；生成时拒绝覆盖，`--check` 时只读比较。
+也必须不同；生成和检查都拒绝覆盖同名不同 bytes 的对象，不删除旧 manifest 或旧资源。
 
 ## CDN delivery 输出合同
 
-目录根只有 `delivery.manifest.json`、`chunks/*.zip` 与 `assets/*`：
+目录中只有扁平普通文件，不含子目录：
+
+```text
+delivery.<sha256>.json
+<sha256>.zip
+<sha256>.webp
+<sha256>.<audio-or-video-extension>
+```
+
+CLI 成功日志会打印本轮 exact `delivery.<sha256>.json`。部署/app 配置必须保存这个文件名；工具不会生成可变的
+`latest.json` 或 unhashed alias。
 
 - physical owner 只允许 `initial`、manifest 顺序中的 `mode:<id>` 与 `media`。同一 logical asset
   只存一份；跨 mode 资源由最早 mode 持有，初始闭包始终优先归 `initial`；没有明确 mode owner
@@ -118,10 +130,31 @@ ZIP 与 JSON 作为一对提交，第二个文件提交失败时会回滚第一�
   padding/extrude 在 WebP 编码前写入 atlas，因此 PNG/JPEG 不会先单图有损再二次合图编码。
 - Spine atlas page 不进入通用 atlas，保持一页一文件并可转 WebP；runtime 仍按 typed texture map
   绑定，不按 basename 猜测。
-- audio/video 不转码、不进 ZIP、不进 atlas；`delivery.manifest.json` 记录其独立 CDN path，runtime
+- audio/video 不转码、不进 ZIP、不进 atlas；hashed delivery manifest 记录其独立 CDN filename，runtime
   直接保留 URL，允许浏览器按媒体能力请求/流式加载。
 - 所有 physical 文件 content-addressed；manifest 记录大小、SHA-256、atlas frame、rotation、owner
   和 dependency。runtime 将 map 仅作为 logical route 使用，CLI 的 `--check` 承担完整交付 parity。
+
+新输出恒为 `scene-layout-delivery` version 2。version 2 的 CDN path 必须是与声明 SHA-256 一致的单段文件名；
+metadata ZIP 内部与 `assets.map.json` 仍保持标准 `assets/<sha256>.<ext>` package path，不能把 CDN 扁平路径写回
+authoring package。RenderCore 继续 strict 读取历史 version 1 nested delivery，但 CLI 不再生成 version 1。
+
+同一文件池可保留多个 hashed manifest 和它们共享的 payload。再次生成相同 delivery 时不会重写任何文件；局部变更只
+新增受影响的 physical atlas/ZIP/media 与新 manifest。`--check` 要求当前 candidate closure 全部存在且 byte-equal，
+允许额外合法 hashed 旧版本。缓存复用粒度是 physical atlas、metadata ZIP 或独立媒体；atlas/ZIP 内任一成员变化仍会使
+整个物理文件产生新 hash。
+
+Runtime 示例：
+
+```ts
+const resource = await loadSceneLayoutDeliveryFromUrl({
+  urlPrefix: "https://cdn.example.com/slot-assets/",
+  manifestFilename: "delivery.<64-char-sha256>.json",
+});
+```
+
+`urlPrefix` 必须是以 `/` 结尾、无 credential/query/hash 的 HTTP(S) 目录 URL；manifest 和全部 physical payload 都只
+相对该 prefix 解析。CDN 应为 hashed 文件配置长期 immutable cache header；真实上传、CORS、对象清理和 purge 属于部署边界。
 
 ## Legacy 单 ZIP 输出合同
 

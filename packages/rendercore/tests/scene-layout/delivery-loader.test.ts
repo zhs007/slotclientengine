@@ -18,6 +18,21 @@ vi.mock("@slotclientengine/browserartifactio", () => ({
   },
 }));
 
+vi.mock("@slotclientengine/editorresource", () => ({
+  decodeEditorAssetsMap: vi.fn(() => ({
+    version: 1,
+    kind: "editor-assets",
+    files: {
+      "intro.mp4": {
+        path: `assets/${"d".repeat(64)}.mp4`,
+        sha256: "d".repeat(64),
+        byteLength: 1,
+        mediaType: "video/mp4",
+      },
+    },
+  })),
+}));
+
 vi.mock("../../src/scene-layout/package-resource.js", () => ({
   createSceneLayoutPackageResource: vi.fn(async (options) => {
     state.packageOptions = options;
@@ -38,8 +53,6 @@ vi.mock("../../src/scene-layout/package-resource.js", () => ({
 
 import { loadSceneLayoutDeliveryFromUrl } from "../../src/scene-layout/delivery-loader.js";
 
-const hash = "a".repeat(64);
-
 describe("Scene Layout delivery loader", () => {
   beforeEach(() => {
     state.packageOptions = null;
@@ -59,7 +72,8 @@ describe("Scene Layout delivery loader", () => {
     }) as unknown as typeof fetch;
 
     const resource = await loadSceneLayoutDeliveryFromUrl({
-      manifestUrl: "https://cdn.example/game/delivery.manifest.json",
+      urlPrefix: "https://cdn.example/game/",
+      manifestFilename: "delivery.manifest.json",
       manifestBytes: new TextEncoder().encode(JSON.stringify(manifest())),
       fetchImpl,
     });
@@ -77,7 +91,7 @@ describe("Scene Layout delivery loader", () => {
       "assets.map.json",
       "free.json",
       "bonus.json",
-      "intro.mp4",
+      `assets/${"d".repeat(64)}.mp4`,
     ]);
     expect(resource.delivery?.isGameModeReady("BaseGame")).toBe(true);
     expect(resource.delivery?.isGameModeReady("FreeGame")).toBe(false);
@@ -97,17 +111,61 @@ describe("Scene Layout delivery loader", () => {
     await resource.delivery!.loadGameMode("BonusGame");
     await resource.destroy();
   });
+
+  it("loads v2 from an explicit asset prefix and rejects filename/version or prefix drift", async () => {
+    const requested: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requested.push(url);
+      if (url.endsWith(`${"a".repeat(64)}.zip`)) return response([1]);
+      if (url.endsWith(`${"b".repeat(64)}.zip`)) return response([2]);
+      if (url.endsWith(`${"c".repeat(64)}.zip`)) return response([3]);
+      if (url.endsWith(`${"d".repeat(64)}.mp4`)) return response([9]);
+      throw new Error(`unexpected URL: ${url}`);
+    }) as unknown as typeof fetch;
+    const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest(2)));
+    const resource = await loadSceneLayoutDeliveryFromUrl({
+      urlPrefix: "https://assets.example/cdn/layouts/",
+      manifestFilename: `delivery.${"e".repeat(64)}.json`,
+      manifestBytes,
+      fetchImpl,
+    });
+
+    expect(requested.slice(0, 3)).toEqual([
+      `https://assets.example/cdn/layouts/${"a".repeat(64)}.zip`,
+      `https://assets.example/cdn/layouts/${"b".repeat(64)}.zip`,
+      `https://assets.example/cdn/layouts/${"c".repeat(64)}.zip`,
+    ]);
+    await resource.destroy();
+
+    await expect(
+      loadSceneLayoutDeliveryFromUrl({
+        urlPrefix: "https://assets.example/cdn/layouts/",
+        manifestFilename: "delivery.manifest.json",
+        manifestBytes,
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/filename version 1.*manifest version 2/);
+    await expect(
+      loadSceneLayoutDeliveryFromUrl({
+        urlPrefix: "https://assets.example/cdn/layouts",
+        manifestFilename: `delivery.${"e".repeat(64)}.json`,
+        manifestBytes,
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/directory URL/);
+  });
 });
 
-function manifest() {
-  const metadata = (path: string) => ({
+function manifest(version: 1 | 2 = 1) {
+  const metadata = (path: string, sha256: string) => ({
     path,
-    sha256: hash,
+    sha256,
     byteLength: 1,
     mediaType: "application/zip",
   });
   return {
-    version: 1,
+    version,
     kind: "scene-layout-delivery",
     layoutId: "streaming-layout",
     initialMode: "BaseGame",
@@ -117,7 +175,10 @@ function manifest() {
         id: "initial",
         owner: "initial",
         dependencies: [],
-        metadata: metadata("initial.zip"),
+        metadata: metadata(
+          version === 1 ? "initial.zip" : `${"a".repeat(64)}.zip`,
+          "a".repeat(64),
+        ),
         atlases: [],
         externalAssets: [],
       },
@@ -133,7 +194,10 @@ function manifest() {
         id: "mode:FreeGame",
         owner: "mode:FreeGame",
         dependencies: ["initial"],
-        metadata: metadata("free.zip"),
+        metadata: metadata(
+          version === 1 ? "free.zip" : `${"b".repeat(64)}.zip`,
+          "b".repeat(64),
+        ),
         atlases: [],
         externalAssets: [],
       },
@@ -141,7 +205,10 @@ function manifest() {
         id: "mode:BonusGame",
         owner: "mode:BonusGame",
         dependencies: ["initial"],
-        metadata: metadata("bonus.zip"),
+        metadata: metadata(
+          version === 1 ? "bonus.zip" : `${"c".repeat(64)}.zip`,
+          "c".repeat(64),
+        ),
         atlases: [],
         externalAssets: [],
       },
@@ -151,8 +218,8 @@ function manifest() {
       "intro.mp4": {
         kind: "external",
         owner: "media",
-        path: "intro.mp4",
-        sha256: hash,
+        path: version === 1 ? "intro.mp4" : `${"d".repeat(64)}.mp4`,
+        sha256: "d".repeat(64),
         byteLength: 1,
         sourceByteLength: 1,
         mediaType: "video/mp4",
@@ -162,7 +229,7 @@ function manifest() {
         owner: "mode:FreeGame",
         chunk: "mode:FreeGame",
         entry: "free.json",
-        sha256: hash,
+        sha256: "f".repeat(64),
         byteLength: 1,
         mediaType: "application/json",
       },
@@ -171,7 +238,7 @@ function manifest() {
         owner: "mode:BonusGame",
         chunk: "mode:BonusGame",
         entry: "bonus.json",
-        sha256: hash,
+        sha256: "f".repeat(64),
         byteLength: 1,
         mediaType: "application/json",
       },
