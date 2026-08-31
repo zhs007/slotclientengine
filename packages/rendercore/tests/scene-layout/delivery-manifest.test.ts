@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createSceneLayoutDeliveryContentFilename,
-  createSceneLayoutDeliveryManifestFilename,
   parseSceneLayoutDeliveryManifest,
-  parseSceneLayoutDeliveryManifestFilename,
   parseSceneLayoutDeliveryPoolFilename,
 } from "../../src/scene-layout/data/delivery.js";
 
@@ -18,7 +16,7 @@ describe("Scene Layout delivery manifest", () => {
     });
   });
 
-  it("accepts strict flat v2 content paths and hashed manifest filenames", () => {
+  it("accepts strict flat v2 content paths", () => {
     const parsed = parseSceneLayoutDeliveryManifest(fixture(2));
     expect(parsed.version).toBe(2);
     expect(parsed.chunks[0]?.metadata?.path).toBe(`${hash}.zip`);
@@ -29,12 +27,6 @@ describe("Scene Layout delivery manifest", () => {
         extension: "zip",
       }),
     ).toBe(`${hash}.zip`);
-    const manifestFilename = createSceneLayoutDeliveryManifestFilename(hash);
-    expect(manifestFilename).toBe(`delivery.${hash}.json`);
-    expect(parseSceneLayoutDeliveryManifestFilename(manifestFilename)).toBe(2);
-    expect(
-      parseSceneLayoutDeliveryManifestFilename("delivery.manifest.json"),
-    ).toBe(1);
     expect(parseSceneLayoutDeliveryPoolFilename(`${hash}.mp4`)).toEqual({
       kind: "content",
       sha256: hash,
@@ -75,8 +67,8 @@ describe("Scene Layout delivery manifest", () => {
       parseSceneLayoutDeliveryPoolFilename(`${hash.slice(1)}.zip`),
     ).toThrow(/invalid/);
     expect(() =>
-      parseSceneLayoutDeliveryManifestFilename(`${hash}.json`),
-    ).toThrow(/manifest filename/);
+      parseSceneLayoutDeliveryPoolFilename(`delivery.${hash}.json`),
+    ).toThrow(/invalid/);
   });
 
   it("keeps v1 external routes compatible and validates v2 extensions", () => {

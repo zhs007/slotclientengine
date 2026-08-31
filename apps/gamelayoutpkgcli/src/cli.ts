@@ -1,4 +1,4 @@
-import { basename, dirname, extname, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import {
   createSceneLayoutAssetGroups,
   serializeSceneLayoutAssetGroups,
@@ -36,7 +36,9 @@ export async function runGamelayoutPkgCli(
       console.log(
         `Atlas ${result.atlasCount} 张、合图帧 ${result.atlasFrameCount} 个、外置资源 ${result.externalAssetCount} 个。`,
       );
-      console.log(`Delivery manifest：${result.manifestFilename}`);
+      console.log(
+        `项目 manifest：${result.manifestPath}${result.manifestChanged ? "（已更新）" : "（未变化）"}`,
+      );
       console.log(
         `CDN 文件新增 ${result.createdFileCount} 个、复用 ${result.reusedFileCount} 个。`,
       );
@@ -192,6 +194,8 @@ export async function publishSceneLayoutDeliveryFile(
 ): Promise<{
   readonly outputDirectory: string;
   readonly manifestFilename: string;
+  readonly manifestPath: string;
+  readonly manifestChanged: boolean;
   readonly atlasCount: number;
   readonly atlasFrameCount: number;
   readonly externalAssetCount: number;
@@ -212,6 +216,7 @@ export async function publishSceneLayoutDeliveryFile(
   });
   let createdFileCount = 0;
   let reusedFileCount = delivery.files.size;
+  let manifestChanged = false;
   if (options.check)
     await checkSceneLayoutDeliveryDirectory({
       outputDirectory: options.deliveryDirectory,
@@ -224,10 +229,13 @@ export async function publishSceneLayoutDeliveryFile(
     });
     createdFileCount = published.createdFileCount;
     reusedFileCount = published.reusedFileCount;
+    manifestChanged = published.manifestChanged;
   }
   return Object.freeze({
     outputDirectory: options.deliveryDirectory,
     manifestFilename: delivery.manifestFilename,
+    manifestPath: join(options.deliveryDirectory, delivery.manifestFilename),
+    manifestChanged,
     atlasCount: delivery.atlasCount,
     atlasFrameCount: delivery.atlasFrameCount,
     externalAssetCount: delivery.externalAssetCount,

@@ -1,5 +1,11 @@
 # 272 gamelayoutpkgcli-flat-hashed-cdn-delivery 任务计划
 
+> 2026-08-31T08:49:59Z 后续需求调整：用户确认 delivery manifest 已随游戏项目 import/发布，因此不再需要
+> content-addressed manifest filename。本计划中关于 `delivery.<sha256>.json`、manifest 与 payload 同 CDN prefix、
+> `manifestFilename` 参数和保留多个 hashed manifest 的原始条目由以下最终合同取代：固定项目文件
+> `delivery.manifest.json`、append-only hashed payload pool，以及 runtime 独立的 `manifestUrl`/`manifestBytes` 与
+> payload `urlPrefix`。其余 v2 flat payload、owner、lazy loading 和 strict failure 计划保持有效。
+
 ## 1. 目标与完成定义
 
 ### 目标

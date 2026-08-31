@@ -276,15 +276,15 @@ lazy runtime resource的exact key/kind来自canonical runtime manifest，initial
 extract、严格 path collision、assets map hash/size/media/orphan 与 nested exact closure
 校验，不执行 editor Finder-wrapper/legacy migration。
 
-`loadSceneLayoutDeliveryFromUrl()` 是 CDN delivery runtime 边界：调用方显式提供 HTTP(S) directory
-`urlPrefix` 与 exact `manifestFilename`，runtime 先 strict 解析 manifest，按 initial 优先顺序 bounded 解压各
-GameMode metadata ZIP，再从 WebP atlas 建立 Pixi 子纹理（含 rotation/original size），并把 Spine page、音频和视频
-保留为独立 CDN URL。prefix 不写入 manifest，JS 与资产可以部署在不同 origin/path；prefix 必须以 `/` 结尾且不含
-credential、query 或 hash。
+`loadSceneLayoutDeliveryFromUrl()` 是 CDN delivery runtime 边界：调用方显式提供项目侧 `manifestUrl`（或已 import 的
+`manifestBytes`）与 payload CDN 的 HTTP(S) directory `urlPrefix`。runtime 先 strict 解析 manifest，按 initial 优先顺序
+bounded 解压各 GameMode metadata ZIP，再从 WebP atlas 建立 Pixi 子纹理（含 rotation/original size），并把 Spine page、
+音频和视频保留为独立 CDN URL。prefix 不写入 manifest，JS/manifest 与 payload 可以部署在不同 origin/path；prefix 必须
+以 `/` 结尾且不含 credential、query 或 hash。
 
-新 delivery version 2 的 manifest 名为 `delivery.<sha256>.json`，metadata ZIP、atlas 与媒体均以
-`<sha256>.<ext>` 扁平放在同一 prefix 下。runtime 继续按明确 version 读取历史 `delivery.manifest.json` v1 nested layout，
-但不把 v1/v2 路径互相 fallback。
+新 delivery version 2 继续使用固定项目文件 `delivery.manifest.json`；只有 metadata ZIP、atlas 与媒体以
+`<sha256>.<ext>` 扁平放在 payload prefix 下。runtime 继续按明确 version 读取历史 v1 nested route，但不把 v1/v2 payload
+路径互相 fallback。
 
 它把 delivery 恢复成同一 logical filename-key package resource；game app 不需要改 layout、Symbols、
 Popup、VNI manifest，也不维护 physical 文件表。delivery hash/byte parity 由 CLI `--check` 负责，
@@ -292,8 +292,19 @@ runtime 仍只在消费点对缺失 path、schema、decoder 和 renderer capabil
 
 ```ts
 const resource = await loadSceneLayoutDeliveryFromUrl({
+  manifestUrl: new URL("./delivery.manifest.json", document.baseURI),
   urlPrefix: "https://cdn.example.com/slot-assets/",
-  manifestFilename: "delivery.<64-char-sha256>.json",
+});
+```
+
+Vite 直接 import manifest 时可省略 manifest URL：
+
+```ts
+import manifestText from "./delivery.manifest.json?raw";
+
+const resource = await loadSceneLayoutDeliveryFromUrl({
+  manifestBytes: new TextEncoder().encode(manifestText),
+  urlPrefix: "https://cdn.example.com/slot-assets/",
 });
 ```
 
