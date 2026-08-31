@@ -7,6 +7,7 @@ import type {
 } from "../data/index.js";
 import type {
   AudioBackend,
+  AudioBackendActivityState,
   AudioBackendInstance,
   AudioBackendSound,
   AudioBackendSource,
@@ -28,11 +29,7 @@ export interface ResolvedAudioEventTrack {
 }
 
 export type AudioPlaybackState =
-  | "pending"
-  | "playing"
-  | "ended"
-  | "stopped"
-  | "failed";
+  "pending" | "playing" | "ended" | "stopped" | "failed";
 
 export interface AudioPlaybackHandle {
   readonly id: number;
@@ -44,6 +41,7 @@ export interface AudioPlaybackHandle {
 }
 
 export interface AudioRuntimeSnapshot {
+  readonly activity: AudioBackendActivityState;
   readonly pendingEffects: number;
   readonly activeEffects: number;
   readonly preparedSounds: number;
@@ -85,6 +83,7 @@ interface PendingEffect {
   remainingSeconds: number;
   sound: AudioBackendSound | null;
   ready: boolean;
+  starting: boolean;
   cancelled: boolean;
 }
 
@@ -173,6 +172,8 @@ class DefaultAudioRuntime implements AudioRuntime {
   readonly #musicListeners = new Set<
     (event: AudioMusicLifecycleEvent) => void
   >();
+  readonly #musicActivityWaiters = new Set<() => void>();
+  readonly #disposeActivity: () => void;
   #nextId = 1;
   #nextMusicVoiceId = -1;
   #sequence = 1;
@@ -185,6 +186,7 @@ class DefaultAudioRuntime implements AudioRuntime {
   #focusElapsedSeconds = 0;
   #focusDurationSeconds = 0;
   #focusKind: "keep" | "duck" | "pause" = "keep";
+  #activity: AudioBackendActivityState;
   #currentMusic: string | null = null;
   #musicRequest = 0;
   #destroyed = false;
@@ -199,6 +201,10 @@ class DefaultAudioRuntime implements AudioRuntime {
     this.#effects = Object.freeze({ ...effects });
     this.#music = Object.freeze({ ...music });
     this.#tracks = Object.freeze({ ...tracks });
+    this.#activity = backend.getActivityState();
+    this.#disposeActivity = backend.observeActivity((state) =>
+      this.setActivity(state),
+    );
   }
 
   async prepare(routes: readonly string[]): Promise<void> {
@@ -252,6 +258,7 @@ class DefaultAudioRuntime implements AudioRuntime {
     this.assertAlive();
     if (name === this.#currentMusic) return;
     const request = ++this.#musicRequest;
+    this.wakeMusicActivityWaiters();
     if (name === null) {
       this.#currentMusic = null;
       for (const voice of this.#musicVoices)
@@ -260,44 +267,18 @@ class DefaultAudioRuntime implements AudioRuntime {
     }
     const resolved = this.#music[name];
     if (!resolved) throw new Error(`unknown audio music binding: ${name}`);
-    const sound = await this.prepareSound(`music:${name}`, resolved.sources);
-    this.assertAlive();
-    if (request !== this.#musicRequest) return;
-    let instance: AudioBackendInstance;
+    this.#currentMusic = name;
     try {
-      instance = await sound.play({ loop: true, volume: 0 });
+      const sound = await this.prepareSound(`music:${name}`, resolved.sources);
+      this.assertAlive();
+      if (request !== this.#musicRequest) return;
+      await this.restartMusicRequest(request, name, resolved, sound);
     } catch (error) {
+      if (request === this.#musicRequest) this.#currentMusic = null;
       throw new Error(
         `failed to start audio music ${name}: ${formatError(error)}`,
       );
     }
-    if (this.#destroyed) {
-      instance.stop();
-      throw new Error("audio runtime is destroyed.");
-    }
-    if (request !== this.#musicRequest) {
-      instance.stop();
-      return;
-    }
-    const next: MusicVoice = {
-      id: this.#nextMusicVoiceId--,
-      name,
-      binding: resolved.binding,
-      instance,
-      sourceIdentity: sourceIdentity(resolved.sources),
-      transitionGain: 0,
-      startGain: 0,
-      targetGain: 1,
-      elapsedSeconds: 0,
-      durationSeconds: resolved.binding.fadeInSeconds,
-      stopping: false,
-    };
-    for (const voice of this.#musicVoices)
-      this.rampMusic(voice, 0, voice.binding.fadeOutSeconds, true);
-    this.#musicVoices.push(next);
-    this.#currentMusic = name;
-    this.applyMusicState();
-    this.emitMusic(name, "started");
   }
 
   observeMusic(
@@ -319,6 +300,7 @@ class DefaultAudioRuntime implements AudioRuntime {
       throw new Error(
         "audio runtime deltaSeconds must be finite and non-negative.",
       );
+    if (this.#activity === "suspended") return;
     for (const pending of this.#pending.values()) {
       pending.remainingSeconds = Math.max(
         0,
@@ -371,6 +353,7 @@ class DefaultAudioRuntime implements AudioRuntime {
 
   getSnapshot(): AudioRuntimeSnapshot {
     return Object.freeze({
+      activity: this.#activity,
       pendingEffects: this.#pending.size,
       activeEffects: this.#active.size,
       preparedSounds: this.#sounds.size,
@@ -383,7 +366,9 @@ class DefaultAudioRuntime implements AudioRuntime {
 
   destroy(): void {
     if (this.#destroyed) return;
+    this.#disposeActivity();
     this.#destroyed = true;
+    this.wakeMusicActivityWaiters();
     this.#musicListeners.clear();
     for (const pending of this.#pending.values()) {
       pending.cancelled = true;
@@ -416,6 +401,8 @@ class DefaultAudioRuntime implements AudioRuntime {
     delaySeconds: number,
   ): AudioPlaybackHandle {
     const binding = resolved.binding;
+    if (binding.playback === "once" && this.#activity === "suspended")
+      return this.stoppedHandle(route);
     if (binding.playback === "loop") {
       const existing = [
         ...this.#pending.values(),
@@ -446,6 +433,7 @@ class DefaultAudioRuntime implements AudioRuntime {
       remainingSeconds: delaySeconds,
       sound: null,
       ready: false,
+      starting: false,
       cancelled: false,
     };
     this.#pending.set(id, pending);
@@ -498,12 +486,14 @@ class DefaultAudioRuntime implements AudioRuntime {
   private tryStartPending(pending: PendingEffect): void {
     if (
       pending.cancelled ||
+      pending.starting ||
+      this.#activity === "suspended" ||
       !pending.ready ||
       pending.remainingSeconds > 0 ||
       !pending.sound
     )
       return;
-    this.#pending.delete(pending.handle.id);
+    pending.starting = true;
     void Promise.resolve(
       pending.sound.play({
         loop: pending.resolved.binding.playback === "loop",
@@ -511,11 +501,23 @@ class DefaultAudioRuntime implements AudioRuntime {
       }),
     ).then(
       (instance) => {
-        if (this.#destroyed || pending.cancelled) {
+        pending.starting = false;
+        if (
+          this.#destroyed ||
+          pending.cancelled ||
+          !this.#pending.has(pending.handle.id)
+        ) {
           instance.stop();
           pending.handle.settle("stopped");
           return;
         }
+        if (this.#activity === "suspended") {
+          instance.stop();
+          if (pending.resolved.binding.playback === "once")
+            this.stopById(pending.handle.id);
+          return;
+        }
+        this.#pending.delete(pending.handle.id);
         pending.handle.state = "playing";
         let active!: ActiveEffect;
         const disposeEnded = instance.onEnded(() =>
@@ -538,7 +540,10 @@ class DefaultAudioRuntime implements AudioRuntime {
         this.applyEffectVolumes();
         this.applyMusicState();
       },
-      (error) => pending.handle.settle("failed", error),
+      (error) => {
+        pending.starting = false;
+        this.failPending(pending, error);
+      },
     );
   }
 
@@ -594,6 +599,12 @@ class DefaultAudioRuntime implements AudioRuntime {
     return handle;
   }
 
+  private stoppedHandle(route: string): AudioPlaybackHandle {
+    const handle = new MutablePlaybackHandle(this.#nextId++, route, () => {});
+    handle.settle("stopped");
+    return handle;
+  }
+
   private recomputeFocus(
     changed: AudioBgmFocusPolicyV1,
     phase: "acquire" | "release",
@@ -620,8 +631,6 @@ class DefaultAudioRuntime implements AudioRuntime {
           : phase === "acquire"
             ? changed.fadeOutSeconds
             : changed.fadeInSeconds;
-    if (this.#focusKind === "pause" && kind !== "pause")
-      for (const voice of this.#musicVoices) voice.instance.paused = false;
     this.#focusKind = kind;
     this.#focusStartGain = this.#focusGain;
     this.#focusTargetGain = target;
@@ -659,6 +668,7 @@ class DefaultAudioRuntime implements AudioRuntime {
 
   private applyEffectVolumes(): void {
     for (const active of this.#active.values()) {
+      active.instance.paused = this.#activity === "suspended";
       const category = playbackCategory(active.resolved);
       const base = this.#masterMuted
         ? 0
@@ -686,9 +696,98 @@ class DefaultAudioRuntime implements AudioRuntime {
         "music",
         voice.sourceIdentity,
       );
-      if (this.#focusKind === "pause" && this.#focusGain === 0)
-        voice.instance.paused = true;
+      voice.instance.paused =
+        this.#activity === "suspended" ||
+        (this.#focusKind === "pause" && this.#focusGain === 0);
     }
+  }
+
+  private setActivity(state: AudioBackendActivityState): void {
+    if (this.#destroyed || state === this.#activity) return;
+    this.#activity = state;
+    if (state === "suspended") {
+      for (const pending of [...this.#pending.values()])
+        if (pending.resolved.binding.playback === "once")
+          this.stopById(pending.handle.id);
+      for (const active of [...this.#active.values()])
+        if (active.resolved.binding.playback === "once")
+          this.stopById(active.handle.id);
+    } else {
+      this.wakeMusicActivityWaiters();
+      for (const pending of this.#pending.values())
+        this.tryStartPending(pending);
+    }
+    this.applyEffectVolumes();
+    this.applyMusicState();
+  }
+
+  private waitForActiveMusicRequest(): Promise<void> {
+    if (this.#activity === "active") return Promise.resolve();
+    return new Promise((resolve) => this.#musicActivityWaiters.add(resolve));
+  }
+
+  private wakeMusicActivityWaiters(): void {
+    for (const resolve of [...this.#musicActivityWaiters]) resolve();
+    this.#musicActivityWaiters.clear();
+  }
+
+  private async restartMusicRequest(
+    request: number,
+    name: string,
+    resolved: ResolvedAudioMusic,
+    sound: AudioBackendSound,
+  ): Promise<void> {
+    while (request === this.#musicRequest) {
+      while (this.#activity === "suspended") {
+        await this.waitForActiveMusicRequest();
+        this.assertAlive();
+        if (request !== this.#musicRequest) return;
+      }
+      const instance = await sound.play({ loop: true, volume: 0 });
+      if (this.#destroyed) {
+        instance.stop();
+        throw new Error("audio runtime is destroyed.");
+      }
+      if (request !== this.#musicRequest) {
+        instance.stop();
+        return;
+      }
+      if (this.isSuspended()) {
+        instance.stop();
+        continue;
+      }
+      this.commitMusicVoice(name, resolved, instance);
+      return;
+    }
+  }
+
+  private commitMusicVoice(
+    name: string,
+    resolved: ResolvedAudioMusic,
+    instance: AudioBackendInstance,
+  ): void {
+    for (const voice of this.#musicVoices)
+      this.rampMusic(voice, 0, voice.binding.fadeOutSeconds, true);
+    const voice: MusicVoice = {
+      id: this.#nextMusicVoiceId--,
+      name,
+      binding: resolved.binding,
+      instance,
+      sourceIdentity: sourceIdentity(resolved.sources),
+      transitionGain: 0,
+      startGain: 0,
+      targetGain: 1,
+      elapsedSeconds: 0,
+      durationSeconds: resolved.binding.fadeInSeconds,
+      stopping: false,
+    };
+    this.#musicVoices.push(voice);
+    this.applyMusicState();
+    this.emitMusic(name, "started");
+  }
+
+  private isSuspended(): boolean {
+    return this.#activity === "suspended";
   }
 
   private eventFocusGain(

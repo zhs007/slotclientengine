@@ -38,6 +38,22 @@ effect 可配置：
 
 延迟等待期间不获取 focus；播放完成、stop、error、cancel 或 destroy 都必须释放。
 
+## 前后台生命周期
+
+AudioCore backend 把窗口焦点、页面可见性和 page lifecycle 合成为唯一的
+`active | suspended` 状态。进入 `suspended` 时，runtime 立即停止 pending、正在启动和
+active 的 `once` 播放；后台期间新建的 `once` handle 直接以 `stopped` 完成，回前台也不补播。
+`loop` effect 与 BGM 保留现有实例和最后一份有效请求，只设置 paused；如果 owner 在后台期间
+显式 stop、更换 BGM 或 destroy，恢复时不得重建旧实例。
+
+后台期间 `update(deltaSeconds)` 不推进 cue delay、focus lease 或 BGM crossfade。回到
+`active` 后只从原进度继续；浏览器 activity pause 与 effect 的 BGM `pause` focus 是两个独立
+条件，必须都释放才允许 BGM unpause。
+
+Pixi backend 在仍有已 prepare 的 owned sound 时显式关闭 `@pixi/sound` 的全局 auto-pause，
+并在最后一个 owner destroy 后恢复进入前的值，避免 Pixi 全局恢复与 AudioCore lifecycle
+重复控制。app、Scene Layout 和具体游戏不得再直接监听 visibility/focus 来批量 resume 音频。
+
 ## 编辑器与交付
 
 - Game Layout Editor：导入/试听 BGM 与 Layout effect，为 mode 选择 optional BGM，维护程序 effect allowlist。

@@ -2,6 +2,7 @@ import { Assets, Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import type {
   AudioBackend,
+  AudioBackendActivityState,
   AudioBackendInstance,
   AudioBackendSound,
 } from "@slotclientengine/audiocore/core";
@@ -54,7 +55,23 @@ class EventAudioSound implements AudioBackendSound {
 
 class EventAudioBackend implements AudioBackend {
   readonly sounds: EventAudioSound[] = [];
+  readonly activityListeners = new Set<
+    (state: AudioBackendActivityState) => void
+  >();
   unlockCount = 0;
+  activity: AudioBackendActivityState = "active";
+  getActivityState() {
+    return this.activity;
+  }
+  observeActivity(listener: (state: AudioBackendActivityState) => void) {
+    this.activityListeners.add(listener);
+    return () => this.activityListeners.delete(listener);
+  }
+  setActivity(activity: AudioBackendActivityState) {
+    if (activity === this.activity) return;
+    this.activity = activity;
+    for (const listener of [...this.activityListeners]) listener(activity);
+  }
   async prepare() {
     const sound = new EventAudioSound();
     this.sounds.push(sound);
@@ -861,6 +878,32 @@ describe("scene layout package runtime", () => {
         expect(observed.some(({ address }) => address === occurrenceB)).toBe(
           true,
         );
+
+        backend.setActivity("suspended");
+        expect(backend.sounds[0]?.instances[0]?.stopped).toBe(true);
+        await runtime.playMainReelSymbolStateBatch([
+          {
+            positions: [
+              { x: 0, y: 0 },
+              { x: 1, y: 0 },
+            ],
+            state: "normal",
+            options: { transitionMode: "immediate", completion: "entered" },
+          },
+        ]);
+        await runtime.playMainReelSymbolStateBatch([
+          {
+            positions: [
+              { x: 0, y: 0 },
+              { x: 1, y: 0 },
+            ],
+            state: "win",
+            options: { transitionMode: "immediate", completion: "entered" },
+          },
+        ]);
+        for (let index = 0; index < 5; index += 1) await Promise.resolve();
+        backend.setActivity("active");
+        expect(backend.sounds[0]?.instances).toHaveLength(1);
 
         const eventCount = observed.length;
         expect(() =>
@@ -2571,6 +2614,11 @@ describe("scene layout package runtime", () => {
       for (let index = 0; index < 5; index += 1) await Promise.resolve();
       expect(backend.unlockCount).toBe(1);
       expect(backend.sounds).toHaveLength(1);
+      expect(backend.sounds[0]?.instances).toHaveLength(1);
+      backend.setActivity("suspended");
+      expect(backend.sounds[0]?.instances[0]?.paused).toBe(true);
+      backend.setActivity("active");
+      expect(backend.sounds[0]?.instances[0]?.paused).toBe(false);
       expect(backend.sounds[0]?.instances).toHaveLength(1);
       runtime.destroy();
       expect(backend.sounds[0]?.instances[0]?.stopped).toBe(true);
