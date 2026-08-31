@@ -5,6 +5,8 @@ export interface AudioBackendSource {
   readonly mediaType: AudioMediaType;
 }
 
+export type AudioBackendActivityState = "active" | "suspended";
+
 export interface AudioBackendInstance {
   volume: number;
   paused: boolean;
@@ -21,6 +23,10 @@ export interface AudioBackendSound {
 }
 
 export interface AudioBackend {
+  getActivityState(): AudioBackendActivityState;
+  observeActivity(
+    listener: (state: AudioBackendActivityState) => void,
+  ): () => void;
   prepare(sources: readonly AudioBackendSource[]): Promise<AudioBackendSound>;
   unlock(): Promise<void>;
 }

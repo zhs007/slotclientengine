@@ -16,3 +16,12 @@ once focus 可以同时降低 BGM 与一种音效范围（`same-audio` 或 `all`
 
 `AudioRuntime.observeMusic()` 只在 loop instance 成功启动后发布 `started`，在 fade-out 到零并 stop 后发布
 `stopped`；Scene Layout 将该实例生命周期映射为 `gamelayout:/audio/music/...` 与 mode BGM event 地址。
+
+backend 还提供唯一的 `active | suspended` activity source。后台时 runtime 取消所有 once
+（包括 delay pending 和异步 start race），并丢弃后台新 once；loop/BGM 只暂停并保留仍有效的
+instance/request。`update()` 在 suspended 期间冻结 delay、focus 和 crossfade，恢复后从原进度继续。
+activity pause 与 BGM focus pause 组合生效，任何一方仍持有时都不会误 unpause。
+
+Pixi backend 以 prepared sound 生命周期引用计数关闭 `@pixi/sound` 的全局 auto-pause，最后一个
+sound destroy 时恢复原值。调用方不应持有 mutable Pixi sound、直接批量 resume，或另建
+visibility/focus 音频恢复逻辑。

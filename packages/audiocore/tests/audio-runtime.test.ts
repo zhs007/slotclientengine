@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   AudioBackend,
+  AudioBackendActivityState,
   AudioBackendInstance,
   AudioBackendSound,
 } from "../src/core/index.js";
@@ -32,11 +33,23 @@ class FakeInstance implements AudioBackendInstance {
 }
 class FakeSound implements AudioBackendSound {
   readonly instances: FakeInstance[] = [];
+  readonly pendingPlayResolvers: Array<(instance: FakeInstance) => void> = [];
+  readonly #deferPlay: boolean;
   destroyed = false;
-  play(): AudioBackendInstance {
+  constructor(deferPlay = false) {
+    this.#deferPlay = deferPlay;
+  }
+  play(): AudioBackendInstance | Promise<AudioBackendInstance> {
     const instance = new FakeInstance();
     this.instances.push(instance);
+    if (this.#deferPlay)
+      return new Promise((resolve) =>
+        this.pendingPlayResolvers.push(() => resolve(instance)),
+      );
     return instance;
+  }
+  resolveNextPlay(): void {
+    this.pendingPlayResolvers.shift()?.(this.instances.at(-1)!);
   }
   destroy(): void {
     this.destroyed = true;
@@ -44,11 +57,31 @@ class FakeSound implements AudioBackendSound {
 }
 class FakeBackend implements AudioBackend {
   readonly sounds: FakeSound[] = [];
+  readonly activityListeners = new Set<
+    (state: AudioBackendActivityState) => void
+  >();
   prepareCount = 0;
   unlockCount = 0;
+  activity: AudioBackendActivityState = "active";
+  deferNextPlay = false;
+  getActivityState(): AudioBackendActivityState {
+    return this.activity;
+  }
+  observeActivity(
+    listener: (state: AudioBackendActivityState) => void,
+  ): () => void {
+    this.activityListeners.add(listener);
+    return () => this.activityListeners.delete(listener);
+  }
+  setActivity(activity: AudioBackendActivityState): void {
+    if (activity === this.activity) return;
+    this.activity = activity;
+    for (const listener of [...this.activityListeners]) listener(activity);
+  }
   async prepare(): Promise<AudioBackendSound> {
     this.prepareCount += 1;
-    const sound = new FakeSound();
+    const sound = new FakeSound(this.deferNextPlay);
+    this.deferNextPlay = false;
     this.sounds.push(sound);
     return sound;
   }
@@ -277,6 +310,189 @@ describe("audio runtime", () => {
     ]);
     second.stop();
     expect(backend.sounds[0]!.instances[0]!.volume).toBe(1);
+    runtime.destroy();
+  });
+
+  it("drops pending, active, and late-starting once effects while suspended", async () => {
+    const backend = new FakeBackend();
+    const runtime = createAudioRuntime({
+      backend,
+      effects: {
+        active: {
+          binding: effect("active", "once"),
+          sources: [{ url: "active.mp3", mediaType: "audio/mpeg" }],
+        },
+        late: {
+          binding: effect("late", "once"),
+          sources: [{ url: "late.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+    });
+    const active = runtime.playEffect("active", { delaySeconds: 0 });
+    await flushMicrotasks();
+    expect(active.state).toBe("playing");
+    backend.deferNextPlay = true;
+    const late = runtime.playEffect("late", { delaySeconds: 0 });
+    await flushMicrotasks();
+    const sound = backend.sounds[1]!;
+    expect(sound.pendingPlayResolvers).toHaveLength(1);
+
+    backend.setActivity("suspended");
+    const dropped = runtime.playEffect("active", { delaySeconds: 0 });
+    expect(runtime.getSnapshot()).toMatchObject({
+      activity: "suspended",
+      pendingEffects: 0,
+      activeEffects: 0,
+    });
+    await expect(active.finished).resolves.toBe("stopped");
+    await expect(late.finished).resolves.toBe("stopped");
+    await expect(dropped.finished).resolves.toBe("stopped");
+    expect(backend.sounds[0]!.instances[0]!.stopped).toBe(true);
+
+    sound.resolveNextPlay();
+    await flushMicrotasks();
+    expect(sound.instances[0]!.stopped).toBe(true);
+    backend.setActivity("active");
+    expect(sound.instances).toHaveLength(1);
+    runtime.destroy();
+  });
+
+  it("defers a music request made while suspended until it is still current", async () => {
+    const backend = new FakeBackend();
+    backend.activity = "suspended";
+    const base = parseAudioMusicBindingV1({
+      name: "base",
+      asset: { sources: [{ path: "base.mp3", mediaType: "audio/mpeg" }] },
+      loop: true,
+      fadeOutSeconds: 0.1,
+      fadeInSeconds: 0.1,
+    });
+    const bonus = parseAudioMusicBindingV1({
+      name: "bonus",
+      asset: { sources: [{ path: "bonus.mp3", mediaType: "audio/mpeg" }] },
+      loop: true,
+      fadeOutSeconds: 0.1,
+      fadeInSeconds: 0.1,
+    });
+    const runtime = createAudioRuntime({
+      backend,
+      effects: {},
+      music: {
+        base: {
+          binding: base,
+          sources: [{ url: "base.mp3", mediaType: "audio/mpeg" }],
+        },
+        bonus: {
+          binding: bonus,
+          sources: [{ url: "bonus.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+    });
+    const stale = runtime.requestMusic("base");
+    const current = runtime.requestMusic("bonus");
+    await flushMicrotasks();
+    expect(backend.sounds.flatMap(({ instances }) => instances)).toHaveLength(
+      0,
+    );
+
+    backend.setActivity("active");
+    await Promise.all([stale, current]);
+    expect(runtime.getSnapshot().activeMusic).toBe("bonus");
+    expect(backend.sounds[0]!.instances).toHaveLength(0);
+    expect(backend.sounds[1]!.instances).toHaveLength(1);
+    runtime.destroy();
+  });
+
+  it("pauses persistent playback, freezes ramps, and resumes only live intent", async () => {
+    const backend = new FakeBackend();
+    const music = parseAudioMusicBindingV1({
+      name: "base",
+      asset: { sources: [{ path: "base.mp3", mediaType: "audio/mpeg" }] },
+      loop: true,
+      fadeOutSeconds: 0.1,
+      fadeInSeconds: 0.1,
+    });
+    const runtime = createAudioRuntime({
+      backend,
+      effects: {
+        ambience: {
+          binding: effect("ambience", "loop"),
+          sources: [{ url: "ambience.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+      music: {
+        base: {
+          binding: music,
+          sources: [{ url: "base.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+    });
+    await runtime.requestMusic("base");
+    const loop = runtime.playEffect("ambience", { delaySeconds: 0 });
+    await flushMicrotasks();
+    runtime.update(0.05);
+    const musicInstance = backend.sounds[0]!.instances[0]!;
+    const loopInstance = backend.sounds[1]!.instances[0]!;
+    expect(musicInstance.volume).toBeCloseTo(0.5);
+
+    backend.setActivity("suspended");
+    expect(musicInstance.paused).toBe(true);
+    expect(loopInstance.paused).toBe(true);
+    runtime.update(1);
+    expect(musicInstance.volume).toBeCloseTo(0.5);
+    loop.stop();
+    expect(loopInstance.stopped).toBe(true);
+
+    backend.setActivity("active");
+    expect(musicInstance.paused).toBe(false);
+    expect(backend.sounds[1]!.instances).toHaveLength(1);
+    runtime.update(0.05);
+    expect(musicInstance.volume).toBe(1);
+    runtime.destroy();
+  });
+
+  it("does not let foreground resume override an active BGM pause lease", async () => {
+    const backend = new FakeBackend();
+    const pause = effect("pause", "loop", {
+      kind: "pause",
+      fadeOutSeconds: 0.001,
+      fadeInSeconds: 0.001,
+    });
+    const music = parseAudioMusicBindingV1({
+      name: "base",
+      asset: { sources: [{ path: "base.mp3", mediaType: "audio/mpeg" }] },
+      loop: true,
+      fadeOutSeconds: 0.001,
+      fadeInSeconds: 0.001,
+    });
+    const runtime = createAudioRuntime({
+      backend,
+      effects: {
+        pause: {
+          binding: pause,
+          sources: [{ url: "pause.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+      music: {
+        base: {
+          binding: music,
+          sources: [{ url: "base.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+    });
+    await runtime.requestMusic("base");
+    runtime.update(0.001);
+    runtime.playEffect("pause", { delaySeconds: 0 });
+    await flushMicrotasks();
+    runtime.update(0.001);
+    const musicInstance = backend.sounds[0]!.instances[0]!;
+    expect(musicInstance.paused).toBe(true);
+
+    backend.setActivity("suspended");
+    backend.setActivity("active");
+    expect(musicInstance.paused).toBe(true);
+    runtime.stopEffect("pause");
+    expect(musicInstance.paused).toBe(false);
     runtime.destroy();
   });
 
