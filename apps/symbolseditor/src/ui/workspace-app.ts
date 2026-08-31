@@ -24,6 +24,7 @@ import {
   getIncludedSymbols,
   getSymbolResourceStatus,
   moveSymbolState,
+  prepareGameConfigUpdate,
   removeCustomStateDefinition,
   removeSymbolState,
   setStateAfterComplete,
@@ -42,6 +43,7 @@ import {
   type EditorBaseVisual,
   type EditorStateVisual,
   type EditorSymbolDraft,
+  type SymbolEditorGameConfigUpdateSummary,
   type SymbolEditorProject,
 } from "../model/editor-project.js";
 import {
@@ -142,6 +144,7 @@ export class SymbolsEditorApp {
   #unsubscribe: (() => void) | null = null;
   #previewRequest = 0;
   #importRequest = 0;
+  #gameConfigUpdateRequest = 0;
   #importing = false;
   #previewError = "";
   #pickerTrigger: HTMLElement | null = null;
@@ -176,6 +179,7 @@ export class SymbolsEditorApp {
     this.#unsubscribe = null;
     this.#previewRequest += 1;
     this.#importRequest += 1;
+    this.#gameConfigUpdateRequest += 1;
     this.#cancelVniProfileChoice?.();
     this.#cancelVniProfileChoice = null;
     this.#preview?.destroy();
@@ -203,6 +207,11 @@ export class SymbolsEditorApp {
       "change",
       (event) =>
         void this.createProject(event.currentTarget as HTMLInputElement),
+    );
+    this.requireElement("[data-update-game-config-input]").addEventListener(
+      "change",
+      (event) =>
+        void this.updateGameConfig(event.currentTarget as HTMLInputElement),
     );
     this.requireElement("[data-upload-input]").addEventListener(
       "change",
@@ -723,6 +732,11 @@ export class SymbolsEditorApp {
   }
 
   private bindProjectControls(panel: HTMLElement): void {
+    panel
+      .querySelector<HTMLElement>("[data-update-game-config]")
+      ?.addEventListener("click", () =>
+        this.requireInput("[data-update-game-config-input]").click(),
+      );
     this.bindInput(panel, "[data-project-id]", (input) =>
       this.#store.transact((draft) => {
         draft.id = input.value.trim();
@@ -2147,6 +2161,47 @@ export class SymbolsEditorApp {
     }
   }
 
+  private async updateGameConfig(input: HTMLInputElement): Promise<void> {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    const before = this.#store.getSnapshot();
+    if (!before.project) {
+      this.#store.setExternalError(new Error("请先创建或导入项目。"));
+      return;
+    }
+    const request = ++this.#gameConfigUpdateRequest;
+    try {
+      const rawGameConfig = JSON.parse(await file.text());
+      if (request !== this.#gameConfigUpdateRequest || this.#destroyed) return;
+      const prepared = prepareGameConfigUpdate(before.project, {
+        rawGameConfig,
+        fileName: file.name,
+      });
+      const confirmed =
+        typeof globalThis.window?.confirm !== "function" ||
+        globalThis.window.confirm(
+          gameConfigUpdateConfirmation(file.name, prepared.summary),
+        );
+      if (!confirmed) {
+        this.showSuccess("已取消 gameconfig.json 更新，项目未修改");
+        return;
+      }
+      const current = this.#store.getSnapshot();
+      if (current.revision !== before.revision) {
+        throw new Error(
+          "读取 game config 期间项目已变化，请基于最新项目重试。",
+        );
+      }
+      this.#store.replace(prepared.project);
+      this.showSuccess(
+        `gameconfig.json 已更新：保留 ${prepared.summary.kept.length}，新增 ${prepared.summary.added.length}，删除 ${prepared.summary.removed.length}，code 变化 ${prepared.summary.codeChanged.length}`,
+      );
+    } catch (error) {
+      this.#store.setExternalError(error);
+    }
+  }
+
   private async uploadResources(
     input: HTMLInputElement,
     intent: UploadIntent,
@@ -2761,6 +2816,7 @@ function shellMarkup(): string {
       <button data-upload>导入资源 / ZIP</button>
       <button class="primary" data-export disabled>导出 ZIP</button>
       <input hidden type="file" accept="application/json,.json" data-new-input>
+      <input hidden type="file" accept="application/json,.json" data-update-game-config-input>
       <input hidden type="file" multiple accept=".png,.jpg,.jpeg,.webp,.json,.atlas,.zip,application/zip" data-upload-input>
     </header>
     <div class="feedback" data-feedback aria-live="polite"></div>
@@ -3585,11 +3641,32 @@ function projectWorkspaceMarkup(
   project: SymbolEditorProject,
   _session: SymbolsEditorUiSession,
 ): string {
-  return `<section class="project-config"><div class="section-heading"><div><h1>项目配置</h1><p>全局内容独立于单个 symbol Inspector。</p></div></div><div class="form-grid"><label>Package / project id <input data-project-id data-focus-key="project-id" value="${escapeAttr(project.id)}"></label><label>Cell width <input data-cell-width type="number" min="1" value="${project.cellSize.width}"></label><label>Cell height <input data-cell-height type="number" min="1" value="${project.cellSize.height}"></label></div>
+  return `<section class="project-config"><div class="section-heading"><div><h1>项目配置</h1><p>全局内容独立于单个 symbol Inspector。</p></div></div><div class="definition-row game-config-update-row"><div><strong>Game config</strong><small>${escapeHtml(project.gameConfigFileName)} · ${project.symbols.size} symbols</small></div><span>完整 JSON 原子替换</span><button type="button" data-update-game-config>更新 gameconfig.json</button></div><div class="form-grid"><label>Package / project id <input data-project-id data-focus-key="project-id" value="${escapeAttr(project.id)}"></label><label>Cell width <input data-cell-width type="number" min="1" value="${project.cellSize.width}"></label><label>Cell height <input data-cell-height type="number" min="1" value="${project.cellSize.height}"></label></div>
     <h2>项目状态定义</h2><div class="definition-list">${project.stateDefinitions.map((item) => `<div class="definition-row"><code>${escapeHtml(item.id)}</code><small>${item.phase} / ${item.playback}</small><span>${item.source === "custom" ? "Custom" : "Built-in"}</span>${item.afterComplete ? `<label>完成后 <select data-state-after-complete="${escapeAttr(item.id)}">${option("return-to-default", "回到 normal", item.afterComplete === "return-to-default")}${option("terminal", "停在终止帧", item.afterComplete === "terminal")}</select></label>` : ""}${item.source === "custom" ? `<button data-remove-custom="${escapeAttr(item.id)}">删除</button>` : ""}</div>`).join("")}</div><div class="form-row add-definition"><input data-custom-id placeholder="custom state id"><select data-custom-lifecycle><option value="once">once / once</option><option value="loop">stable / loop</option></select><select data-custom-after-complete><option value="return-to-default">完成后回到 normal</option><option value="terminal">完成后停在终止帧</option></select><button class="primary" data-add-custom>增加 custom state</button></div>
     <details class="advanced-summary"><summary>Legacy 导入兼容数据</summary><p>这些字段只为无损 round-trip 保留，不是现代 state texture 生成配置。</p><pre>${escapeHtml(JSON.stringify({ textureStateOrder: project.legacyTextureStateOrder, settings: project.legacyStateSettings }, null, 2))}</pre></details>
     <details class="advanced-summary"><summary>高级导出摘要</summary><dl class="summary-grid"><div><dt>Game config</dt><dd>${escapeHtml(project.gameConfigFileName)}</dd></div><div><dt>Symbols</dt><dd>${project.symbols.size}</dd></div><div><dt>Included</dt><dd>${getIncludedSymbols(project).length}</dd></div><div><dt>Library resources</dt><dd>${project.assetLibrary.records.size}</dd></div></dl><p>UI Tab、筛选、选择和展开状态不进入 ZIP。</p></details>
   </section>`;
+}
+
+function gameConfigUpdateConfirmation(
+  fileName: string,
+  summary: SymbolEditorGameConfigUpdateSummary,
+): string {
+  const list = (label: string, values: readonly string[]): string =>
+    `${label} (${values.length})：${values.length > 0 ? values.join(", ") : "无"}`;
+  const codeChanges = summary.codeChanged.map(
+    ({ symbol, previousCode, nextCode }) =>
+      `${symbol}: ${previousCode} → ${nextCode}`,
+  );
+  return [
+    `更新 gameconfig.json\n${fileName}`,
+    list("保留", summary.kept),
+    list("新增", summary.added),
+    list("删除", summary.removed),
+    list("Code 变化", codeChanges),
+    "删除项的 symbol 配置将移除；资源 bytes 会保留为未引用资源。",
+    "确认原子更新当前项目？",
+  ].join("\n\n");
 }
 
 function resourcePickerMarkup(

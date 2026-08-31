@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   addSymbolState,
   createFromGameConfig,
+  prepareGameConfigUpdate,
   setStateVisual,
   uploadAssetBatch,
 } from "../src/model/editor-project.js";
@@ -71,6 +72,63 @@ describe("symbols zip IO", () => {
       height: 160,
     });
     expect(imported.project.assetLibrary.records.size).toBe(0);
+    imported.destroy();
+  });
+
+  it("exports the updated canonical game config and only its referenced closure", async () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "old.json",
+    });
+    uploadAssetBatch(project, [
+      { path: "A.png", bytes: imageBytes() },
+      { path: "unused.png", bytes: imageBytes() },
+    ]);
+    setStateVisual(project, "A", "normal", {
+      kind: "image",
+      imagePath: "A.png",
+    });
+    const updatedGameConfig = {
+      paytable: {
+        "5": { code: 5, symbol: "A", pays: [2] },
+        "2": { code: 2, symbol: "C", pays: [3] },
+      },
+      symbolCodes: { A: 5, C: 2 },
+      reels: { replacement: [[2, 5]] },
+    };
+    const prepared = prepareGameConfigUpdate(project, {
+      rawGameConfig: updatedGameConfig,
+      fileName: "replacement.json",
+    });
+
+    const exported = await exportSymbolPackageZip(prepared.project, {
+      loadTextures: false,
+    });
+    const entries = extractBoundedZip(exported.bytes, {
+      limits: SYMBOL_ZIP_LIMITS,
+    });
+    expect(
+      JSON.parse(new TextDecoder().decode(entries.get("gameconfig.json"))),
+    ).toEqual(updatedGameConfig);
+    const assetsMap = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+    expect(Object.keys(assetsMap.files)).toEqual(["A.png"]);
+    const imported = await importSymbolPackageZip(exported.bytes, {
+      loadTextures: false,
+    });
+    expect(
+      [...imported.project.symbols.values()].map(({ code, symbol }) => ({
+        code,
+        symbol,
+      })),
+    ).toEqual([
+      { code: 2, symbol: "C" },
+      { code: 5, symbol: "A" },
+    ]);
+    expect(imported.project.symbols.get("A")?.states.get("normal")).toEqual({
+      kind: "image",
+      imagePath: "A.png",
+    });
+    expect(imported.project.assetLibrary.records.has("unused.png")).toBe(false);
     imported.destroy();
   });
 

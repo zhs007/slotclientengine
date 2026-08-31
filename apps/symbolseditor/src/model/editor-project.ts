@@ -177,6 +177,24 @@ export interface SymbolEditorExportSnapshot {
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }
 
+export interface SymbolEditorGameConfigCodeChange {
+  readonly symbol: string;
+  readonly previousCode: number;
+  readonly nextCode: number;
+}
+
+export interface SymbolEditorGameConfigUpdateSummary {
+  readonly kept: readonly string[];
+  readonly added: readonly string[];
+  readonly removed: readonly string[];
+  readonly codeChanged: readonly SymbolEditorGameConfigCodeChange[];
+}
+
+export interface PreparedSymbolEditorGameConfigUpdate {
+  readonly project: SymbolEditorProject;
+  readonly summary: SymbolEditorGameConfigUpdateSummary;
+}
+
 export interface SymbolResourceStatus {
   readonly ready: boolean;
   readonly required: readonly string[];
@@ -217,6 +235,80 @@ export function createFromGameConfig(options: {
     nextUploadBatch: 1,
   };
   return project;
+}
+
+export function prepareGameConfigUpdate(
+  project: SymbolEditorProject,
+  options: {
+    readonly rawGameConfig: unknown;
+    readonly fileName: string;
+  },
+): PreparedSymbolEditorGameConfigUpdate {
+  const parsed = parseSymbolPackageGameConfig(options.rawGameConfig).symbols;
+  if (parsed.length === 0) {
+    throw new Error("game config symbolCodes 不能为空。");
+  }
+  const candidate = cloneSymbolEditorProject(project);
+  const previousSymbols = candidate.symbols;
+  const kept: string[] = [];
+  const added: string[] = [];
+  const codeChanged: SymbolEditorGameConfigCodeChange[] = [];
+  const symbols = new Map<string, EditorSymbolDraft>();
+  for (const { code, symbol } of parsed) {
+    const previous = previousSymbols.get(symbol);
+    if (!previous) {
+      added.push(symbol);
+      symbols.set(
+        symbol,
+        createBlankSymbol(
+          code,
+          symbol,
+          candidate.cellSize.width,
+          candidate.cellSize.height,
+        ),
+      );
+      continue;
+    }
+    kept.push(symbol);
+    if (previous.code !== code) {
+      codeChanged.push(
+        Object.freeze({
+          symbol,
+          previousCode: previous.code,
+          nextCode: code,
+        }),
+      );
+    }
+    symbols.set(symbol, { ...previous, code });
+  }
+  const removed = [...previousSymbols.values()]
+    .filter((symbol) => !symbols.has(symbol.symbol))
+    .sort(
+      (left, right) =>
+        left.code - right.code || left.symbol.localeCompare(right.symbol, "en"),
+    )
+    .map(({ symbol }) => symbol);
+  candidate.rawGameConfig = cloneValue(options.rawGameConfig);
+  candidate.gameConfigFileName = options.fileName;
+  candidate.symbols = symbols;
+  for (const { code, symbol } of parsed) {
+    const draft = candidate.symbols.get(symbol);
+    if (!draft || draft.symbol !== symbol || draft.code !== code) {
+      throw new Error(`game config 更新后的 symbol identity 无效：${symbol}。`);
+    }
+  }
+  if (candidate.symbols.size !== parsed.length) {
+    throw new Error("game config 更新后的 symbol 集合不完整。");
+  }
+  return Object.freeze({
+    project: candidate,
+    summary: Object.freeze({
+      kept: Object.freeze(kept),
+      added: Object.freeze(added),
+      removed: Object.freeze(removed),
+      codeChanged: Object.freeze(codeChanged),
+    }),
+  });
 }
 
 export function createFromImportedPackage(options: {

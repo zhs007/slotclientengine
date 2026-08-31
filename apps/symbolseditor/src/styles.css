@@ -853,6 +853,21 @@ details > summary {
   border-bottom: 1px solid #202d43;
 }
 
+.game-config-update-row {
+  grid-template-columns: minmax(160px, 1fr) auto auto;
+  margin-bottom: 14px;
+}
+
+.game-config-update-row > div {
+  display: grid;
+  gap: 2px;
+}
+
+.game-config-update-row > span {
+  color: #8799b7;
+  font-size: 11px;
+}
+
 .add-definition {
   margin: 10px 0 22px;
 }
