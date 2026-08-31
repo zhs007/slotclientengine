@@ -5,7 +5,10 @@ import {
   createDeterministicZip,
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
-import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
+import {
+  createEditorAssetEntry,
+  decodeEditorAssetsMap,
+} from "@slotclientengine/editorresource";
 import { describe, expect, it } from "vitest";
 import {
   addSymbolState,
@@ -68,6 +71,89 @@ describe("symbols zip IO", () => {
       height: 160,
     });
     expect(imported.project.assetLibrary.records.size).toBe(0);
+    imported.destroy();
+  });
+
+  it("strictly imports then removes legacy Symbol audio and its payload", async () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "legacy-audio.json",
+    });
+    const exported = await exportSymbolPackageZip(project, {
+      loadTextures: false,
+    });
+    const entries = new Map(
+      extractBoundedZip(exported.bytes, { limits: SYMBOL_ZIP_LIMITS }),
+    );
+    const audio = await createEditorAssetEntry({
+      key: "coin.wav",
+      bytes: new Uint8Array([
+        0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45,
+      ]),
+      mediaType: "audio/wav",
+    });
+    const map = JSON.parse(
+      new TextDecoder().decode(entries.get("assets.map.json")),
+    );
+    map.files[audio.key] = {
+      path: audio.payloadPath,
+      sha256: audio.sha256,
+      mediaType: audio.mediaType,
+      byteLength: audio.byteLength,
+    };
+    entries.set("assets.map.json", encode(map));
+    entries.set(audio.payloadPath, audio.bytes);
+    const packageManifest = JSON.parse(
+      new TextDecoder().decode(entries.get("symbols.package.json")),
+    );
+    packageManifest.resources.push(audio.key);
+    entries.set("symbols.package.json", encode(packageManifest));
+    const symbolManifest = JSON.parse(
+      new TextDecoder().decode(
+        entries.get("symbol-state-textures.manifest.json"),
+      ),
+    );
+    symbolManifest.audio.effects = [
+      {
+        name: "coin",
+        asset: {
+          sources: [{ path: "coin.wav", mediaType: "audio/wav" }],
+        },
+        playback: "once",
+        offsetSeconds: 0,
+        voices: { maxConcurrent: 4, overflow: "restart-oldest" },
+        bgm: { kind: "keep" },
+      },
+    ];
+    symbolManifest.symbols.A.audioCues = [{ state: "normal", effect: "coin" }];
+    entries.set("symbol-state-textures.manifest.json", encode(symbolManifest));
+
+    const imported = await importSymbolPackageZip(
+      createDeterministicZip(entries),
+      { loadTextures: false },
+    );
+    expect(imported.legacyAudioMigration).toEqual({
+      effects: 1,
+      cues: 1,
+      assets: 1,
+    });
+    expect(imported.project.assetLibrary.records.has("coin.wav")).toBe(false);
+    const migratedFiles = extractBoundedZip(
+      (
+        await exportSymbolPackageZip(imported.project, {
+          loadTextures: false,
+        })
+      ).bytes,
+      { limits: SYMBOL_ZIP_LIMITS },
+    );
+    const migratedManifest = JSON.parse(
+      new TextDecoder().decode(
+        migratedFiles.get("symbol-state-textures.manifest.json"),
+      ),
+    );
+    expect(migratedManifest.audio).toEqual({ version: 1, effects: [] });
+    expect(migratedManifest.symbols.A).not.toHaveProperty("audioCues");
+    expect(migratedFiles.has(audio.payloadPath)).toBe(false);
     imported.destroy();
   });
 

@@ -26,10 +26,7 @@ import {
   type PopupManifest,
 } from "@slotclientengine/rendercore/popup/editor";
 import { assertVNIProject } from "@slotclientengine/vnicore/data";
-import type {
-  AudioCatalogManifestV1,
-  AudioMediaType,
-} from "@slotclientengine/audiocore/data";
+import type { AudioMediaType } from "@slotclientengine/audiocore/data";
 import {
   editorResourcePaths,
   editorResourceSignature,
@@ -143,7 +140,6 @@ export interface EditorGameModeDraft {
   symbols: EditorModeSymbolBinding | null;
   awardCelebrationPopupId: string | null;
   primaryActionTargetMode: string | null;
-  bgm: string | null;
 }
 
 interface EditorGameModeTransitionBaseDraft {
@@ -196,7 +192,6 @@ export interface EditorProject {
   popupDependencies: Map<string, EditorPopupDependency>;
   programmaticPopupIds: Set<string>;
   runtimeResourceBindings: Map<string, string>;
-  audio: AudioCatalogManifestV1;
   eventAudio: SceneLayoutEventAudioV1;
   gameModes: {
     activeModeId: string;
@@ -236,8 +231,7 @@ export function createNewEditorProject(_legacyMode?: unknown): EditorProject {
     popupDependencies: new Map(),
     programmaticPopupIds: new Set(),
     runtimeResourceBindings: new Map(),
-    audio: { version: 1, effects: [], music: [], programmaticEffects: [] },
-    eventAudio: { version: 1, ignoreLegacyAudio: false, bindings: [] },
+    eventAudio: { version: 1, ignoreLegacyAudio: true, bindings: [] },
     gameModes: {
       activeModeId: "BaseGame",
       initialMode: "BaseGame",
@@ -251,7 +245,6 @@ export function createNewEditorProject(_legacyMode?: unknown): EditorProject {
           symbols: null,
           awardCelebrationPopupId: null,
           primaryActionTargetMode: null,
-          bgm: null,
         },
       ],
     },
@@ -301,7 +294,6 @@ export function createEditorGameModeDraft(
     symbols: null,
     awardCelebrationPopupId: null,
     primaryActionTargetMode: null,
-    bgm: null,
   };
 }
 
@@ -682,7 +674,7 @@ export function editorProjectToManifest(
           };
         }),
     },
-    audio: canonicalEditorAudioCatalog(project),
+    audio: emptyLegacyAudioCatalog(),
     eventAudio: canonicalEditorEventAudio(project),
     runtimeAllocation: undefined as never,
   };
@@ -701,17 +693,9 @@ export function editorProjectToManifest(
           }
         : {}),
     })),
-    audio: canonicalEditorAudioCatalog(project),
+    audio: emptyLegacyAudioCatalog(),
     eventAudio: canonicalEditorEventAudio(project),
-    gameModes: {
-      ...base.gameModes,
-      modes: base.gameModes.modes.map((mode) => {
-        const draft = project.gameModes.modes.find(
-          (candidate) => candidate.id === mode.id,
-        )!;
-        return { ...mode, ...(draft.bgm ? { bgm: draft.bgm } : {}) };
-      }),
-    },
+    gameModes: base.gameModes,
   } satisfies SceneLayoutManifestLatest;
   const runtimeAllocation = createSceneLayoutRuntimeAllocation(latestDraft);
   if (runtimeAllocation.version !== 3)
@@ -948,29 +932,23 @@ export function manifestToEditorProject(
   project.assets = new Map(
     [...assets].map(([path, bytes]) => [path, bytes.slice()]),
   );
-  const referencedMusic = new Set(
-    latest.gameModes.modes.flatMap((mode) => (mode.bgm ? [mode.bgm] : [])),
-  );
-  const rootProgrammatic = new Set(
-    latest.audio.programmaticEffects.filter((route) => !route.includes(".")),
-  );
-  project.audio = {
-    ...structuredClone(latest.audio),
-    music: structuredClone(
-      latest.audio.music.filter((binding) => referencedMusic.has(binding.name)),
-    ),
-    effects: structuredClone(
-      latest.audio.effects.filter((binding) =>
-        rootProgrammatic.has(binding.name),
-      ),
-    ),
+  project.eventAudio = {
+    ...structuredClone(latest.eventAudio),
+    ignoreLegacyAudio: true,
   };
-  project.eventAudio = structuredClone(latest.eventAudio);
-  for (const binding of [
-    ...project.audio.music,
-    ...project.audio.effects,
-    ...project.eventAudio.bindings.map(({ audio }) => audio),
-  ]) {
+  const eventAudioPaths = new Set(
+    project.eventAudio.bindings.flatMap(({ audio }) =>
+      audio.asset.sources.map(({ path }) => path),
+    ),
+  );
+  const legacyAudioPaths = new Set(
+    [...latest.audio.music, ...latest.audio.effects].flatMap((binding) =>
+      binding.asset.sources.map(({ path }) => path),
+    ),
+  );
+  for (const path of legacyAudioPaths)
+    if (!eventAudioPaths.has(path)) project.assets.delete(path);
+  for (const binding of project.eventAudio.bindings.map(({ audio }) => audio)) {
     for (const source of binding.asset.sources) {
       requiredAsset(assets.get(source.path), source.path);
       registerResource({
@@ -1126,11 +1104,11 @@ export function manifestToEditorProject(
             : null,
         awardCelebrationPopupId: mode.awardCelebrationPopup ?? null,
         primaryActionTargetMode: mode.primaryAction?.targetMode ?? null,
-        bgm: mode.bgm ?? null,
       };
     }),
   };
   activateEditorGameMode(project, latest.gameModes.initialMode);
+  editorProjectToManifest(project);
   return project;
 }
 
@@ -1352,7 +1330,7 @@ function editorResourceToRuntimeSpec(
     return { kind: "video", path: resource.path, mimeType: "video/mp4" };
   if (resource.kind === "audio")
     throw new Error(
-      `audio asset ${resource.id} 必须通过 BGM 或程序音效绑定使用，不能作为 runtimeResources。`,
+      `audio asset ${resource.id} 必须通过 Event 音频绑定使用，不能作为 runtimeResources。`,
     );
   return {
     kind: "spine",
@@ -1362,34 +1340,12 @@ function editorResourceToRuntimeSpec(
   };
 }
 
-function canonicalEditorAudioCatalog(
-  project: EditorProject,
-): AudioCatalogManifestV1 {
-  const musicNames = new Set(
-    project.gameModes.modes.flatMap((mode) => (mode.bgm ? [mode.bgm] : [])),
-  );
-  const music = project.audio.music.filter((binding) =>
-    musicNames.has(binding.name),
-  );
-  for (const name of musicNames)
-    if (!music.some((binding) => binding.name === name))
-      throw new Error(`game mode 引用了未知 BGM：${name}`);
-
-  const rootEffectNames = new Set(
-    project.audio.programmaticEffects.filter((route) => !route.includes(".")),
-  );
-  const effects = project.audio.effects.filter((binding) =>
-    rootEffectNames.has(binding.name),
-  );
-  for (const name of rootEffectNames)
-    if (!effects.some((binding) => binding.name === name))
-      throw new Error(`程序音效 allowlist 引用了未知 root effect：${name}`);
-  assertEditorAudioSources(project, [...music, ...effects]);
+function emptyLegacyAudioCatalog() {
   return {
-    version: 1,
-    effects,
-    music,
-    programmaticEffects: project.audio.programmaticEffects,
+    version: 1 as const,
+    effects: [],
+    music: [],
+    programmaticEffects: [],
   };
 }
 
@@ -1400,7 +1356,10 @@ function canonicalEditorEventAudio(
     project,
     project.eventAudio.bindings.map(({ audio }) => audio),
   );
-  return structuredClone(project.eventAudio);
+  return {
+    ...structuredClone(project.eventAudio),
+    ignoreLegacyAudio: true,
+  };
 }
 
 function assertEditorAudioSources(

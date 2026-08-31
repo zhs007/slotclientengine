@@ -1,6 +1,6 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v7 编辑器，覆盖 layout、mode/orientation、optional loop BGM、全局 event 音乐音效、程序音效、普通 image/VNI/Spine 图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v7 ZIP 会在打开事务中规范化；后续预览和导出只生成 canonical v7。
+纯前端 Scene Layout v7 编辑器，覆盖 layout、mode/orientation、全局 Event 音乐音效、普通 image/VNI/Spine 图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v7 ZIP 会在打开事务中规范化；后续预览和导出只生成 canonical v7。
 
 ## 中心坐标与 per-mode 可见性
 
@@ -13,7 +13,7 @@ readiness；零个、一个或多个背景都作为普通 scene node 添加。
 global）且对应 orientation placement 存在。预览和 production runtime 按宿主原始页面宽高选择方向；
 尺寸宽高相等时维持当前方向，首次以正方形启动时选择 landscape。
 
-award-celebration Popup 作为自包含 dependency，通过 `rendercore/popup/editor` 完成 standalone ZIP 校验、flatten、namespace 与 vendor。任一受支持的 Popup v1–v9 都先按 source strict 校验，再由默认 loader 转成 latest v9；Popup/Symbol 音效保持 local name，直到 Scene Layout 按 binding id 聚合为全局 route。画面和音频预览继续只走 Scene Layout production runtime/inspector。
+award-celebration Popup 作为自包含 dependency，通过 `rendercore/popup/editor` 完成 standalone ZIP 校验、flatten、namespace 与 vendor。任一受支持的 Popup v1–v9 都先按 source strict 校验，再由默认 loader 转成 latest v9；历史 Popup/Symbol cue 仍由共享 parser/runtime 兼容，但 Layout Editor 不改写 dependency，也不再 author 这些 owner-local 配置。画面和 Event 音频预览继续只走 Scene Layout production runtime/inspector。
 三类 Popup 都可在 Popup 工作区设为“程序 Popup”。这只负责让没有 mode/transition 直接引用的 package 仍进入 production `popups`；已有直接引用的 Popup 本来就可从相同 canonical 地址打开。普通 Spine 仍可在具体转场中选择。Popup root 的 placement、order 与统一 open/close 预览由 Layout Editor 配置并随 layout vendor；一个 preview runtime 同时只允许一个 active Popup。
 若 package 带单行 prompt，Popup 工作区可输入临时预览文案；留空使用 package 默认值。字体、渲染区域和 image/Spine/VNI overlay 保持只读，须回 Popup Editor 修改。相同字体 bytes 与其它 payload 一样在最终 `assets.map.json` 中按 SHA-256 物理去重。
 
@@ -28,7 +28,7 @@ SymbolsEditor 编辑。
 
 Assets 工具栏另有明确的“导入 JSON data”动作，可原子导入一个或多个顶层为 object/array 的 `.json` 文件。它们是 opaque、program-only assets：不会进入画布、背景或资源 Picker，也没有 preview 和渲染地址。只有设置唯一程序键后才进入 production ZIP，runtime 通过 `SceneLayoutPackageResource.loadJsonData(key)` 读取；取消绑定后，无其它引用的数据恢复为不导出。替换要求保持同一 filename key 并重新严格校验，导出、重导和 optimizer 都保留原始 JSON bytes，不扫描或改写其中看似资源路径的字符串。
 
-MP3、OGG、WAV、M4A、AAC 和 WebM 音频先作为未绑定 asset 导入；扩展名、signature 和显式 MIME 必须一致，`.mp4` 固定保留给视频。当前 mode 的 BGM 在 Layout inspector 选择，新绑定恒为 loop，可编辑 fade in/out；程序音效在 audio asset 行以 strict local name 显式登记。音频不会创建 scene node，也不使用通用 `runtimeResources` 程序键。预览必须先点“启用声音”，随后 initial/authoring/production mode 切换与 effect 试听都走同一个 production package runtime；preview 重建会把已解锁会话应用到新 runtime。
+MP3、OGG、WAV、M4A、AAC 和 WebM 音频先作为未绑定 asset 导入；扩展名、signature 和显式 MIME 必须一致，`.mp4` 固定保留给视频。项目页的“编辑音乐音效”是唯一音频 authoring 入口，只能把已导入 asset 绑定到 exact Event；音频不会创建 scene node，也不使用通用 `runtimeResources` 程序键。预览必须先点“启用声音”，随后 Event 播放只走同一个 production package runtime；preview 重建会把已解锁会话应用到新 runtime。打开含 mode BGM、root effect 的旧 Layout 时先完整 strict 校验，再移除旧配置和仅由其引用的 audio bytes，并显示迁移摘要。
 
 node/transition 直接引用 filename key 或 typed key 组合。node id、package id、mode id 仍是业务身份，但不是第二个资源 id。多个普通节点可引用同一 `BG.jpg`，覆盖一次即可更新全部 bytes，同时各自的稳定 node id、scope 与 placement 保持独立。
 
@@ -51,7 +51,7 @@ Editor draft 只保存中心坐标；legacy top-left/artSize 仅在 RenderCore u
 
 Popup Spine 的 atlas page logical name 不随物理 filename key 前缀化。导入提交前会用完整 SHA-256 比较 Popup 与 Layout 自有 Spine 中同名的 atlas/texture；同名不同 bytes 时列出冲突，由用户取消整次导入或确认继续隔离导入，不自动覆盖、改名或推断 skeleton JSON 兼容性。
 
-资源列表可把任一已识别的 image、Spine、VNI、ImgNumber、MP4 或 JSON data root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。展开已绑定渲染资源的详情可复制 canonical 地址；ImgNumber 例如 `gamelayout:/resource/image-string/win-amount`。JSON data 只显示 `loadJsonData` API 提示，不生成地址。Audio 使用上一段的 `audio.effects` / `programmaticEffects` typed binding，不进入这套通用程序资源 union。
+资源列表可把任一已识别的 image、Spine、VNI、ImgNumber、MP4 或 JSON data root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。展开已绑定渲染资源的详情可复制 canonical 地址；ImgNumber 例如 `gamelayout:/resource/image-string/win-amount`。JSON data 只显示 `loadJsonData` API 提示，不生成地址。Audio 只通过 Event audio binding 使用，不进入通用程序资源 union。
 
 手工验收例子：导入一个 ImgNumber ZIP，在资源行填写 `win-amount` 并点“设为程序资源”，展开详情复制 factory 地址；再导入一个未绑定 mode/transition 的 Popup ZIP，在 Popup 工作区点“设为程序 Popup”，复制 `gamelayout:/popup/<id>`，点播放后状态区应显示该 exact 地址。Popup active 时再次播放应明确报错，点“立即关闭”后应可用同一地址再次播放。导出并重导 ZIP 后，两项程序用途和地址应保持。
 
@@ -85,7 +85,7 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 - 根 `assets.map.json`；
 - 一个 `assets/<完整 SHA-256>.<ext>` payload 区。
 
-layout、audio、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。只有被 mode BGM、程序音效或 event audio binding 引用的 root audio asset 才写入 ZIP；重新导入会恢复 audio resource、exact binding、event 地址与旧音频忽略开关。项目 Tab 的“编辑音乐音效”复用 EditorCore event dialog，只选择 Assets 中已上传的 audio；loop 的结束 event 通过 EditorCore 单 Event picker 选择，并且必须与启动 event 不同。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
+layout、audio、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。只有被 Event audio binding 引用的 root audio asset 才写入 ZIP；canonical v7 固定写空 `audio.music/effects/programmaticEffects`、mode 不写 `bgm`、`eventAudio.ignoreLegacyAudio=true`，并无损保留 exact Event binding/address。项目 Tab 的“编辑音乐音效”复用 EditorCore event dialog，只选择 Assets 中已上传的 audio；loop 的结束 event 通过 EditorCore 单 Event picker 选择，并且必须与启动 event 不同。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
 
 每个 mode 可独立选择 Symbols 与 award-celebration Popup。每条有向转场显式选择无效果、Spine 顶层特效或黑场视频，并可独立选择“无”或一个普通 Spine `preludePopup`；切换效果类型会保留 Popup binding。未选 Popup 时直接执行效果，无效果分支在目标 scene prepare 成功后原子切换；已选时保持 source mode，复用 Popup 的 start→loop→end 状态机，完整 end 后再继续效果。preview 将完整 canvas 与 window keyboard 绑定到 rendercore：active Popup 可在 canvas 任意位置点击或按任意非 repeat 键，idle 时输入透传。带 Popup 的视频随后进入等待阶段，必须由第二次真实 pointer/key 启动有声媒体。Popup 直接渲染在当前状态的顶层 Popup root，不建立独立 scene。
 

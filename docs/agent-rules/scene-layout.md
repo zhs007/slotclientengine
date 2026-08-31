@@ -13,10 +13,10 @@
 ## Mode、variant 与稳定节点
 
 - Scene Layout latest 为 v7：root 只保留 typed `main` grid；每个 mode 直接声明 `main.enabled` 与 `main.variants.landscape/portrait`，每侧保存 main center `x/y`、absolute `focusRect` 和可选 `minFocusMargin`。v7 不含 `coordinateOrigin`、`artSize`、adaptation type、`backgroundNodes`、`reelPlacements` 或 `frameFocusRect`。RenderCore 与 Editor 读取合法 v1–v7并统一规范化为 v7；Editor 只预览和导出 canonical v7。
-- 每个 mode 可选择零或一首 loop BGM；Splash 通常留空但 schema 不强制。成功 mode commit 后才以显式 fade-out/fade-in 切歌，相同 BGM 不重启；失败或 rollback 保留原 BGM。
-- Game Layout Editor 中 root 音频先作为统一 filename-key asset 导入，不因文件名自动绑定用途；BGM 只在 exact mode 上选择，程序音效只通过 strict local name 进入 `audio.effects` 与 `programmaticEffects`，event 音乐音效对话框也只选择已上传 audio，不负责导入 bytes。未绑定音频保留在 authoring workspace，但不进入 production closure；audio 不得伪装成 scene node 或通用 `runtimeResources`。
+- RenderCore 继续 strict 读取和运行历史 per-mode loop BGM、root effects 与 Popup/Symbol cue；该 compatibility 只属于历史 artifact consumer，不是 Editor authoring 合同。Game Layout Editor 打开旧 package 时必须先完整验证 source schema/map/hash/closure，随后迁移删除 root legacy audio 与 mode BGM，但不得改写只读 Symbols/Popup dependency。
+- Game Layout Editor 中 root 音频先作为统一 filename-key asset 导入，不因文件名自动绑定用途；全局 Event 音乐音效对话框是唯一音频 authoring 入口，只选择已上传 audio，不负责导入 bytes。未绑定音频保留在 authoring workspace但不进入 production closure；audio 不得伪装成 scene node 或通用 `runtimeResources`。canonical v7 的 legacy audio catalog恒为空、mode 不含 `bgm`、`eventAudio.ignoreLegacyAudio` 恒为 true。
 - event audio 的 `music` / `effect` 是玩家可独立控制的音量总线，不是互斥播放策略。once track 可独立降低 BGM，并在 `same-audio` / `all` 中至多选择一种音效范围；target gain 为 `0..1`，默认 authoring 值为 `0.5`。衰减由每个 active voice 的 owner-scoped lease 持有，owner 自身不被降低，重叠 lease 取最小 gain，结束、停止、失败和 destroy 必须恢复。loop track 不配置 focus，开始 event 在解锁前保留播放意图，once event 在解锁前丢弃。
-- `ignoreLegacyAudio` 默认 false；true 只禁止 runtime 自动 mode BGM、Popup cue 与 Symbol cue，不删除旧配置/资源，也不改变显式程序 `playEffect` / `stopEffect` API。初始 mode 的 displayed/stable entered occurrence 必须在 init 成功后发出，使 event audio 与其它 event consumer 看到一致的首次状态。
+- Shared schema/runtime 中 `ignoreLegacyAudio=false` 仍按历史合同播放自动 mode BGM、Popup cue 与 Symbol cue；Game Layout Editor 不再暴露该开关且导出恒为 true。初始 mode 的 displayed/stable entered occurrence 必须在 init 成功后发出，使 Event audio 与其它 event consumer 看到一致的首次状态。
 - 每个 v7 mode 显式声明 `main.enabled`；关闭时不得绑定 Symbols，但横竖 main/focus 几何仍必填并用于 viewport。runtime 不得按 mode id 猜测开关。
 - orientation variant只由宿主原始page width/height决定；正方形保持当前variant，首次正方形为landscape，focus和派生frame尺寸不得反馈成方向输入。
 - main、普通 scene node、Popup 与 transition 都按当前 `landscape` / `portrait` variant 解析；方向 resize 只更新 placement/visibility，不重建稳定 player。

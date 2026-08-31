@@ -18,11 +18,6 @@ import { Application, Container, Graphics } from "pixi.js";
 import type { PopupEditorProject } from "../model/project.js";
 import { exportPopupZip, importPopupZip } from "../io/popup-zip.js";
 import { POPUP_ZIP_LIMITS } from "../io/resource-import.js";
-import {
-  createAudioRuntime,
-  createPixiSoundBackend,
-  type AudioRuntime,
-} from "@slotclientengine/audiocore/core";
 
 export interface PopupPreviewAmountFormat {
   readonly fractionDigits: number;
@@ -87,10 +82,6 @@ export class PopupPreview {
   #amountFormat = DEFAULT_POPUP_PREVIEW_AMOUNT_FORMAT;
   #disposePopupInputBinding: (() => void) | null = null;
   #presentationSnapshot: PopupPresentationSnapshot | null = null;
-  #audio: AudioRuntime | null = null;
-  #audioUrls: string[] = [];
-  #audioCueState: string | null = null;
-  #audioCues: PopupEditorProject["audio"]["cues"] = [];
   #rebuildGeneration = 0;
   constructor(host: HTMLElement, status: HTMLElement) {
     this.#host = host;
@@ -125,28 +116,6 @@ export class PopupPreview {
       if (this.#player?.isPlaying()) {
         const deltaSeconds = ticker.deltaMS / 1000;
         const snapshot = this.#player.update(deltaSeconds);
-        this.#audio?.update(deltaSeconds);
-        const cueState =
-          "activeTierId" in snapshot
-            ? snapshot.activeTierId
-              ? `award-tier:${snapshot.activeTierId}`
-              : null
-            : "dismissRequested" in snapshot &&
-                (snapshot.phase === "start" ||
-                  snapshot.phase === "loop" ||
-                  snapshot.phase === "end")
-              ? `segment:${snapshot.phase}`
-              : null;
-        if (cueState && cueState !== this.#audioCueState) {
-          this.#audioCueState = cueState;
-          for (const cue of this.#audioCues) {
-            const target =
-              cue.target.kind === "segment"
-                ? `segment:${cue.target.segment}`
-                : `award-tier:${cue.target.tier}`;
-            if (target === cueState) this.#audio?.playEffect(cue.effect);
-          }
-        }
         this.#status.textContent =
           "activeTierId" in snapshot
             ? `${snapshot.activeTierId ?? "-"} / ${snapshot.activeSegment ?? "-"} / ${snapshot.phase} / ${snapshot.formattedAmount} / layers ${snapshot.activeLayerCount}+${snapshot.endingLayerCount}`
@@ -198,29 +167,6 @@ export class PopupPreview {
     this.#resource = resource;
     this.#player = player;
     this.#type = resource.manifest.type;
-    const projectAudio = project.audio ?? { version: 1, effects: [], cues: [] };
-    this.#audioCues = structuredClone(projectAudio.cues);
-    this.#audio = createAudioRuntime({
-      backend: createPixiSoundBackend(),
-      effects: Object.fromEntries(
-        projectAudio.effects.map((effect) => [
-          effect.name,
-          {
-            binding: effect,
-            sources: effect.asset.sources.map((source) => {
-              const asset = project.assets.get(source.path);
-              if (!asset)
-                throw new Error(`Popup preview 缺少音频资源：${source.path}`);
-              const url = URL.createObjectURL(
-                new Blob([asset.bytes as BlobPart], { type: source.mediaType }),
-              );
-              this.#audioUrls.push(url);
-              return { url, mediaType: source.mediaType };
-            }),
-          },
-        ]),
-      ),
-    });
     this.#previewRoot.addChild(player.container);
     this.layout();
     this.#status.textContent = "production runtime ready";
@@ -234,8 +180,6 @@ export class PopupPreview {
   play() {
     if (!this.#player) throw new Error("请先生成有效 production preview。");
     this.#player.dismissImmediately();
-    this.#audioCueState = null;
-    void this.#audio?.unlock().catch(() => {});
     if (this.#type === "award-celebration")
       (this.#player as AwardCelebrationPlayer).start(this.#input);
     else (this.#player as SpinePopupPlayer | SingleStatePopupPlayer).start();
@@ -326,12 +270,6 @@ export class PopupPreview {
   }
   private clear() {
     this.#presentationSnapshot = null;
-    this.#audio?.destroy();
-    this.#audio = null;
-    for (const url of this.#audioUrls) URL.revokeObjectURL(url);
-    this.#audioUrls = [];
-    this.#audioCues = [];
-    this.#audioCueState = null;
     this.#player?.destroy();
     this.#player = null;
     void this.#resource?.destroy();

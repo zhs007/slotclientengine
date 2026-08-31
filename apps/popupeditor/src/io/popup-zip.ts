@@ -27,6 +27,7 @@ import {
   loadPopupManifest,
 } from "@slotclientengine/rendercore/popup/editor";
 import type {
+  LatestPopupManifest,
   PopupManifest,
   PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup/editor";
@@ -41,6 +42,26 @@ import type { PopupEditorProject } from "../model/project.js";
 import { POPUP_ZIP_LIMITS } from "./resource-import.js";
 
 const ROOT = "popup.manifest.json";
+
+export interface PopupLegacyAudioMigration {
+  readonly effects: number;
+  readonly cues: number;
+  readonly assets: number;
+}
+
+const popupLegacyAudioMigrations = new WeakMap<
+  PopupEditorProject,
+  PopupLegacyAudioMigration
+>();
+
+export function getPopupLegacyAudioMigration(
+  project: PopupEditorProject,
+): PopupLegacyAudioMigration {
+  return (
+    popupLegacyAudioMigrations.get(project) ??
+    Object.freeze({ effects: 0, cues: 0, assets: 0 })
+  );
+}
 
 export async function exportPopupZip(
   project: PopupEditorProject,
@@ -112,7 +133,6 @@ export async function importPopupZip(
     alpha: manifest.backdrop.alpha,
     visibleStates: [...manifest.backdrop.visibleStates],
   };
-  project.audio = structuredClone(manifest.audio);
   project.resources.clear();
   project.assets.clear();
   for (const key of virtual.keys()) {
@@ -142,7 +162,7 @@ export async function importPopupZip(
     const closure = popupManifestAssetClosure(manifest, project.assets);
     if (closure.length !== project.assets.size)
       throw new Error("popup assets map 包含未引用 entry。");
-    return clonePopupEditorProject(project);
+    return finishImportedPopupProject(project, manifest);
   }
   if (manifest.type === "spine") {
     project.spine = {
@@ -167,7 +187,7 @@ export async function importPopupZip(
     const closure = popupManifestAssetClosure(manifest, project.assets);
     if (closure.length !== project.assets.size)
       throw new Error("popup assets map 包含未引用 entry。");
-    return clonePopupEditorProject(project);
+    return finishImportedPopupProject(project, manifest);
   }
   project.amountFormat = { ...manifest.amountFormat };
   project.tiers.set("base", {
@@ -189,7 +209,39 @@ export async function importPopupZip(
   const closure = popupManifestAssetClosure(manifest, project.assets);
   if (closure.length !== project.assets.size)
     throw new Error("popup assets map 包含未引用 entry。");
-  return clonePopupEditorProject(project);
+  return finishImportedPopupProject(project, manifest);
+}
+
+function finishImportedPopupProject(
+  project: PopupEditorProject,
+  manifest: LatestPopupManifest,
+): PopupEditorProject {
+  const retained = new Set(
+    Object.values(manifest.resources).flatMap((spec) =>
+      resourceClosure(spec, project.assets),
+    ),
+  );
+  const legacyAudioPaths = new Set(
+    manifest.audio.effects.flatMap((effect) =>
+      effect.asset.sources.map(({ path }) => path),
+    ),
+  );
+  let removedAssets = 0;
+  for (const path of legacyAudioPaths) {
+    if (retained.has(path)) continue;
+    if (project.assets.delete(path)) removedAssets += 1;
+  }
+  const migrated = clonePopupEditorProject(project);
+  projectToManifest(migrated);
+  popupLegacyAudioMigrations.set(
+    migrated,
+    Object.freeze({
+      effects: manifest.audio.effects.length,
+      cues: manifest.audio.cues.length,
+      assets: removedAssets,
+    }),
+  );
+  return migrated;
 }
 
 function normalizeImportedProject(project: PopupEditorProject): void {

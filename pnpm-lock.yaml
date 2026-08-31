@@ -506,9 +506,6 @@ importers:
 
   apps/popupeditor:
     dependencies:
-      '@slotclientengine/audiocore':
-        specifier: workspace:*
-        version: link:../../packages/audiocore
       '@slotclientengine/browserartifactio':
         specifier: workspace:*
         version: link:../../packages/browserartifactio
@@ -639,9 +636,6 @@ importers:
 
   apps/symbolseditor:
     dependencies:
-      '@slotclientengine/audiocore':
-        specifier: workspace:*
-        version: link:../../packages/audiocore
       '@slotclientengine/browserartifactio':
         specifier: workspace:*
         version: link:../../packages/browserartifactio

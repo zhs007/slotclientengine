@@ -25,7 +25,6 @@ import {
   audioEditorFormatAdapter,
   mediaTypeForAudioFilenameKey,
 } from "@slotclientengine/audiocore/editor";
-import { parseAudioEffectBindingV1 } from "@slotclientengine/audiocore/data";
 import {
   assertVNIBundleManifest,
   assertVNIProject,
@@ -558,36 +557,6 @@ export function getLayoutResourceReferences(
   const resource = project.resources.get(resourceId);
   if (resource?.kind !== "audio")
     return Object.freeze([...nodes, ...transitions]);
-  const musicNames = new Set(
-    project.audio.music
-      .filter((binding) =>
-        binding.asset.sources.some((source) => source.path === resource.path),
-      )
-      .map(({ name }) => name),
-  );
-  const modes = project.gameModes.modes
-    .filter((mode) => mode.bgm !== null && musicNames.has(mode.bgm))
-    .map((mode) =>
-      Object.freeze({
-        nodeId: mode.id,
-        role: "mode-bgm" as const,
-        variants: Object.freeze([]),
-      }),
-    );
-  const allowlist = new Set(project.audio.programmaticEffects);
-  const effects = project.audio.effects
-    .filter(
-      (binding) =>
-        allowlist.has(binding.name) &&
-        binding.asset.sources.some((source) => source.path === resource.path),
-    )
-    .map((binding) =>
-      Object.freeze({
-        nodeId: binding.name,
-        role: "programmatic-audio" as const,
-        variants: Object.freeze([]),
-      }),
-    );
   const eventAudio = project.eventAudio.bindings
     .filter((binding) =>
       binding.audio.asset.sources.some(
@@ -601,161 +570,7 @@ export function getLayoutResourceReferences(
         variants: Object.freeze([]),
       }),
     );
-  return Object.freeze([
-    ...nodes,
-    ...transitions,
-    ...modes,
-    ...effects,
-    ...eventAudio,
-  ]);
-}
-
-export function getModeBgmResourceId(
-  project: EditorProject,
-  modeId: string,
-): string | null {
-  const mode = requireGameMode(project, modeId);
-  if (!mode.bgm) return null;
-  const binding = project.audio.music.find(({ name }) => name === mode.bgm);
-  if (!binding) throw new Error(`主状态 ${modeId} 引用了未知 BGM：${mode.bgm}`);
-  const source = binding.asset.sources[0];
-  if (!source) throw new Error(`BGM ${binding.name} 没有音频 source。`);
-  const resource = [...project.resources.values()].find(
-    (candidate) => candidate.kind === "audio" && candidate.path === source.path,
-  );
-  if (!resource)
-    throw new Error(
-      `BGM ${binding.name} 引用了未知 audio asset：${source.path}`,
-    );
-  return resource.id;
-}
-
-export function bindModeBgm(
-  project: EditorProject,
-  modeId: string,
-  resourceId: string | null,
-): void {
-  const mode = requireGameMode(project, modeId);
-  if (resourceId === null) {
-    mode.bgm = null;
-    pruneUnusedMusicBindings(project);
-    return;
-  }
-  const resource = requireAudioResource(project, resourceId);
-  const matching = project.audio.music.filter((binding) =>
-    binding.asset.sources.some((source) => source.path === resource.path),
-  );
-  if (matching.length > 1)
-    throw new Error(
-      `audio asset ${resource.id} 对应多个 BGM 名称：${matching.map(({ name }) => name).join(", ")}。`,
-    );
-  let binding = matching[0];
-  if (!binding) {
-    const name = suggestAudioBindingName(resource.id);
-    const occupied = project.audio.music.find((item) => item.name === name);
-    if (occupied) throw new Error(`BGM 名称 ${name} 已绑定其它 audio asset。`);
-    binding = {
-      name,
-      asset: {
-        sources: [{ path: resource.path, mediaType: resource.mediaType }],
-      },
-      loop: true,
-      fadeOutSeconds: 1,
-      fadeInSeconds: 1,
-    };
-    project.audio = {
-      ...project.audio,
-      music: [...project.audio.music, binding],
-    };
-  }
-  mode.bgm = binding.name;
-  pruneUnusedMusicBindings(project);
-}
-
-export function setModeBgmFade(
-  project: EditorProject,
-  modeId: string,
-  field: "fadeOutSeconds" | "fadeInSeconds",
-  value: number,
-): void {
-  if (!Number.isFinite(value) || value <= 0)
-    throw new Error("BGM fade 必须是有限正数。");
-  const mode = requireGameMode(project, modeId);
-  if (!mode.bgm) throw new Error(`主状态 ${modeId} 尚未绑定 BGM。`);
-  let found = false;
-  const music = project.audio.music.map((binding) => {
-    if (binding.name !== mode.bgm) return binding;
-    found = true;
-    return { ...binding, [field]: value };
-  });
-  if (!found) throw new Error(`主状态 ${modeId} 引用了未知 BGM：${mode.bgm}`);
-  project.audio = { ...project.audio, music };
-}
-
-export function getProgrammaticAudioEffects(
-  project: EditorProject,
-  resourceId: string,
-) {
-  const resource = requireAudioResource(project, resourceId);
-  const allowed = new Set(project.audio.programmaticEffects);
-  return Object.freeze(
-    project.audio.effects.filter(
-      (binding) =>
-        allowed.has(binding.name) &&
-        binding.asset.sources.some((source) => source.path === resource.path),
-    ),
-  );
-}
-
-export function bindProgrammaticAudioEffect(
-  project: EditorProject,
-  resourceId: string,
-  requestedName: string,
-): void {
-  const resource = requireAudioResource(project, resourceId);
-  const name = normalizeAudioBindingName(requestedName);
-  const binding = parseAudioEffectBindingV1({
-    name,
-    asset: {
-      sources: [{ path: resource.path, mediaType: resource.mediaType }],
-    },
-    playback: "once",
-    offsetSeconds: 0,
-    voices: { maxConcurrent: 4, overflow: "restart-oldest" },
-    bgm: { kind: "keep" },
-  });
-  const existing = project.audio.effects.find((item) => item.name === name);
-  if (existing) {
-    const same = existing.asset.sources.some(
-      (source) => source.path === resource.path,
-    );
-    if (!same) throw new Error(`程序音效名称 ${name} 已绑定其它 audio asset。`);
-    if (project.audio.programmaticEffects.includes(name)) return;
-  }
-  project.audio = {
-    ...project.audio,
-    effects: existing
-      ? project.audio.effects
-      : [...project.audio.effects, binding],
-    programmaticEffects: [...project.audio.programmaticEffects, name],
-  };
-}
-
-export function unbindProgrammaticAudioEffect(
-  project: EditorProject,
-  name: string,
-): void {
-  if (!project.audio.programmaticEffects.includes(name))
-    throw new Error(`未知程序音效：${name}`);
-  project.audio = {
-    ...project.audio,
-    programmaticEffects: project.audio.programmaticEffects.filter(
-      (candidate) => candidate !== name,
-    ),
-    effects: project.audio.effects.filter(
-      (candidate) => candidate.name !== name,
-    ),
-  };
+  return Object.freeze([...nodes, ...transitions, ...eventAudio]);
 }
 
 export function getRuntimeResourceKey(
@@ -777,7 +592,7 @@ export function bindRuntimeResource(
   const resource = requireResource(project, resourceId);
   if (resource.kind === "audio")
     throw new Error(
-      "audio asset 必须通过 BGM 或程序音效绑定使用，不能设为普通程序资源。",
+      "audio asset 只允许通过统一 Event 音频绑定使用，不能设为普通程序资源。",
     );
   const normalizedKey = normalizeRuntimeResourceKey(key);
   if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalizedKey))
@@ -828,13 +643,9 @@ export function deleteLayoutResource(
         .map((reference) =>
           reference.role === "scene-transition"
             ? `${reference.nodeId} (scene-transition)`
-            : reference.role === "mode-bgm"
-              ? `${reference.nodeId} (mode BGM)`
-              : reference.role === "event-audio"
-                ? `${reference.nodeId} (event audio)`
-                : reference.role === "programmatic-audio"
-                  ? `${reference.nodeId} (程序音效)`
-                  : `${reference.nodeId} (图层)`,
+            : reference.role === "event-audio"
+              ? `${reference.nodeId} (event audio)`
+              : `${reference.nodeId} (图层)`,
         )
         .join("、")} 引用，不能删除。`,
     );
@@ -1261,49 +1072,12 @@ function requireResource(
   return resource;
 }
 
-function requireAudioResource(
-  project: EditorProject,
-  resourceId: string,
-): EditorAudioLayoutResource {
-  const resource = requireResource(project, resourceId);
-  if (resource.kind !== "audio")
-    throw new Error(`资源 ${resourceId} 不是 audio asset。`);
-  return resource;
-}
-
 function requireGameMode(project: EditorProject, modeId: string) {
   const mode = project.gameModes.modes.find(
     (candidate) => candidate.id === modeId,
   );
   if (!mode) throw new Error(`未知主状态：${modeId}`);
   return mode;
-}
-
-function normalizeAudioBindingName(value: string): string {
-  return value.trim().toLocaleLowerCase("en-US");
-}
-
-export function suggestAudioBindingName(resourceId: string): string {
-  const basename = resourceId.split("/").at(-1) ?? resourceId;
-  const dot = basename.lastIndexOf(".");
-  const stem = dot > 0 ? basename.slice(0, dot) : basename;
-  const name = normalizeAudioBindingName(stem)
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+|-+$/gu, "");
-  if (!name) throw new Error(`无法从 audio asset 生成名称：${resourceId}`);
-  return name;
-}
-
-function pruneUnusedMusicBindings(project: EditorProject): void {
-  const referenced = new Set(
-    project.gameModes.modes.flatMap((mode) => (mode.bgm ? [mode.bgm] : [])),
-  );
-  project.audio = {
-    ...project.audio,
-    music: project.audio.music.filter((binding) =>
-      referenced.has(binding.name),
-    ),
-  };
 }
 
 function requireLayer(project: EditorProject, nodeId: string): EditorNodeDraft {

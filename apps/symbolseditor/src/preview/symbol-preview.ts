@@ -5,12 +5,6 @@ import {
   type SymbolPackageResource,
 } from "@slotclientengine/rendercore/symbol/editor";
 import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
-import {
-  createAudioRuntime,
-  createPixiSoundBackend,
-  type AudioRuntime,
-} from "@slotclientengine/audiocore/core";
-import type { SymbolEditorProject } from "../model/editor-project.js";
 
 export type SymbolPreviewCellStatus =
   | "configured"
@@ -44,9 +38,6 @@ export class SymbolEditorPreview {
   #zoom = 1;
   #manualZoom = false;
   #resizeObserver: ResizeObserver | null = null;
-  #audio: AudioRuntime | null = null;
-  #audioUrls: string[] = [];
-  #audioCuesByState = new Map<string, string[]>();
 
   constructor(host: HTMLElement) {
     this.#host = host;
@@ -64,7 +55,6 @@ export class SymbolEditorPreview {
     this.#app.ticker.add((ticker: Ticker) => {
       const deltaSeconds = ticker.deltaMS / 1000;
       for (const symbol of this.#symbols) symbol.update(deltaSeconds);
-      this.#audio?.update(deltaSeconds);
     });
     this.#host.replaceChildren(this.#app.canvas);
     this.#resizeObserver = new ResizeObserver(() => this.resizeAndFit());
@@ -208,47 +198,6 @@ export class SymbolEditorPreview {
         symbol.requestState(this.#selectedState, "immediate");
       }
     }
-    this.playAudioCue(this.#selectedState);
-  }
-
-  configureAudio(project: SymbolEditorProject, symbolName: string): void {
-    this.clearAudio();
-    const symbol = project.symbols.get(symbolName);
-    if (!symbol || project.audio.effects.length === 0) return;
-    for (const cue of symbol.audioCues) {
-      const effects = this.#audioCuesByState.get(cue.state) ?? [];
-      effects.push(cue.effect);
-      this.#audioCuesByState.set(cue.state, effects);
-    }
-    this.#audio = createAudioRuntime({
-      backend: createPixiSoundBackend(),
-      effects: Object.fromEntries(
-        project.audio.effects.map((effect) => [
-          effect.name,
-          {
-            binding: effect,
-            sources: effect.asset.sources.map((source) => {
-              const record = project.assetLibrary.records.get(source.path);
-              if (!record)
-                throw new Error(`Symbols preview 缺少音频资源：${source.path}`);
-              const url = URL.createObjectURL(
-                new Blob([record.bytes as BlobPart], {
-                  type: source.mediaType,
-                }),
-              );
-              this.#audioUrls.push(url);
-              return { url, mediaType: source.mediaType };
-            }),
-          },
-        ]),
-      ),
-    });
-    void this.#audio.unlock();
-  }
-
-  playAudioCue(state: string): void {
-    for (const effect of this.#audioCuesByState.get(state) ?? [])
-      this.#audio?.playEffect(effect);
   }
 
   fitAll(): number {
@@ -281,17 +230,8 @@ export class SymbolEditorPreview {
     this.#resizeObserver?.disconnect();
     this.#resizeObserver = null;
     this.clearResource();
-    this.clearAudio();
     this.#gallery.destroy({ children: true });
     this.#app.destroy(true, { children: true, texture: true });
-  }
-
-  private clearAudio(): void {
-    this.#audio?.destroy();
-    this.#audio = null;
-    for (const url of this.#audioUrls) URL.revokeObjectURL(url);
-    this.#audioUrls = [];
-    this.#audioCuesByState.clear();
   }
 
   private resizeAndFit(): void {

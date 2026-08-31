@@ -1,12 +1,8 @@
 export {
   addLayerFromResource,
-  bindModeBgm,
-  bindProgrammaticAudioEffect,
   deleteLayoutResource,
   describeResource,
   getLayoutResourceReferences,
-  getModeBgmResourceId,
-  getProgrammaticAudioEffects,
   moveLayer,
   rebindLayerResource,
   renameNode,
@@ -16,13 +12,11 @@ export {
   replaceSpineResource,
   suggestNodeId,
   setLayerVariantVisibility,
-  setModeBgmFade,
   setNodeDefaultAnimation,
   uploadImageResource,
   uploadAudioResources,
   uploadSpineResource,
   uploadSpineResources,
-  unbindProgrammaticAudioEffect,
 } from "./resource-commands.js";
 export * from "./game-mode-commands.js";
 export * from "./node-id.js";

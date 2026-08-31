@@ -10,6 +10,8 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 新建项目与新导出的 `<id>-popup.zip` 固定使用 Popup v9。默认 loader 接受全部受支持的 v1–v9，先 strict 校验 source，再统一规范化并复验为 latest v9。v8 新增的 `single-state` 继续可保持零图层，也可组合 image、字体文字、ImgNumber、Spine 与 VNI，Spine/VNI autoplay 均可省略。合法 v1–v8 文字层在升级时补入 `widthRange: { minWidth: 0, maxWidth: 0 }`，保持旧视觉不变。
 
+音乐音效统一由 Game Layout Event 驱动，因此 Popup Editor 不再导入、配置或预览 tier/segment cue。含旧 effect/cue 的合法 ZIP 会先完成 source schema、map/hash、closure 和可选资源 prepare，再移除旧配置与仅由其引用的 audio payload并显示摘要。canonical v9 继续写 schema 要求的空 `audio.effects/cues`；RenderCore 仍可严格读取和运行未重导的历史 Popup。
+
 `single-state` 图层的 exact `id` 同时是 Editor name、runtime lookup name 和 Game Layout 地址 segment。父节点只能选择同一 Popup 中已经存在的 Spine exact slot，或由 ImgNumber 选择已经存在的 VNI 文字层；不提供主 Spine fallback。runtime 通过 `getLayer(name)` 取得 borrowed `RenderObject`，通过 `getTextNode(name)` / `getImageStringNode(name)` 修改文字。
 
 普通 Spine 类型不再提供独立 prompt authoring；提示语与其它文案一样使用命名的字体文字 overlay。旧 v1/v2 prompt 在导入边界自动结构化迁移为 `name=prompt` 的文字层，名称、order 或资源冲突会使整次导入失败。可追加任意数量 image、字体文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/项目状态可见性。

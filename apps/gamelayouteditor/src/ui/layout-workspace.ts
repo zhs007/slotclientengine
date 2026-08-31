@@ -10,7 +10,6 @@ import type { EditorLayoutResource } from "../model/editor-resource.js";
 import {
   describeLayerScope,
   describeResource,
-  getModeBgmResourceId,
   isLayerVisibleInContext,
 } from "../model/resource-commands.js";
 import {
@@ -58,28 +57,8 @@ export function layoutWorkspaceMarkup(
         }</div>
       </div>
     </aside>
-    <section class="inspector" aria-live="polite">${modeBgmEditor(project, modeId)}${inspectorMarkup(project, selection, layers, modeId, session)}</section>
+    <section class="inspector" aria-live="polite">${inspectorMarkup(project, selection, layers, modeId, session)}</section>
   </section>`;
-}
-
-function modeBgmEditor(project: EditorProject, modeId: string): string {
-  const mode = project.gameModes.modes.find(
-    (candidate) => candidate.id === modeId,
-  );
-  if (!mode) return "";
-  const selectedResourceId = getModeBgmResourceId(project, modeId);
-  const music = mode.bgm
-    ? project.audio.music.find((binding) => binding.name === mode.bgm)
-    : undefined;
-  const options = [...project.resources.values()]
-    .filter((resource) => resource.kind === "audio")
-    .sort((left, right) => left.id.localeCompare(right.id, "en"))
-    .map(
-      (resource) =>
-        `<option value="${escapeHtml(resource.id)}" ${selectedResourceId === resource.id ? "selected" : ""}>${escapeHtml(resource.id)} · ${escapeHtml(resource.mediaType)}</option>`,
-    )
-    .join("");
-  return `<section class="inspector-section mode-bgm-editor"><h3>${escapeHtml(modeId)} · BGM</h3><label>Audio asset<select data-mode-bgm-asset><option value="">无 BGM</option>${options}</select></label><p class="hint">BGM 属于当前 mode；新绑定固定 loop，不从其它 mode 继承。切换只由 production runtime 在成功 mode commit 后执行。</p>${music ? `<div class="field-grid"><label>fade out (s)<input type="number" step="0.1" min="0.001" data-mode-bgm-fade="fadeOutSeconds" value="${music.fadeOutSeconds}" /></label><label>fade in (s)<input type="number" step="0.1" min="0.001" data-mode-bgm-fade="fadeInSeconds" value="${music.fadeInSeconds}" /></label></div><p class="derived"><code>${escapeHtml(music.name)}</code> · loop</p>` : '<p class="derived">当前 mode 静音。</p>'}</section>`;
 }
 
 function outlineRow(options: {
