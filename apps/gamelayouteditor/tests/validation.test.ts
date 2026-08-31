@@ -6,6 +6,13 @@ import {
   editorProjectToManifest,
   manifestToEditorProject,
 } from "../src/model/editor-project.js";
+import {
+  isLayerVisibleInContext,
+  setLayerScopeGlobal,
+  setLayerScopeVisibility,
+  setLayerVariantVisibility,
+} from "../src/model/resource-commands.js";
+import { addGameMode } from "../src/model/game-mode-commands.js";
 
 describe("editor scene-layout v7 contract", () => {
   it("exports a background-free project as the latest centered manifest", () => {
@@ -115,6 +122,104 @@ describe("editor scene-layout v7 contract", () => {
     });
   });
 
+  it("edits exact mode and orientation scope without a legacy gameMode field", () => {
+    const project = createNewEditorProject();
+    addGameMode(project, "FreeGame");
+    project.nodes.push({
+      id: "background",
+      order: 0,
+      resourceId: "background.png",
+      placements: {
+        landscape: createDefaultNodePlacement(),
+        portrait: createDefaultNodePlacement(),
+      },
+    });
+
+    setLayerScopeGlobal(project, "background", false, "BaseGame");
+    expect(project.nodes[0]).not.toHaveProperty("gameMode");
+    expect(project.nodes[0]!.scope).toEqual({
+      BaseGame: ["landscape", "portrait"],
+    });
+    expect(
+      isLayerVisibleInContext(project.nodes[0]!, "BaseGame", "landscape"),
+    ).toBe(true);
+    expect(
+      isLayerVisibleInContext(project.nodes[0]!, "FreeGame", "landscape"),
+    ).toBe(false);
+
+    setLayerScopeVisibility(
+      project,
+      "background",
+      "FreeGame",
+      "portrait",
+      true,
+    );
+    setLayerScopeVisibility(
+      project,
+      "background",
+      "BaseGame",
+      "portrait",
+      false,
+    );
+    expect(project.nodes[0]!.scope).toEqual({
+      BaseGame: ["landscape"],
+      FreeGame: ["portrait"],
+    });
+
+    expect(() =>
+      setLayerScopeVisibility(
+        project,
+        "background",
+        "Missing",
+        "landscape",
+        true,
+      ),
+    ).toThrow(/未知主状态/u);
+    expect(() =>
+      setLayerScopeVisibility(
+        project,
+        "background",
+        "FreeGame",
+        "landscape",
+        true,
+      ),
+    ).not.toThrow();
+
+    setLayerVariantVisibility(project, "background", "portrait", false);
+    expect(project.nodes[0]!.scope).toEqual({
+      BaseGame: ["landscape"],
+      FreeGame: ["landscape"],
+    });
+    expect(() =>
+      setLayerVariantVisibility(project, "background", "landscape", false),
+    ).toThrow(/至少需要一个 orientation placement/u);
+
+    setLayerScopeGlobal(project, "background", true, "BaseGame");
+    expect(project.nodes[0]!.scope).toBeUndefined();
+  });
+
+  it("rejects removing the final scoped context without widening to global", () => {
+    const project = createNewEditorProject();
+    project.nodes.push({
+      id: "background",
+      order: 0,
+      resourceId: "background.png",
+      scope: { BaseGame: ["landscape"] },
+      placements: { landscape: createDefaultNodePlacement() },
+    });
+
+    expect(() =>
+      setLayerScopeVisibility(
+        project,
+        "background",
+        "BaseGame",
+        "landscape",
+        false,
+      ),
+    ).toThrow(/scope 至少需要一个可见上下文/u);
+    expect(project.nodes[0]!.scope).toEqual({ BaseGame: ["landscape"] });
+  });
+
   it("imports legacy top-left data with canonical landscape/portrait defaults", () => {
     const legacy = parseSceneLayoutManifestDocument({
       version: 1,
@@ -158,6 +263,9 @@ describe("editor scene-layout v7 contract", () => {
     expect(latest.version).toBe(7);
     expect(latest.nodes[0]!.placements).toHaveProperty("landscape");
     expect(latest.nodes[0]!.placements).toHaveProperty("portrait");
+    expect(project.nodes[0]!.scope).toEqual({
+      BaseGame: ["landscape", "portrait"],
+    });
     expect(latest.gameModes.modes[0]!.main.variants.landscape).toEqual(
       latest.gameModes.modes[0]!.main.variants.portrait,
     );

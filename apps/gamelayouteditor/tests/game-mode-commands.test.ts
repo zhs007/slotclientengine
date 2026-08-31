@@ -37,7 +37,10 @@ describe("game mode commands", () => {
       id: "free-decoration",
       order: 0,
       resourceId: "decoration.png",
-      scope: { FreeGame: ["landscape"] },
+      scope: {
+        BaseGame: ["portrait"],
+        FreeGame: ["landscape"],
+      },
       placements: {},
     });
     project.gameModes.modes[0]!.primaryActionTargetMode = "FreeGame";
@@ -49,7 +52,10 @@ describe("game mode commands", () => {
       "BaseGame",
       "BonusGame",
     ]);
-    expect(project.nodes[0]!.scope).toEqual({ BonusGame: ["landscape"] });
+    expect(project.nodes[0]!.scope).toEqual({
+      BaseGame: ["portrait"],
+      BonusGame: ["landscape"],
+    });
     expect(project.gameModes.modes[0]!.primaryActionTargetMode).toBe(
       "BonusGame",
     );

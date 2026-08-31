@@ -103,6 +103,12 @@ vi.mock("../src/io/imported-popup-package.js", () => ({
 }));
 
 import { GameLayoutEditorApp } from "../src/ui/app-shell.js";
+import {
+  createDefaultNodePlacement,
+  createNewEditorProject,
+  editorProjectToManifest,
+} from "../src/model/editor-project.js";
+import { addGameMode } from "../src/model/game-mode-commands.js";
 
 describe("GameLayoutEditorApp current workspace", () => {
   beforeEach(() => {
@@ -202,6 +208,74 @@ describe("GameLayoutEditorApp current workspace", () => {
       ),
     ).toEqual(["BaseGame", "FreeGame"]);
     app.destroy();
+  });
+
+  it("edits an imported exact mode and orientation scope", async () => {
+    const project = createNewEditorProject();
+    addGameMode(project, "FreeGame");
+    project.resources.set("background.png", {
+      id: "background.png",
+      kind: "image",
+      path: "background.png",
+      size: { width: 1, height: 1 },
+    });
+    project.assets.set("background.png", new Uint8Array([1]));
+    project.nodes.push({
+      id: "base-bg",
+      order: 0,
+      resourceId: "background.png",
+      scope: { BaseGame: ["landscape", "portrait"] },
+      placements: {
+        landscape: createDefaultNodePlacement(),
+        portrait: createDefaultNodePlacement(),
+      },
+    });
+    const destroyImported = vi.fn();
+    ioSpies.importZip.mockResolvedValueOnce({
+      manifest: editorProjectToManifest(project),
+      assets: project.assets,
+      videoMetadata: new Map(),
+      nodeIdRenames: [],
+      destroy: destroyImported,
+    });
+    const click = selectFilesOnce([new File(["layout"], "layout.zip")]);
+    const { app, root } = await createApp();
+
+    (root.querySelector("[data-import]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector('[data-outline-key="layer:base-bg"]'),
+      ).toBeTruthy(),
+    );
+    (
+      root.querySelector(
+        '[data-outline-key="layer:base-bg"]',
+      ) as HTMLButtonElement
+    ).click();
+
+    const global = root.querySelector(
+      '[data-layer-global="base-bg"]',
+    ) as HTMLInputElement;
+    expect(global.checked).toBe(false);
+    expect(root.textContent).toContain("BaseGame · landscape/portrait");
+    const freeLandscape = root.querySelector(
+      '[data-layer-node-id="base-bg"][data-layer-scope-mode="FreeGame"][data-layer-scope-variant="landscape"]',
+    ) as HTMLInputElement;
+    expect(freeLandscape.checked).toBe(false);
+    freeLandscape.click();
+
+    await vi.waitFor(() => {
+      const lastCall = previewSpies.setLayout.mock.lastCall as unknown as
+        [ReturnType<typeof editorProjectToManifest>] | undefined;
+      const manifest = lastCall?.[0];
+      expect(manifest?.nodes[0]?.scope).toEqual({
+        BaseGame: ["landscape", "portrait"],
+        FreeGame: ["landscape"],
+      });
+    });
+    expect(destroyImported).toHaveBeenCalledTimes(1);
+    app.destroy();
+    click.mockRestore();
   });
 
   it("surfaces a failed import and destroys idempotently", async () => {

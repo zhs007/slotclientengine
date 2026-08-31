@@ -82,8 +82,7 @@ export type EditorVniPlaybackDraft = {
 export interface EditorNodeDraft {
   id: string;
   order: number;
-  /** Missing means the ordinary layer is effective in every game mode. */
-  gameMode?: string;
+  /** Missing means every game mode; entries select exact mode/orientation contexts. */
   scope?: Readonly<Record<string, readonly ("landscape" | "portrait")[]>>;
   resourceId: string;
   playback?: EditorSpinePlaybackDraft | EditorVniPlaybackDraft;
@@ -488,10 +487,7 @@ export function editorProjectToManifest(
       order: node.order,
       resource: resolveEditorNodeResource(project, node),
       placements: structuredClone(node.placements),
-      ...(() => {
-        const scope = node.scope ?? legacyEditorNodeScope(project, node);
-        return scope ? { scope } : {};
-      })(),
+      ...(node.scope ? { scope: structuredClone(node.scope) } : {}),
     })),
     ...(() => {
       const bindings = new Map<string, EditorModeSymbolBinding>();
@@ -1217,14 +1213,6 @@ function createEmptyVariant(): EditorVariantDraft {
     },
     minFocusMargin: { left: 0, right: 0, top: 0, bottom: 0 },
   };
-}
-
-function legacyEditorNodeScope(
-  _project: EditorProject,
-  node: EditorNodeDraft,
-): Readonly<Record<string, readonly ("landscape" | "portrait")[]>> | undefined {
-  if (node.gameMode) return { [node.gameMode]: ["landscape", "portrait"] };
-  return undefined;
 }
 
 function editorMainVariant(

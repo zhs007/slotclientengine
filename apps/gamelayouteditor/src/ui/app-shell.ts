@@ -65,9 +65,10 @@ import {
   replaceJsonDataResource,
   replaceSpineResource,
   replaceVideoResource,
+  setLayerScopeGlobal,
+  setLayerScopeVisibility,
   setLayerVariantVisibility,
   setModeBgmFade,
-  setLayerGameMode,
   setImageStringLayerAnchor,
   setImageStringLayerText,
   setNodeDefaultAnimation,
@@ -2169,29 +2170,32 @@ export class GameLayoutEditorApp {
         input.addEventListener("change", () =>
           this.runTransaction(
             (draft) =>
-              setLayerGameMode(
+              setLayerScopeGlobal(
                 draft,
                 input.dataset.layerGlobal!,
-                input.checked ? null : this.#selectedGameMode,
+                input.checked,
+                this.#selectedGameMode,
               ),
             input.checked
               ? "图层已设为所有状态有效。"
-              : `图层已绑定状态 ${this.#selectedGameMode}。`,
+              : `图层已绑定 ${this.#selectedGameMode} 的现有 placements。`,
           ),
         ),
       );
     panel
-      .querySelectorAll<HTMLSelectElement>("[data-layer-game-mode]")
-      .forEach((select) =>
-        select.addEventListener("change", () =>
+      .querySelectorAll<HTMLInputElement>("[data-layer-scope-mode]")
+      .forEach((input) =>
+        input.addEventListener("change", () =>
           this.runTransaction(
             (draft) =>
-              setLayerGameMode(
+              setLayerScopeVisibility(
                 draft,
-                select.dataset.layerGameMode!,
-                select.value,
+                input.dataset.layerNodeId!,
+                input.dataset.layerScopeMode!,
+                input.dataset.layerScopeVariant as "landscape" | "portrait",
+                input.checked,
               ),
-            `图层已绑定状态 ${select.value}。`,
+            `${input.dataset.layerScopeMode} · ${input.dataset.layerScopeVariant} 已${input.checked ? "启用" : "停用"}。`,
           ),
         ),
       );

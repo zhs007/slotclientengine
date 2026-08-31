@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createNewEditorProject } from "../src/model/editor-project.js";
 import { EditorStore } from "../src/model/editor-store.js";
+import { addGameMode } from "../src/model/game-mode-commands.js";
+import { setLayerScopeGlobal } from "../src/model/resource-commands.js";
 
 describe("EditorStore", () => {
   it("starts with a valid background-free centered project", () => {
@@ -30,6 +32,38 @@ describe("EditorStore", () => {
     store.transact((project) => {
       project.reel.columns = 6;
     });
+    expect(store.getSnapshot()).toMatchObject({
+      errors: [],
+      revision: 1,
+      changeKind: "structural",
+    });
+  });
+
+  it("classifies ordinary-layer scope edits as structural", () => {
+    const project = createNewEditorProject();
+    addGameMode(project, "FreeGame");
+    project.resources.set("background.png", {
+      id: "background.png",
+      kind: "image",
+      path: "background.png",
+      size: { width: 1, height: 1 },
+    });
+    project.assets.set("background.png", new Uint8Array([1]));
+    project.nodes.push({
+      id: "background",
+      order: 0,
+      resourceId: "background.png",
+      placements: {
+        landscape: { x: 0, y: 0, scale: 1 },
+        portrait: { x: 0, y: 0, scale: 1 },
+      },
+    });
+    const store = new EditorStore(project);
+
+    store.transact((draft) =>
+      setLayerScopeGlobal(draft, "background", false, "BaseGame"),
+    );
+
     expect(store.getSnapshot()).toMatchObject({
       errors: [],
       revision: 1,

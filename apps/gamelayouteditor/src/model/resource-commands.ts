@@ -1,5 +1,6 @@
 import {
   parseSceneLayoutJsonData,
+  type SceneLayoutOrientationVariantId,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/data";
 import {
@@ -1101,26 +1102,115 @@ export function setLayerVariantVisibility(
     return;
   }
   if (!placement) return;
+  const remainingPlacements = ordinaryLayerVariantIds.filter(
+    (candidate) => candidate !== variant && Boolean(node.placements[candidate]),
+  );
+  if (remainingPlacements.length === 0)
+    throw new Error(`普通图层 ${nodeId} 至少需要一个 orientation placement。`);
+  const nextScope = node.scope
+    ? canonicalLayerScope(
+        project,
+        Object.fromEntries(
+          Object.entries(node.scope).flatMap(([modeId, variants]) => {
+            const remaining = variants.filter(
+              (candidate) => candidate !== variant,
+            );
+            return remaining.length > 0 ? [[modeId, remaining] as const] : [];
+          }),
+        ),
+      )
+    : undefined;
+  if (node.scope && !nextScope)
+    throw new Error(`普通图层 ${nodeId} 的 scope 至少需要一个可见上下文。`);
   node.hiddenPlacements ??= {};
   node.hiddenPlacements[variant] = structuredClone(placement);
   delete node.placements[variant];
+  if (nextScope) node.scope = nextScope;
 }
 
-export function setLayerGameMode(
+export function setLayerScopeGlobal(
   project: EditorProject,
   nodeId: string,
-  gameMode: string | null,
+  global: boolean,
+  initialModeId: string,
 ): void {
   const node = requireLayer(project, nodeId);
-  if (gameMode === null) {
-    delete node.gameMode;
+  if (global) {
     delete node.scope;
     return;
   }
-  if (!project.gameModes.modes.some((mode) => mode.id === gameMode))
-    throw new Error(`未知游戏模式：${gameMode}`);
-  delete node.scope;
-  node.gameMode = gameMode;
+  if (node.scope) return;
+  requireGameMode(project, initialModeId);
+  const variants = ordinaryLayerVariantIds.filter((variant) =>
+    Boolean(node.placements[variant]),
+  );
+  if (variants.length === 0)
+    throw new Error(`普通图层 ${nodeId} 没有可用于 scope 的 placement。`);
+  node.scope = { [initialModeId]: variants };
+}
+
+export function setLayerScopeVisibility(
+  project: EditorProject,
+  nodeId: string,
+  modeId: string,
+  variant: SceneLayoutOrientationVariantId,
+  visible: boolean,
+): void {
+  const node = requireLayer(project, nodeId);
+  requireGameMode(project, modeId);
+  assertLayerVariantsAllowed([variant]);
+  if (!node.scope) throw new Error(`普通图层 ${nodeId} 当前对所有状态有效。`);
+  if (visible && !node.placements[variant])
+    throw new Error(
+      `普通图层 ${nodeId} 缺少 ${variant} placement，不能启用该 scope。`,
+    );
+  const draft = Object.fromEntries(
+    Object.entries(node.scope).map(([id, variants]) => [id, [...variants]]),
+  ) as Record<string, SceneLayoutOrientationVariantId[]>;
+  const variants = draft[modeId] ?? [];
+  if (visible) {
+    if (!variants.includes(variant)) variants.push(variant);
+    draft[modeId] = variants;
+  } else if (variants.includes(variant)) {
+    const remaining = variants.filter((candidate) => candidate !== variant);
+    if (remaining.length > 0) draft[modeId] = remaining;
+    else delete draft[modeId];
+  } else {
+    return;
+  }
+  const scope = canonicalLayerScope(project, draft);
+  if (!scope)
+    throw new Error(`普通图层 ${nodeId} 的 scope 至少需要一个可见上下文。`);
+  node.scope = scope;
+}
+
+export function isLayerVisibleInContext(
+  node: EditorNodeDraft,
+  modeId: string,
+  variant: SceneLayoutVariantId | null,
+): boolean {
+  if (!node.scope) return variant === null || Boolean(node.placements[variant]);
+  const scopedVariants = node.scope[modeId];
+  if (!scopedVariants) return false;
+  if (variant === null)
+    return scopedVariants.some((candidate) =>
+      Boolean(node.placements[candidate]),
+    );
+  if (variant !== "landscape" && variant !== "portrait") return false;
+  return scopedVariants.includes(variant) && Boolean(node.placements[variant]);
+}
+
+export function describeLayerScope(
+  project: EditorProject,
+  node: EditorNodeDraft,
+): string {
+  if (!node.scope) return "所有状态";
+  return project.gameModes.modes
+    .flatMap(({ id }) => {
+      const variants = node.scope?.[id];
+      return variants ? [`${id} · ${variants.join("/")}`] : [];
+    })
+    .join("；");
 }
 
 export function suggestNodeId(
@@ -1220,6 +1310,23 @@ function requireLayer(project: EditorProject, nodeId: string): EditorNodeDraft {
   const node = project.nodes.find((item) => item.id === nodeId);
   if (!node) throw new Error(`未知节点：${nodeId}`);
   return node;
+}
+
+function canonicalLayerScope(
+  project: EditorProject,
+  value: Readonly<Record<string, readonly SceneLayoutOrientationVariantId[]>>,
+): EditorNodeDraft["scope"] {
+  const knownModes = new Set(project.gameModes.modes.map(({ id }) => id));
+  for (const modeId of Object.keys(value))
+    if (!knownModes.has(modeId)) throw new Error(`未知游戏模式：${modeId}`);
+  const entries = project.gameModes.modes.flatMap(({ id }) => {
+    const selected = new Set(value[id] ?? []);
+    const variants = ordinaryLayerVariantIds.filter((variant) =>
+      selected.has(variant),
+    );
+    return variants.length > 0 ? [[id, variants] as const] : [];
+  });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function assertLayerVariantsAllowed(

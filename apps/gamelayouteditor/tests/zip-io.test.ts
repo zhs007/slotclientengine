@@ -17,9 +17,12 @@ import {
 } from "../src/io/imported-layout-zip.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 import {
+  createDefaultNodePlacement,
+  createNewEditorProject,
   editorProjectToManifest,
   manifestToEditorProject,
 } from "../src/model/editor-project.js";
+import { addGameMode } from "../src/model/game-mode-commands.js";
 import { popupFiles } from "./popup-fixture.js";
 
 const decodeImage = async () => ({ width: 1, height: 1 });
@@ -131,6 +134,75 @@ function compositePackageFixture() {
 }
 
 describe("layout zip IO", () => {
+  it("round-trips exact mode-scoped ordinary backgrounds through a v7 ZIP", async () => {
+    const project = createNewEditorProject();
+    addGameMode(project, "FreeGame");
+    const png = assetBytes.get("assets/bg.png")!;
+    for (const [index, modeId] of ["BaseGame", "FreeGame"].entries()) {
+      const resourceId = `${modeId.toLowerCase()}-bg.png`;
+      project.resources.set(resourceId, {
+        id: resourceId,
+        kind: "image",
+        path: resourceId,
+        size: { width: 1, height: 1 },
+      });
+      project.assets.set(resourceId, png.slice());
+      project.nodes.push({
+        id: `${modeId.toLowerCase()}-bg`,
+        order: index,
+        resourceId,
+        scope: { [modeId]: ["landscape", "portrait"] },
+        placements: {
+          landscape: createDefaultNodePlacement(),
+          portrait: createDefaultNodePlacement(),
+        },
+      });
+    }
+
+    const first = await exportLayoutZip({
+      manifest: editorProjectToManifest(project),
+      assets: project.assets,
+      decodeImage,
+    });
+    const imported = await importLayoutZip(first.bytes, { decodeImage });
+    const reopened = manifestToEditorProject(
+      imported.manifest,
+      imported.assets,
+    );
+    expect(reopened.nodes.map(({ id, scope }) => ({ id, scope }))).toEqual([
+      {
+        id: "basegame-bg",
+        scope: { BaseGame: ["landscape", "portrait"] },
+      },
+      {
+        id: "freegame-bg",
+        scope: { FreeGame: ["landscape", "portrait"] },
+      },
+    ]);
+    expect(reopened.nodes.every((node) => !("gameMode" in node))).toBe(true);
+
+    const second = await exportLayoutZip({
+      manifest: editorProjectToManifest(reopened),
+      assets: reopened.assets,
+      decodeImage,
+    });
+    const reimported = await importLayoutZip(second.bytes, { decodeImage });
+    expect(
+      reimported.manifest.nodes.map(({ id, scope }) => ({ id, scope })),
+    ).toEqual([
+      {
+        id: "basegame-bg",
+        scope: { BaseGame: ["landscape", "portrait"] },
+      },
+      {
+        id: "freegame-bg",
+        scope: { FreeGame: ["landscape", "portrait"] },
+      },
+    ]);
+    imported.destroy();
+    reimported.destroy();
+  });
+
   it("normalizes Popup resource keys together with uppercase root references", async () => {
     const popupManifest = {
       version: 1,

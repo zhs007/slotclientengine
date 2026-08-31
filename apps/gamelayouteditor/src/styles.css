@@ -481,13 +481,24 @@ h3 {
 }
 
 .layer-state-scope,
-.layer-state-variants {
+.layer-state-variants,
+.layer-scope-grid,
+.layer-scope-mode {
   display: grid;
   gap: 10px;
 }
 
-.layer-state-variants {
+.layer-state-variants,
+.layer-scope-grid {
   margin-top: 4px;
+}
+
+.layer-scope-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.layer-scope-mode {
+  align-content: start;
 }
 
 .outline-group small,

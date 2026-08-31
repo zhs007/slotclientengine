@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createNewEditorProject } from "../src/model/editor-project.js";
 import {
   addLayerFromResource,
-  setLayerGameMode,
+  setLayerScopeGlobal,
+  setLayerScopeVisibility,
 } from "../src/model/resource-commands.js";
 import { addGameMode } from "../src/model/game-mode-commands.js";
 import {
@@ -100,7 +101,7 @@ describe("editor UI session and Resource Picker view model", () => {
       nodeId: "free-only",
       variants: ["landscape"],
     });
-    setLayerGameMode(project, "free-only", "FreeGame");
+    setLayerScopeGlobal(project, "free-only", false, "FreeGame");
 
     const markup = layoutWorkspaceMarkup(
       project,
@@ -110,7 +111,29 @@ describe("editor UI session and Resource Picker view model", () => {
       "portrait",
     );
     expect(markup).toContain('data-currently-hidden="true"');
-    expect(markup).toContain('data-layer-game-mode="free-only"');
-    expect(markup).toContain("仅 FreeGame");
+    expect(markup).toContain('data-layer-global="free-only"');
+    expect(markup).not.toMatch(/data-layer-global="free-only" checked/u);
+    expect(markup).toContain('data-layer-scope-mode="FreeGame"');
+    expect(markup).toContain('data-layer-scope-variant="landscape"');
+    expect(markup).toContain("FreeGame · landscape");
+
+    setLayerScopeVisibility(
+      project,
+      "free-only",
+      "BaseGame",
+      "landscape",
+      true,
+    );
+    const multiModeMarkup = layoutWorkspaceMarkup(
+      project,
+      { kind: "layer", nodeId: "free-only" },
+      "BaseGame",
+      createEditorUiSession(),
+      "landscape",
+    );
+    expect(multiModeMarkup).not.toContain('data-currently-hidden="true"');
+    expect(multiModeMarkup).toContain(
+      "BaseGame · landscape；FreeGame · landscape",
+    );
   });
 });

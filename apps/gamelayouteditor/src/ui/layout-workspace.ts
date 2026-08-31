@@ -8,8 +8,10 @@ import {
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout/data";
 import type { EditorLayoutResource } from "../model/editor-resource.js";
 import {
+  describeLayerScope,
   describeResource,
   getModeBgmResourceId,
+  isLayerVisibleInContext,
 } from "../model/resource-commands.js";
 import {
   selectionKey,
@@ -36,7 +38,7 @@ export function layoutWorkspaceMarkup(
           layers.length
             ? layers
                 .map((node) => {
-                  const visible = layerVisibleInContext(
+                  const visible = isLayerVisibleInContext(
                     node,
                     modeId,
                     currentVariant,
@@ -96,19 +98,8 @@ function layerMeta(
   visible: boolean,
 ): string {
   const resource = project.resources.get(node.resourceId);
-  const scope = node.gameMode ? `仅 ${node.gameMode}` : "所有状态";
+  const scope = describeLayerScope(project, node);
   return `${resource?.kind ?? "unknown"} · order ${node.order} · ${scope} · ${visible ? (resource ? "ready" : "error") : "当前状态不显示"}`;
-}
-
-function layerVisibleInContext(
-  node: EditorNodeDraft,
-  modeId: string,
-  variant: SceneLayoutVariantId | null,
-): boolean {
-  return (
-    (node.gameMode === undefined || node.gameMode === modeId) &&
-    (variant === null || Boolean(node.placements[variant]))
-  );
 }
 
 function inspectorMarkup(
@@ -164,14 +155,24 @@ function layerInspector(
   const resource = project.resources.get(node.resourceId);
   const index = project.nodes.findIndex((item) => item.id === node.id);
   const layerIndex = layers.findIndex((item) => item.id === node.id);
-  const modeOptions = project.gameModes.modes
-    .map(
-      (mode) =>
-        `<option value="${escapeHtml(mode.id)}" ${mode.id === node.gameMode ? "selected" : ""}>${escapeHtml(mode.id)}</option>`,
-    )
-    .join("");
-  const scopeLabel = node.gameMode ?? "所有状态";
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>图层 Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}${numberField("order", `nodes.${index}.order`, node.order)}<p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div><p class="hint">可直接填写高于 main reel 的 order；order 必须唯一，且所有 Popup order 必须更高。</p>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "vni" ? vniPlaybackEditor(node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}</section><section class="inspector-section"><h3>状态、方向与 Placement</h3><fieldset class="layer-state-scope"><legend>${escapeHtml(scopeLabel)}</legend><label class="visibility"><input type="checkbox" data-layer-global="${escapeHtml(node.id)}" ${node.gameMode === undefined ? "checked" : ""}/> 所有状态有效</label>${node.gameMode === undefined ? "" : `<label>绑定状态<select data-layer-game-mode="${escapeHtml(node.id)}">${modeOptions}</select></label>`}<p class="hint">取消全局后，图层只能绑定一个状态；当前编辑状态为 ${escapeHtml(modeId)}。</p><div class="layer-state-variants">${ordinaryLayerVariantIds
+  const scopeLabel = describeLayerScope(project, node);
+  const scopeMatrix = node.scope
+    ? `<div class="layer-scope-grid" role="group" aria-label="图层状态与方向可见性">${project.gameModes.modes
+        .map(
+          (mode) =>
+            `<fieldset class="layer-scope-mode"><legend>${escapeHtml(mode.id)}</legend>${ordinaryLayerVariantIds
+              .map((variant) => {
+                const hasPlacement = Boolean(node.placements[variant]);
+                const checked = Boolean(
+                  node.scope?.[mode.id]?.includes(variant),
+                );
+                return `<label class="visibility"><input type="checkbox" data-layer-scope-mode="${escapeHtml(mode.id)}" data-layer-scope-variant="${variant}" data-layer-node-id="${escapeHtml(node.id)}" ${checked ? "checked" : ""} ${hasPlacement ? "" : "disabled"}/> ${variant}${hasPlacement ? "" : "（无 placement）"}</label>`;
+              })
+              .join("")}</fieldset>`,
+        )
+        .join("")}</div>`
+    : "";
+  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>图层 Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}${numberField("order", `nodes.${index}.order`, node.order)}<p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div><p class="hint">可直接填写高于 main reel 的 order；order 必须唯一，且所有 Popup order 必须更高。</p>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "vni" ? vniPlaybackEditor(node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}</section><section class="inspector-section"><h3>状态、方向与 Placement</h3><fieldset class="layer-state-scope"><legend>${escapeHtml(scopeLabel)}</legend><label class="visibility"><input type="checkbox" data-layer-global="${escapeHtml(node.id)}" ${node.scope === undefined ? "checked" : ""}/> 所有状态有效</label>${scopeMatrix}<p class="hint">取消全局时先绑定当前编辑状态 ${escapeHtml(modeId)} 的现有 placements；之后可按 mode × orientation 精确调整。</p><div class="layer-state-variants">${ordinaryLayerVariantIds
     .map((variant) => placementMarkup(node, index, variant))
     .join(
       "",
@@ -215,7 +216,7 @@ function placementMarkup(
   variant: "default" | "landscape" | "portrait",
 ): string {
   const placement = node.placements[variant];
-  const visibility = `<label class="visibility"><input type="checkbox" data-layer-visible="${variant}" data-layer-node-id="${escapeHtml(node.id)}" ${placement ? "checked" : ""}/> ${variant} 可见</label>`;
+  const visibility = `<label class="visibility"><input type="checkbox" data-layer-visible="${variant}" data-layer-node-id="${escapeHtml(node.id)}" ${placement ? "checked" : ""}/> ${variant} placement</label>`;
   const hiddenHint = node.hiddenPlacements?.[variant]
     ? "placement 已保留；重新显示会恢复此前编辑值。"
     : "首次启用会创建固定初值 {x:0,y:0,scale:1,rotation:0,center:{x:0.5,y:0.5}}。";

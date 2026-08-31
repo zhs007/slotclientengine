@@ -1,22 +1,16 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v6 编辑器，覆盖 layout、mode/variant、optional loop BGM、全局 event 音乐音效、程序音效、稳定背景、普通 VNI/Spine 动画图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v6 ZIP 会在打开事务中规范化；后续预览和导出只生成 v6。
+纯前端 Scene Layout v7 编辑器，覆盖 layout、mode/orientation、optional loop BGM、全局 event 音乐音效、程序音效、普通 image/VNI/Spine 图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v7 ZIP 会在打开事务中规范化；后续预览和导出只生成 canonical v7。
 
-## Splash-first 与 per-mode 适配
+## 中心坐标与 per-mode 可见性
 
-新建项目会分别要求为 Splash 和 BaseGame 选择 `maximized-focus`（单背景）或
-`orientation-focus`（横竖双背景），未选择时不能创建。Splash 是 initial mode，带一条显式
-Splash → BaseGame none transition 和 primary click action；可在转场工作区把该边改为 Spine 或
-MP4。实际 preview 必须点击 Splash 才进入 BaseGame。状态管理器新增 mode 时也必须先选择该
-mode 的适配类型，不继承当前 mode。
+Scene Layout v7 固定使用中心坐标。root `main` 保存 grid，每个 mode 显式保存 `main.enabled` 以及
+landscape/portrait 的 main center、absolute focusRect 和可选 margin。背景没有专属类型、selector 或
+readiness；零个、一个或多个背景都作为普通 scene node 添加。
 
-状态管理器也保存每个 mode 的“启用主转轮区域”开关。新建 Splash 默认关闭、BaseGame 与后续
-mode 默认开启；关闭的 mode 不显示 reel guide、不能绑定 Symbols，focus 四边相对 art 配置。
-开启的 mode 继续以 main reel 为基准配置 focus 外扩。已有 Symbols 时必须先解绑才能关闭。
-
-适配、focus、背景和 main reel placement 都属于各自 mode。单背景 mode 只有 default geometry/background，
-双背景 mode 的 landscape/portrait 各有独立 geometry/background；两种 mode 的普通图层都始终拥有独立
-landscape/portrait placement 与可见性。预览和 production runtime 按宿主原始页面宽高选择普通图层方向；
+普通节点的 optional `scope` 精确声明 mode × orientation 可见性；字段缺失才表示所有 mode。Inspector
+提供显式全局开关和 mode × orientation 矩阵。最终显示要求当前 mode/orientation 命中 scope（或节点为
+global）且对应 orientation placement 存在。预览和 production runtime 按宿主原始页面宽高选择方向；
 尺寸宽高相等时维持当前方向，首次以正方形启动时选择 landscape。
 
 award-celebration Popup 作为自包含 dependency，通过 `rendercore/popup/editor` 完成 standalone ZIP 校验、flatten、namespace 与 vendor。任一受支持的 Popup v1–v9 都先按 source strict 校验，再由默认 loader 转成 latest v9；Popup/Symbol 音效保持 local name，直到 Scene Layout 按 binding id 聚合为全局 route。画面和音频预览继续只走 Scene Layout production runtime/inspector。
@@ -36,24 +30,22 @@ Assets 工具栏另有明确的“导入 JSON data”动作，可原子导入一
 
 MP3、OGG、WAV、M4A、AAC 和 WebM 音频先作为未绑定 asset 导入；扩展名、signature 和显式 MIME 必须一致，`.mp4` 固定保留给视频。当前 mode 的 BGM 在 Layout inspector 选择，新绑定恒为 loop，可编辑 fade in/out；程序音效在 audio asset 行以 strict local name 显式登记。音频不会创建 scene node，也不使用通用 `runtimeResources` 程序键。预览必须先点“启用声音”，随后 initial/authoring/production mode 切换与 effect 试听都走同一个 production package runtime；preview 重建会把已解锁会话应用到新 runtime。
 
-node/background/transition 直接引用 filename key 或 typed key 组合。node id、package id、mode id 仍是业务身份，但不是第二个资源 id。多个 mode/variant 可引用同一 `BG.jpg`，覆盖一次即可更新全部 bytes，同时各自的稳定 node id 与 placement 保持独立。
+node/transition 直接引用 filename key 或 typed key 组合。node id、package id、mode id 仍是业务身份，但不是第二个资源 id。多个普通节点可引用同一 `BG.jpg`，覆盖一次即可更新全部 bytes，同时各自的稳定 node id、scope 与 placement 保持独立。
 
 Scene node id只允许小写字母、数字和连字符，并禁止`layout/reel/transition/popup`四个RenderLayer保留名。导入旧Layout ZIP时，带点号/下划线和保留名的node会按稳定collision规则迁移，adaptation/mode/nodeStates引用同一事务改写，完成提示列出`old→new`；rendercore仍可直接运行未重导的旧v1包。游戏侧统一取层和坐标接口见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 
-layout 大纲选中普通图层后，preview 使用红框和半透明红色斜线显示当前 variant 中该节点的实时可见范围；斜线裁在渲染区域内，因此图层边界位于画布外时仍有选中提示。黄/绿 focus 与 reel guide 保持原语义。普通图层与背景的每个 variant placement 可编辑 `x/y/scale`、顺时针角度 `rotation` 和 `[0,1]` normalized `center`；默认 rotation 为 `0`、center 为 `0.5/0.5`，负角度与超过一圈的角度原样保存。Spine 的默认 center 对应 authored 原点。只修改 node/reel placement、focus、art size或坐标类型时走 geometry 更新，复用已加载资源、Spine player、reel 和已抽样 symbols，不重新随机排列。
+layout 大纲选中普通图层后，preview 使用红框和半透明红色斜线显示当前 orientation 中该节点的实时可见范围；斜线裁在渲染区域内，因此图层边界位于画布外时仍有选中提示。黄/绿 focus 与 reel guide 保持原语义。普通图层的每个 orientation placement 可编辑 `x/y/scale`、顺时针角度 `rotation` 和 `[0,1]` normalized `center`；默认 rotation 为 `0`、center 为 `0.5/0.5`，负角度与超过一圈的角度原样保存。Spine 的默认 center 对应 authored 原点。只修改 node/main placement 或 focus 时走 geometry 更新，复用已加载资源、Spine player、reel 和已抽样 symbols，不重新随机排列。
 
 Popup root的`x/y/scale`与Spine transition placement同样走geometry更新；数字输入只在blur、Enter或spinner形成`change`后
 提交，输入中的临时空串、负号或小数不会触发preview rebuild。预览分辨率、宽高和右下角拖拽只更新现有runtime viewport，拖拽
 事件按animation frame合并；zoom只改变canvas display size。以上操作都保留当前mode、Popup/reel/player和已抽样Symbols。只有资源、
 package/binding、transition kind等immutable structure变化才自动重建preview，不需要手动刷新。
 
-普通图层的 `order` 可直接输入安全整数，不会因其它编辑被自动压缩重排；main reel 仍可使用默认 `999`，普通图层允许配置到其上方。node、main reel 与 Popup root 的 order 全局不得重复；Popup root 默认从 `2000` 分配且必须高于全部 node/main reel，其值可在 Popup 工作区或引用它的转场中修改。背景和 main reel 继续作为大纲中的特殊项展示。
+普通图层的 `order` 可直接输入安全整数，不会因其它编辑被自动压缩重排；main reel 仍可使用默认 `999`，普通图层允许配置到其上方。node、main reel 与 Popup root 的 order 全局不得重复；Popup root 默认从 `2000` 分配且必须高于全部 node/main reel，其值可在 Popup 工作区或引用它的转场中修改。背景与其它普通节点使用同一大纲和 Inspector，只有 main reel 是特殊项。
 
-普通图层默认勾选“所有状态有效”；取消后必须且只能绑定一个大小写精确的主状态。状态范围位于横屏/竖屏可见性外层，实际显示要求状态匹配且当前 variant 存在 placement。当前编辑状态或预览方向下不可见的图层在大纲灰显但仍可选中，隐藏不会删除节点或改变全局 `order`。旧 layout 缺少 node `gameMode` 时继续按全局图层读取和导出。
+普通图层默认勾选“所有状态有效”，对应 v7 `scope` 缺失。取消后先绑定当前编辑 mode 的已有 placements，随后可在 mode × orientation 矩阵中精确增删上下文；至少保留一个有效上下文，scope 不能引用缺失的 placement。当前编辑 mode 或预览方向下不可见的图层在大纲灰显但仍可选中，隐藏不会删除节点或改变全局 `order`。合法旧 layout 先由 RenderCore shared upgrader 把单 `gameMode` 和 per-mode background binding 转为 v7 scope，Editor draft 不保留旧 `gameMode` 双轨。
 
-项目 Tab 可在“左上角”和“中心”全局坐标间切换。切换会在一次事务中转换普通图层、背景、main reel 和 art-space Spine transition 的现有 placement，视觉位置保持不变；popup 与 video 不参与转换。旧包缺少坐标字段时按左上角读取。
-
-main reel 只提供横竖屏 `x/y` placement，不提供整体缩放。双背景适配通过美术调整背景素材宽度、art size 和 reel 位置完成，避免横竖屏分别缩放转轮造成额外布局差异。
+Editor draft 只保存中心坐标；legacy top-left/artSize 仅在 RenderCore upgrader 输入中存在，不进入 v7 preview 或导出。main reel 只提供横竖屏中心 `x/y`，不提供整体缩放；横竖屏适配通过各 mode 的 main/focus 与普通节点 placement 完成。
 
 原始文件上传在任何资源解析前先整批校验 filename：只允许 ASCII 字母、数字、点、下划线和连字符，并统一转为小写。任一文件包含中文、空格、路径分隔符或其它非法字符，或多个文件小写化后重名，整批上传原子拒绝。普通资源合法同名不同 bytes 默认覆盖，引用不变；不建立 `dependencies/**` 目录。ImgNumber ZIP 以 manifest project id 为稳定前缀物化 root 与 glyph filename keys（例如 `digits.image-string.manifest.json`、`digits-0.png`），不同项目可在同一 workspace 并存，同 id 才进入替换流程。Symbols/Popup ZIP 同样先按 standalone schema 校验，再以 manifest id 为稳定前缀物化 root/leaf filename keys；相同物理 bytes 最终仍由 `assets.map.json` 的 SHA-256 payload 去重。同 id 替换只覆盖该 owner 的独占 keys，并在提交后回收无其它 owner 引用的旧 keys。SymbolsEditor 已验证合法的 owner-owned filename key（包括大小写）在 Layout 导入、替换、导出和重导时原样保留；若与其它 owner 形成大小写 alias 则显式失败。完整 Editor ZIP 验证 map/hash/size 后，只迁移 Layout-owned 旧 logical filename key：先做 Unicode NFKC，ASCII 合法字符转小写，空白和 ASCII 标点转 `-`，非 ASCII 字符按 `u<Unicode 十六进制>` 展开，连续分隔符合并并清理首尾；扩展名同样小写且必须能归一为字母数字。归一后不同 bytes 重名时按稳定源路径顺序添加 `-2/-3`，相同 bytes 复用同一 key；layout 及已识别的 VNI、image-string、Popup JSON 引用同步结构化改写，业务 id 和 atlas page logical name 不变。Symbols/Popup dependency 只保存业务 package id、root key、closure keys 与 placement；bytes 只存在全局 asset workspace。
 

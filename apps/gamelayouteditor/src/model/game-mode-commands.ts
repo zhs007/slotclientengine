@@ -40,12 +40,14 @@ export function renameGameMode(
     throw new Error(`游戏模式已存在：${nextId}`);
   mode.id = nextId;
   for (const node of project.nodes) {
-    if (node.gameMode === currentId) node.gameMode = nextId;
     if (!node.scope || !(currentId in node.scope)) continue;
-    const scope = { ...node.scope };
-    const variants = scope[currentId]!;
-    delete scope[currentId];
-    scope[nextId] = variants;
+    const scope = Object.fromEntries(
+      project.gameModes.modes.flatMap((candidate) => {
+        const id = candidate.id === nextId ? currentId : candidate.id;
+        const variants = node.scope?.[id];
+        return variants ? [[candidate.id, variants] as const] : [];
+      }),
+    );
     node.scope = scope;
   }
   for (const transition of project.gameModes.transitions) {
@@ -85,7 +87,7 @@ export function deleteGameMode(project: EditorProject, id: string): void {
       `游戏模式 ${id} 仍被 primary action 引用：${actionReferences.join(", ")}`,
     );
   const layerReferences = project.nodes
-    .filter((node) => node.gameMode === id || Boolean(node.scope?.[id]))
+    .filter((node) => Boolean(node.scope?.[id]))
     .map((node) => node.id);
   if (layerReferences.length)
     throw new Error(
