@@ -547,6 +547,7 @@ function runtimeResourceClosure(
   if (
     resource.kind === "image" ||
     resource.kind === "video" ||
+    resource.kind === "audio" ||
     resource.kind === "json"
   ) {
     keys.add(resource.path);

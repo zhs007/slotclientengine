@@ -54,6 +54,14 @@ export function collectPackageAudioAssetRoles(
       for (const effect of popup.audio.effects)
         addBinding(roles, effect.asset.sources, "effect");
   }
+  for (const resource of Object.values(manifest.runtimeResources ?? {})) {
+    if (resource.kind !== "audio") continue;
+    const current = roles.get(resource.path);
+    if (current && current.mediaType !== resource.mediaType)
+      throw new Error(
+        `音频资源 mediaType 冲突：${resource.path} (${current.mediaType} / ${resource.mediaType})`,
+      );
+  }
   return new Map([...roles].sort(([left], [right]) => compare(left, right)));
 }
 

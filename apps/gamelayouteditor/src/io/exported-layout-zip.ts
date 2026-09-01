@@ -763,6 +763,7 @@ function rewriteLayoutManifestFilenameKeys(
           if (
             resource.kind === "image" ||
             resource.kind === "video" ||
+            resource.kind === "audio" ||
             resource.kind === "json"
           )
             return [id, { ...resource, path: key(resource.path) }];

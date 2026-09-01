@@ -32,6 +32,14 @@ import {
 const PATH_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]*$/;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
+const AUDIO_MEDIA_TYPES = new Set([
+  "audio/mpeg",
+  "audio/ogg",
+  "audio/wav",
+  "audio/mp4",
+  "audio/aac",
+  "audio/webm",
+]);
 export const DEFAULT_SCENE_LAYOUT_POPUP_ORDER = 2000;
 
 export function parseSceneLayoutManifest(
@@ -252,7 +260,8 @@ export function collectSceneLayoutAssetPaths(
     if (
       resource.kind === "image" ||
       resource.kind === "video" ||
-      resource.kind === "json"
+      resource.kind === "json" ||
+      resource.kind === "audio"
     )
       paths.add(resource.path);
     else if (resource.kind === "image-string") paths.add(resource.manifest);
@@ -653,8 +662,28 @@ function parseRuntimeResources(
       });
       continue;
     }
+    if (resource.kind === "audio") {
+      known(resource, ["kind", "path", "mediaType"], label);
+      if (
+        typeof resource.mediaType !== "string" ||
+        !AUDIO_MEDIA_TYPES.has(resource.mediaType)
+      )
+        fail(`${label}.mediaType is unsupported.`);
+      resources[key] = deepFreeze({
+        kind: "audio",
+        path: audioOwnedPath(resource.path, `${label}.path`),
+        mediaType: resource.mediaType as
+          | "audio/mpeg"
+          | "audio/ogg"
+          | "audio/wav"
+          | "audio/mp4"
+          | "audio/aac"
+          | "audio/webm",
+      });
+      continue;
+    }
     fail(
-      `${label}.kind must be image, spine, image-string, vni, video, or json.`,
+      `${label}.kind must be image, spine, image-string, vni, video, json, or audio.`,
     );
   }
   return deepFreeze(resources);
@@ -945,7 +974,8 @@ function validatePathClosure(
     paths.push(
       ...(resource.kind === "image" ||
       resource.kind === "video" ||
-      resource.kind === "json"
+      resource.kind === "json" ||
+      resource.kind === "audio"
         ? [resource.path]
         : resource.kind === "image-string"
           ? [resource.manifest]
@@ -1502,6 +1532,14 @@ function videoOwnedPath(value: unknown, label: string): string {
       `${label} must be a filename key or assets/<full-lowercase-sha256>.mp4.`,
     );
   return path;
+}
+
+function audioOwnedPath(value: unknown, label: string): string {
+  return localPath(
+    value,
+    label,
+    new Set([".mp3", ".ogg", ".wav", ".m4a", ".aac", ".webm"]),
+  );
 }
 
 function assertEditorAssetKey(value: string): string {

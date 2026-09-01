@@ -6,14 +6,19 @@ import {
   importLayoutZip,
 } from "../src/io/imported-layout-zip.js";
 import {
+  editorProjectToPreviewManifest,
   editorProjectToManifest,
   manifestToEditorProject,
 } from "../src/model/editor-project.js";
 import {
+  bindRuntimeResource,
   deleteLayoutResource,
   getLayoutResourceReferences,
+  getRuntimeResourceKey,
   uploadAudioResources,
 } from "../src/model/resource-commands.js";
+import { createEditorUiSession } from "../src/ui/ui-session.js";
+import { resourcesWorkspaceMarkup } from "../src/ui/resources-workspace.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 
 const wavBytes = new Uint8Array([
@@ -233,6 +238,105 @@ describe("audio assets", () => {
 
     deleteLayoutResource(project, "unused.ogg");
     expect(project.assets.has("unused.ogg")).toBe(false);
+  });
+
+  it("exports and restores a program-only audio asset", async () => {
+    const project = createProject();
+    const [jingle] = await uploadAudioResources({
+      project,
+      files: [new File([oggBytes], "jingle.ogg", { type: "audio/ogg" })],
+    });
+    bindRuntimeResource(project, jingle!.id, "feature-jingle");
+
+    const manifest = editorProjectToManifest(project);
+    expect(manifest.runtimeResources?.["feature-jingle"]).toEqual({
+      kind: "audio",
+      path: "jingle.ogg",
+      mediaType: "audio/ogg",
+    });
+    expect(
+      editorProjectToPreviewManifest(project, "default")?.runtimeResources,
+    ).toBeUndefined();
+
+    const session = createEditorUiSession();
+    session.expandedResourceIds.add(jingle!.id);
+    const markup = resourcesWorkspaceMarkup({
+      project,
+      session,
+      thumbnailUrls: new Map(),
+    });
+    expect(markup).toContain('data-runtime-resource-key="jingle.ogg"');
+    expect(markup).toContain('loadRuntimeResource(key, "audio")');
+    expect(markup).not.toContain("gamelayout:/resource/audio/");
+
+    const exported = await exportLayoutZip({
+      manifest,
+      assets: project.assets,
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    const entries = extractBoundedZip(exported.bytes);
+    const assetsMap = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+    expect(entries.get(assetsMap.files["jingle.ogg"]!.path)).toEqual(oggBytes);
+
+    const imported = await importLayoutZip(exported.bytes, {
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    try {
+      await expect(
+        imported.packageResource.loadRuntimeResource("feature-jingle", "audio"),
+      ).resolves.toMatchObject({ kind: "audio", mediaType: "audio/ogg" });
+      const restored = manifestToEditorProject(
+        imported.manifest,
+        imported.assets,
+        imported.videoMetadata,
+      );
+      expect(restored.resources.get("jingle.ogg")).toMatchObject({
+        kind: "audio",
+        mediaType: "audio/ogg",
+      });
+      expect(getRuntimeResourceKey(restored, "jingle.ogg")).toBe(
+        "feature-jingle",
+      );
+    } finally {
+      imported.destroy();
+    }
+  });
+
+  it("allows the same audio root to be used by Event and program bindings", async () => {
+    const project = createProject();
+    const [jingle] = await uploadAudioResources({
+      project,
+      files: [new File([wavBytes], "shared.wav", { type: "audio/wav" })],
+    });
+    bindRuntimeResource(project, jingle!.id, "shared-audio");
+    project.eventAudio = {
+      ...project.eventAudio,
+      bindings: [
+        {
+          event: "gamelayout:/mode/BaseGame/state/stable/entered",
+          audio: {
+            name: "shared-event",
+            asset: {
+              sources: [{ path: "shared.wav", mediaType: "audio/wav" }],
+            },
+            category: "effect",
+            playback: "once",
+            voices: { maxConcurrent: 1, overflow: "restart-oldest" },
+            focus: {},
+          },
+        },
+      ],
+    };
+
+    const manifest = editorProjectToManifest(project);
+    expect(manifest.runtimeResources?.["shared-audio"]).toMatchObject({
+      kind: "audio",
+      path: "shared.wav",
+    });
+    expect(manifest.eventAudio.bindings[0]?.audio.asset.sources[0]).toEqual({
+      path: "shared.wav",
+      mediaType: "audio/wav",
+    });
   });
 
   it("rejects extension/signature and MIME mismatches atomically", async () => {

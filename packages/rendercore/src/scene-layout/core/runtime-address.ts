@@ -696,7 +696,7 @@ export function createGameLayoutRuntimeAddresses(
   for (const [name, spec] of Object.entries(
     manifest.runtimeResources ?? {},
   ).sort(([a], [b]) => a.localeCompare(b, "en"))) {
-    if (spec.kind === "json") continue;
+    if (spec.kind === "json" || spec.kind === "audio") continue;
     add(
       ["resource", spec.kind, name],
       "resource-factory",

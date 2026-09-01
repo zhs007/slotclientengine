@@ -84,4 +84,48 @@ describe("Popup audio asset collection", () => {
       });
     },
   );
+
+  it("keeps program-only audio out of optimization roles and validates shared media types", () => {
+    const programOnly = {
+      version: 7,
+      runtimeResources: {
+        jingle: {
+          kind: "audio",
+          path: "jingle.ogg",
+          mediaType: "audio/ogg",
+        },
+      },
+      audio: { version: 1, effects: [], music: [], programmaticEffects: [] },
+      eventAudio: { version: 1, ignoreLegacyAudio: true, bindings: [] },
+    };
+    expect(
+      collectPackageAudioAssetRoles(programOnly as never, new Map()),
+    ).toEqual(new Map());
+
+    const conflicting = {
+      ...programOnly,
+      eventAudio: {
+        version: 1,
+        ignoreLegacyAudio: true,
+        bindings: [
+          {
+            event: "gamelayout:/mode/BaseGame/state/stable/entered",
+            audio: {
+              name: "jingle",
+              asset: {
+                sources: [{ path: "jingle.ogg", mediaType: "audio/mpeg" }],
+              },
+              category: "effect",
+              playback: "once",
+              voices: { maxConcurrent: 1, overflow: "restart-oldest" },
+              focus: {},
+            },
+          },
+        ],
+      },
+    };
+    expect(() =>
+      collectPackageAudioAssetRoles(conflicting as never, new Map()),
+    ).toThrow(/mediaType 冲突/);
+  });
 });

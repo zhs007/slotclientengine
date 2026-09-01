@@ -589,11 +589,7 @@ export function bindRuntimeResource(
   resourceId: string,
   key: string,
 ): void {
-  const resource = requireResource(project, resourceId);
-  if (resource.kind === "audio")
-    throw new Error(
-      "audio asset 只允许通过统一 Event 音频绑定使用，不能设为普通程序资源。",
-    );
+  requireResource(project, resourceId);
   const normalizedKey = normalizeRuntimeResourceKey(key);
   if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalizedKey))
     throw new Error(

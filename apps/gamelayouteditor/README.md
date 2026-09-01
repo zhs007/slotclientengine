@@ -30,7 +30,7 @@ SymbolsEditor 编辑。
 
 Assets 工具栏另有明确的“导入 JSON data”动作，可原子导入一个或多个顶层为 object/array 的 `.json` 文件。它们是 opaque、program-only assets：不会进入画布、背景或资源 Picker，也没有 preview 和渲染地址。只有设置唯一程序键后才进入 production ZIP，runtime 通过 `SceneLayoutPackageResource.loadJsonData(key)` 读取；取消绑定后，无其它引用的数据恢复为不导出。替换要求保持同一 filename key 并重新严格校验，导出、重导和 optimizer 都保留原始 JSON bytes，不扫描或改写其中看似资源路径的字符串。
 
-MP3、OGG、WAV、M4A、AAC 和 WebM 音频先作为未绑定 asset 导入；扩展名、signature 和显式 MIME 必须一致，`.mp4` 固定保留给视频。项目页的“编辑音乐音效”是唯一音频 authoring 入口，只能把已导入 asset 绑定到 exact Event；音频不会创建 scene node，也不使用通用 `runtimeResources` 程序键。预览必须先点“启用声音”，随后 Event 播放只走同一个 production package runtime；preview 重建会把已解锁会话应用到新 runtime。打开含 mode BGM、root effect 的旧 Layout 时先完整 strict 校验，再移除旧配置和仅由其引用的 audio bytes，并显示迁移摘要。
+MP3、OGG、WAV、M4A、AAC 和 WebM 音频先作为未绑定 asset 导入；扩展名、signature 和显式 MIME 必须一致，`.mp4` 固定保留给视频。项目页的“编辑音乐音效”是唯一音频行为 authoring 入口，只能把已导入 asset 绑定到 exact Event；Assets 中的音频也可独立绑定程序键强制导出，但这只提供 exact URL/mediaType，不会创建 scene node、播放行为或渲染地址。预览必须先点“启用声音”，随后 Event 播放只走同一个 production package runtime；preview 重建会把已解锁会话应用到新 runtime。打开含 mode BGM、root effect 的旧 Layout 时先完整 strict 校验，再移除旧配置和仅由其引用的 audio bytes，并显示迁移摘要。
 Event 选择器会按当前 Symbols render mode 显示 ReelSpin、GridCell 与 CellSpin 的整体 started/ended、
 单元 started/stopped 和 all-stopped；具体轴/cell、列、行和全体 wildcard 均来自 RenderCore shared catalog。
 Spin event 默认创建为单次音效，仍可在同一配置中改为音乐或循环播放。
@@ -56,7 +56,7 @@ Editor draft 只保存中心 main 坐标和 focus 四边外扩量；legacy top-l
 
 Popup Spine 的 atlas page logical name 不随物理 filename key 前缀化。导入提交前会用完整 SHA-256 比较 Popup 与 Layout 自有 Spine 中同名的 atlas/texture；同名不同 bytes 时列出冲突，由用户取消整次导入或确认继续隔离导入，不自动覆盖、改名或推断 skeleton JSON 兼容性。
 
-资源列表可把任一已识别的 image、Spine、VNI、ImgNumber、MP4 或 JSON data root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片优化后仍保持不变。展开已绑定渲染资源的详情可复制 canonical 地址；ImgNumber 例如 `gamelayout:/resource/image-string/win-amount`。JSON data 只显示 `loadJsonData` API 提示，不生成地址。Audio 只通过 Event audio binding 使用，不进入通用程序资源 union。
+资源列表可把任一已识别的 image、Spine、VNI、ImgNumber、MP4、audio 或 JSON data root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片/音频优化后仍保持不变。展开已绑定渲染资源的详情可复制 canonical 地址；ImgNumber 例如 `gamelayout:/resource/image-string/win-amount`。JSON data 只显示 `loadJsonData` API 提示，audio 只显示 `loadRuntimeResource(key, "audio")`；两者都不生成渲染地址。同一 audio root 可同时由 Event binding 和一个程序键引用。
 
 手工验收例子：导入一个 ImgNumber ZIP，在资源行填写 `win-amount` 并点“设为程序资源”，展开详情复制 factory 地址；再导入一个未绑定 mode/transition 的 Popup ZIP，在 Popup 工作区点“设为程序 Popup”，复制 `gamelayout:/popup/<id>`，点播放后状态区应显示该 exact 地址。Popup active 时再次播放应明确报错，点“立即关闭”后应可用同一地址再次播放。导出并重导 ZIP 后，两项程序用途和地址应保持。
 

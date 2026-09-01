@@ -17,6 +17,7 @@ import {
 import {
   parseSceneLayoutManifestDocument,
   type SceneLayoutManifest,
+  type SceneLayoutRuntimeResourceSpec,
 } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   parseSymbolPackageManifest,
@@ -176,12 +177,10 @@ export function rewriteLayoutManifest(
           if (
             resource.kind === "image" ||
             resource.kind === "video" ||
+            resource.kind === "audio" ||
             resource.kind === "json"
           )
-            return [
-              id,
-              { ...resource, path: rewriteRef(resource.path, mapping) },
-            ];
+            return [id, rewriteRuntimePathResource(resource, mapping)];
           if (resource.kind === "image-string")
             return [
               id,
@@ -641,6 +640,23 @@ function rewriteRef(
   const source = dot ? value.slice(2) : value;
   const target = mapping.get(source);
   return target ? (dot ? `./${target}` : target) : value;
+}
+
+function rewriteRuntimePathResource(
+  resource: Extract<
+    SceneLayoutRuntimeResourceSpec,
+    { readonly kind: "image" | "video" | "audio" | "json" }
+  >,
+  mapping: ReadonlyMap<string, string>,
+): SceneLayoutRuntimeResourceSpec {
+  const path = rewriteRef(resource.path, mapping);
+  return {
+    ...resource,
+    path,
+    ...(resource.kind === "audio" && path.toLowerCase().endsWith(".m4a")
+      ? { mediaType: "audio/mp4" }
+      : {}),
+  };
 }
 
 function rewriteRequiredRef(
