@@ -413,3 +413,6 @@ dimensions/mips、bone/skin/triangle/clip facts、外部工具版本、实际验
 - 第五轮用户反馈指出鞋尖虽已校正，但髋—膝—踝腿链仍外张；walk 的每个 gait key pose 必须同时数值求解 thigh Z
   与 shin Z，使同侧髋、膝、踝保持在角色前后平面内，再求解鞋尖朝向。validator 对关键帧间密集采样的膝/踝
   横向偏差设置最大 5mm 门禁；另外三个动作不受影响。
+- 第六轮用户反馈指出 `victory` 抬剑过程发生穿模；重做持剑侧肩与前臂轨迹，使剑始终从身体外侧升降，不经过
+  面甲、头饰、躯干或披风。validator 对 victory 密集采样，使用 BVH 检查 right-hand/sword 分组与除相连前臂外的
+  全部身体及装备分组，任何三角面相交均显式失败；双脚锁定合同保持不变。

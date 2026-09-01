@@ -16,7 +16,7 @@
   - `attack` 1.30 秒、`idle` 2.03 秒、`victory` 1.53 秒、`walk` 2.03 秒；每段 60 个 transform channels。
   - 3 张内嵌 `image/ktx2` UASTC 纹理，均为 2048×2048、12 级 mipmap；GLB required extension 为
     `KHR_texture_basisu`，无 PNG/WebP fallback 或外部 URI。
-  - SHA-256：`b7c20d9d4a1e20bf5e0d6b47c3b500e74741a9c80f7466305ae699e525b6ec51`。
+  - SHA-256：`c0e254f681f0f8b862b886ca5d4fc920729c6fb2d4913afa0d8cb6b943d4445f`。
 - `apps/castleknight3ddemo/viewer.html`
   - 独立查看器页面及可访问名称明确的控制面板。
 - `apps/castleknight3ddemo/src/model-viewer.ts`
@@ -141,6 +141,11 @@ foot bone 的世界 X 回到各自固定轨道。最终左脚横向/前后范围
 第六版在每个 gait key pose 联立数值求解 thigh Z 与 shin Z，使左右两侧的髋、膝、踝分别处于同一角色前后平面，
 再独立求解鞋尖朝向。最终 GLB 密集采样的腿链最大横向偏差约 0.05mm、鞋尖最大朝向偏差约 0.081°，脚踝保持
 约 10.385cm 的前后步幅；validator 增加 5mm 腿平面门禁，Blender 九相位和真实 Three.js viewer 起步/换步均通过。
+
+用户随后指出 `victory` 抬剑时剑穿过面甲。第七版将持剑侧肩和前臂由向面部内收改为从角色右外侧抬起，五个
+关键姿态中剑身均与头盔、头饰、躯干和披风保持间距。validator 对整段 victory 做 13 点密集采样，并以 BVH 检查
+right-hand/sword 网格与除相连前臂外全部身体和装备分组，所有样本相交数均为 0；双脚继续保持零位移/零旋转，
+Blender 五相位与真实 Three.js viewer 的最高抬剑姿态均已复验。
 
 ## 剩余风险
 
