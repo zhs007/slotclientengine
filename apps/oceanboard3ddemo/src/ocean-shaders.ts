@@ -199,7 +199,7 @@ void main() {
   vec2 screenUv = gl_FragCoord.xy / max(uResolution, vec2(1.0));
   float detailFade = 1.0 - smoothstep(520.0, 980.0, distanceToCamera);
   float screenDetail = smootherStep(0.24, 0.78, screenUv.y);
-  float farDetailFade = 1.0 - smoothstep(760.0, 1050.0, distanceToCamera);
+  float farDetailFade = 1.0 - smoothstep(330.0, 720.0, distanceToCamera);
 
   vec2 point = vWorldPosition.xz;
   mat2 rotateA = mat2(0.94, -0.34, 0.34, 0.94);
@@ -282,6 +282,24 @@ void main() {
       lineGlint * fragmentedGlitter * 0.24 +
       sharpGlint * sparseGlitter * 1.12);
 
+  float middleWaterZone = smootherStep(0.28, 0.47, screenUv.y) *
+    (1.0 - smootherStep(0.79, 0.855, screenUv.y));
+  float horizontalWaveA = sin(
+    point.y * 0.055 + sin(point.x * 0.021 + uTime * 0.18) * 1.15 -
+      uTime * 0.36
+  );
+  float horizontalWaveB = sin(
+    point.y * 0.094 + point.x * 0.013 + uTime * 0.27
+  );
+  float stylizedWaveRidge = smoothstep(
+    0.62,
+    0.94,
+    horizontalWaveA * 0.72 + horizontalWaveB * 0.28
+  );
+  float stylizedWaveBreakup = smoothstep(0.46, 0.76, glitterField);
+  color += vec3(0.12, 0.57, 0.68) *
+    stylizedWaveRidge * stylizedWaveBreakup * middleWaterZone * 0.11;
+
   float farWaveShape =
     sin(point.x * 0.012 + uTime * 0.14) * 0.58 +
     sin(point.x * 0.027 - uTime * 0.09 + 1.7) * 0.42;
@@ -290,7 +308,7 @@ void main() {
     900.0 + farWaveShape * 18.0,
     distanceToCamera
   );
-  color = mix(color, vec3(0.115, 0.525, 0.655), horizonFade * 0.78);
+  color = mix(color, vec3(0.045, 0.405, 0.62), horizonFade * 0.82);
 
   float waterDepthUv = clamp((0.845 - screenUv.y) / 0.845, 0.0, 1.0);
   vec2 sunpathDrift = vec2(
