@@ -409,7 +409,7 @@ export function editorProjectToPreviewManifest(
     const manifest = editorProjectToManifest(project);
     const visualRuntimeResources = Object.fromEntries(
       Object.entries(manifest.runtimeResources ?? {}).filter(
-        ([, resource]) => resource.kind !== "json",
+        ([, resource]) => resource.kind !== "json" && resource.kind !== "audio",
       ),
     );
     const visualManifest = {
@@ -926,18 +926,20 @@ export function manifestToEditorProject(
     ...structuredClone(latest.eventAudio),
     ignoreLegacyAudio: true,
   };
-  const eventAudioPaths = new Set(
+  const retainedAudioPaths = new Set(
     project.eventAudio.bindings.flatMap(({ audio }) =>
       audio.asset.sources.map(({ path }) => path),
     ),
   );
+  for (const resource of Object.values(latest.runtimeResources ?? {}))
+    if (resource.kind === "audio") retainedAudioPaths.add(resource.path);
   const legacyAudioPaths = new Set(
     [...latest.audio.music, ...latest.audio.effects].flatMap((binding) =>
       binding.asset.sources.map(({ path }) => path),
     ),
   );
   for (const path of legacyAudioPaths)
-    if (!eventAudioPaths.has(path)) project.assets.delete(path);
+    if (!retainedAudioPaths.has(path)) project.assets.delete(path);
   for (const binding of project.eventAudio.bindings.map(({ audio }) => audio)) {
     for (const source of binding.asset.sources) {
       requiredAsset(assets.get(source.path), source.path);
@@ -1356,9 +1358,11 @@ function editorResourceToRuntimeSpec(
   if (resource.kind === "video")
     return { kind: "video", path: resource.path, mimeType: "video/mp4" };
   if (resource.kind === "audio")
-    throw new Error(
-      `audio asset ${resource.id} 必须通过 Event 音频绑定使用，不能作为 runtimeResources。`,
-    );
+    return {
+      kind: "audio",
+      path: resource.path,
+      mediaType: resource.mediaType,
+    };
   return {
     kind: "spine",
     skeleton: resource.skeleton,
@@ -1434,6 +1438,12 @@ function manifestRuntimeResourceToEditorResource(
     }
   >,
 ): EditorLayoutResourceDraft {
+  if (resource.kind === "audio")
+    return {
+      kind: "audio",
+      path: resource.path,
+      mediaType: resource.mediaType,
+    };
   if (resource.kind === "json") {
     const value = parseSceneLayoutJsonData(
       requiredAsset(assets.get(resource.path), resource.path),

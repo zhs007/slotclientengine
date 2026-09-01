@@ -613,6 +613,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     const atlasModules: Record<string, string> = {};
     const textureModules: Record<string, string> = {};
     const videoModules: Record<string, string> = {};
+    const audioModules: Record<string, string> = {};
     const jsonDataModules: Record<string, SceneLayoutJsonData> = {};
     for (const node of manifest.nodes) {
       const resource = node.resource;
@@ -722,6 +723,13 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
           resolved ?? createObjectUrl(bytes!, resource.path, objectUrls);
         continue;
       }
+      if (resource.kind === "audio") {
+        audioModules[resource.path] ??= resolveAudioPath(
+          resource.path,
+          resource.mediaType,
+        );
+        continue;
+      }
       if (resource.kind === "json") {
         jsonDataModules[resource.path] ??= parseSceneLayoutJsonData(
           requireBytes(files, resource.path),
@@ -793,6 +801,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       atlasModules,
       textureModules,
       videoModules,
+      audioModules,
       jsonDataModules,
       imageStringResources: imageStrings,
       vniResources,
@@ -802,6 +811,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       ...layout.runtimeResources,
     };
     const runtimeLoads = new Map<string, Promise<SceneLayoutRuntimeResource>>();
+    const lazyRuntimeObjectUrls = new Set<string>();
     const popupLoads = new Map<string, Promise<PopupPackageResource>>();
     const lazyFiles = new Map(files);
     const lazyImageStrings: ImageStringResource[] = [];
@@ -913,6 +923,8 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
             ...(options.resolveAssetUrl
               ? { resolveAssetUrl: options.resolveAssetUrl }
               : {}),
+            getResolvedAudioUrl: (path, mediaType) =>
+              audioUrls.get(`${path}\0${mediaType}`),
           }).then(
             (resource) => {
               if (destroyed) {
@@ -924,6 +936,8 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
                 );
               }
               objectUrls.push(...pendingObjectUrls);
+              for (const url of pendingObjectUrls)
+                lazyRuntimeObjectUrls.add(url);
               runtimeResources[key] = resource;
               return resource;
             },
@@ -953,6 +967,8 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
           Promise.resolve(popup.destroy()),
         );
         for (const resource of lazyImageStrings) void resource.destroy();
+        for (const url of lazyRuntimeObjectUrls) URL.revokeObjectURL(url);
+        lazyRuntimeObjectUrls.clear();
         return Promise.allSettled([
           ...popupLoads.values(),
           ...popupDestructions,
@@ -995,6 +1011,10 @@ async function prepareLazyRuntimeResource(options: {
   readonly lazyImageStrings: ImageStringResource[];
   readonly decodeImage?: DecodeImageStringImage;
   readonly resolveAssetUrl?: (logicalKey: string) => string | undefined;
+  readonly getResolvedAudioUrl?: (
+    path: string,
+    mediaType: AudioMediaType,
+  ) => string | undefined;
 }): Promise<SceneLayoutRuntimeResource> {
   const { key, spec, files, mapped, objectUrls } = options;
   const fetchLazyBytes = async (path: string): Promise<Uint8Array> => {
@@ -1029,6 +1049,23 @@ async function prepareLazyRuntimeResource(options: {
     return Object.freeze({
       kind: "json",
       value,
+    });
+  }
+  if (spec.kind === "audio") {
+    const resolved =
+      options.getResolvedAudioUrl?.(spec.path, spec.mediaType) ??
+      options.resolveAssetUrl?.(spec.path);
+    return Object.freeze({
+      kind: "audio",
+      url:
+        resolved ??
+        createObjectUrl(
+          await requireLazyBytes(spec.path),
+          spec.path,
+          objectUrls,
+          spec.mediaType,
+        ),
+      mediaType: spec.mediaType,
     });
   }
   if (spec.kind === "video") {

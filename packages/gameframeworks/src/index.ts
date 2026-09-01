@@ -67,6 +67,7 @@ export type {
   SceneLayoutJsonArray,
   SceneLayoutJsonValue,
   SceneLayoutRuntimeJsonResourceSpec,
+  SceneLayoutRuntimeAudioResourceSpec,
   SceneLayoutNodeRenderLayerPlacement,
   SceneLayoutRenderLayerRef,
   SceneLayoutRenderObject,

@@ -29,6 +29,7 @@ export type {
   SceneLayoutRuntimeVniResourceSpec,
   SceneLayoutRuntimeVideoResourceSpec,
   SceneLayoutRuntimeJsonResourceSpec,
+  SceneLayoutRuntimeAudioResourceSpec,
   SceneLayoutRuntimeResourceSpec,
   SceneLayoutNode,
   SceneLayoutReelGrid,

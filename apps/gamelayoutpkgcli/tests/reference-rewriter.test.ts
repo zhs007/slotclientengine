@@ -166,6 +166,25 @@ describe("typed asset reference rewriting", () => {
       textures: { "symbol.png": "symbol.webp" },
     });
 
+    const withAudio = rewriteLayoutManifest(
+      {
+        ...layoutFixture(),
+        runtimeResources: {
+          jingle: {
+            kind: "audio",
+            path: "jingle.ogg",
+            mediaType: "audio/ogg",
+          },
+        },
+      },
+      new Map([...mapping, ["jingle.ogg", "jingle.m4a"]]),
+    );
+    expect(withAudio.runtimeResources?.jingle).toEqual({
+      kind: "audio",
+      path: "jingle.m4a",
+      mediaType: "audio/mp4",
+    });
+
     const withNone = rewriteLayoutManifest(
       {
         ...layoutFixture(),

@@ -13,6 +13,7 @@ import type {
   ResolvedAudioEventTrack,
   ResolvedAudioMusic,
 } from "@slotclientengine/audiocore/core";
+import type { AudioMediaType } from "@slotclientengine/audiocore/data";
 import type { GameLayoutRuntimeAddress } from "./data/runtime-address.js";
 import type {
   FocusedArtViewport,
@@ -125,13 +126,20 @@ export interface SceneLayoutRuntimeJsonResourceSpec {
   readonly path: string;
 }
 
+export interface SceneLayoutRuntimeAudioResourceSpec {
+  readonly kind: "audio";
+  readonly path: string;
+  readonly mediaType: AudioMediaType;
+}
+
 export type SceneLayoutRuntimeResourceSpec =
   | SceneLayoutImageResourceSpec
   | SceneLayoutRuntimeSpineResourceSpec
   | SceneLayoutRuntimeImageStringResourceSpec
   | SceneLayoutRuntimeVniResourceSpec
   | SceneLayoutRuntimeVideoResourceSpec
-  | SceneLayoutRuntimeJsonResourceSpec;
+  | SceneLayoutRuntimeJsonResourceSpec
+  | SceneLayoutRuntimeAudioResourceSpec;
 
 export interface SceneLayoutNode {
   readonly id: string;
@@ -541,6 +549,11 @@ export type SceneLayoutRuntimeResource =
   | {
       readonly kind: "json";
       readonly value: SceneLayoutJsonData;
+    }
+  | {
+      readonly kind: "audio";
+      readonly url: string;
+      readonly mediaType: AudioMediaType;
     };
 
 interface OfficialSpineRuntimeResource {

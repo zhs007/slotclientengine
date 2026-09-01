@@ -175,6 +175,10 @@ class DefaultSceneLayoutRenderObjectFactory implements SceneLayoutRenderObjectFa
       throw new SceneLayoutError(
         `Scene layout runtime resource "${name}" is JSON data; use loadJsonData().`,
       );
+    if (spec.kind === "audio")
+      throw new SceneLayoutError(
+        `Scene layout runtime resource "${name}" is audio data; use loadRuntimeResource().`,
+      );
     const resource = await this.#resource.loadRuntimeResource(name, spec.kind);
     this.assertAlive();
     switch (resource.kind) {

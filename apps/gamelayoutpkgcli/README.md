@@ -131,8 +131,9 @@ immutable CDN payload。CLI 成功日志会打印该文件的绝对路径及本�
   padding/extrude 在 WebP 编码前写入 atlas，因此 PNG/JPEG 不会先单图有损再二次合图编码。
 - Spine atlas page 不进入通用 atlas，保持一页一文件并可转 WebP；runtime 仍按 typed texture map
   绑定，不按 basename 猜测。
-- audio/video 不转码、不进 ZIP、不进 atlas；delivery manifest 记录其独立 CDN filename，runtime
+- CDN delivery 中 audio/video 不转码、不进 ZIP、不进 atlas；delivery manifest 记录其独立 CDN filename，runtime
   直接保留 URL，允许浏览器按媒体能力请求/流式加载。
+- legacy optimized ZIP 只对具有 Event/历史 music/effect role 的 audio 执行 AAC 优化；纯 program audio 不猜 role，保留原 bytes。同一 root 同时被 Event 与 `runtimeResources` 引用时，优化后 path/mediaType 必须在两处原子改写。
 - 所有 physical 文件 content-addressed；manifest 记录大小、SHA-256、atlas frame、rotation、owner
   和 dependency。runtime 将 map 仅作为 logical route 使用，CLI 的 `--check` 承担完整交付 parity。
 

@@ -74,6 +74,11 @@ function createResource(options?: {
       kind: "json" as const,
       value: Object.freeze({ localReels: Object.freeze([["A"]]) }),
     },
+    jingle: {
+      kind: "audio" as const,
+      url: "blob:jingle",
+      mediaType: "audio/ogg" as const,
+    },
   } satisfies Readonly<Record<string, SceneLayoutRuntimeResource>>;
   const runtimeManifest = {
     id: "factory-test",
@@ -97,6 +102,11 @@ function createResource(options?: {
         mimeType: "video/mp4",
       },
       spinConfig: { kind: "json", path: "spin-config.json" },
+      jingle: {
+        kind: "audio",
+        path: "jingle.ogg",
+        mediaType: "audio/ogg",
+      },
     },
   } as unknown as SceneLayoutPackageResource["runtimeManifest"];
   return {
@@ -219,6 +229,9 @@ describe("Scene Layout named RenderObject factory", () => {
     });
     await expect(factory.createRenderObject("spinConfig")).rejects.toThrow(
       /JSON data; use loadJsonData/,
+    );
+    await expect(factory.createRenderObject("jingle")).rejects.toThrow(
+      /audio data; use loadRuntimeResource/,
     );
     await expect(
       factory.createImgNumberRenderObject("spinConfig", { text: "1" }),
