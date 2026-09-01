@@ -392,3 +392,14 @@ dimensions/mips、bone/skin/triangle/clip facts、外部工具版本、实际验
 5. 只运行计划规定的 L2 验收，并由独立验收者复核 binary asset 与真实浏览器。
 6. 完成后生成 UTC 报告；用户已明确要求提交本地 Git 分支时只提交第 6 节 runtime 文件、计划和报告，不提交下载
    目录内容，不 push、不创建 PR。
+
+## 15. 执行后用户反馈增补
+
+2026-09-01 用户在首次浏览器验收后增加以下动作合同；本节覆盖前文“三段 exact clip”与 attack/victory 下肢动作的
+旧约束，其余范围和 Git 边界保持不变：
+
+- 默认骑士 clip 集严格为 `idle / attack / victory / walk`。
+- `attack` 双脚和完整腿链在世界空间保持固定，只包含一次清晰的蓄力—挥砍—回收，不做踏步或第二次攻击。
+- `victory` 双脚和完整腿链在世界空间保持固定，庆祝 motion 只发生在躯干、头、手臂、披风和头饰。
+- `walk` 是无 root displacement 的原地循环动作，左右腿/膝/脚交替、手臂反向摆动，首尾无跳变。
+- 外部 validator 增加 attack/victory 双脚零位移/零旋转、attack 持剑手最小轨迹及 walk 双脚最小运动门禁。

@@ -35,7 +35,7 @@ const defaultModelUrl = new URL(
   "./models/castle-knight-rigged-ktx2.glb",
   window.location.href,
 ).href;
-const requiredDefaultClips = new Set(["idle", "attack", "victory"]);
+const requiredDefaultClips = new Set(["idle", "attack", "victory", "walk"]);
 
 function requiredElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
