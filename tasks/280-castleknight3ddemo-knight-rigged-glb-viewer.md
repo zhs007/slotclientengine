@@ -407,3 +407,6 @@ dimensions/mips、bone/skin/triangle/clip facts、外部工具版本、实际验
   骨盆侧摆，缩短步幅和脚部旋转；validator 对 walk 渲染 9 个相位而非只抽 5 帧。
 - 第三轮用户反馈要求双脚沿角色正前方而非 splayed bone 的斜向 local X 轨迹运动；rig 在每个 gait key pose
   数值求解 thigh Z 以锁定 foot world X，validator 要求横向/前后 range ratio 不超过 3%。
+- 第四轮用户反馈明确要求先处理 `walk` 起始姿态的脚尖朝向；只在 walk 中根据左右鞋几何主轴逐关键帧数值求解
+  foot Z，使第 1 帧及整个循环的脚尖朝角色正前方。idle、attack、victory 的站姿保持不变；validator 对 walk
+  密集采样的左右鞋朝向误差设置最大 2° 门禁。

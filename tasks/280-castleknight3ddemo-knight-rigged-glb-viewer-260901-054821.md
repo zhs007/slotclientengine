@@ -4,7 +4,7 @@
 
 已为城堡骑士建立一套 20-bone humanoid armature，以刚性单权重绑定原模型的 33 个硬表面部件，并导出
 `idle`、`attack`、`victory`、`walk` 四段骨骼动画。生产 GLB 的三张纹理已转换为带完整 mipmap 的
-2048×2048 UASTC KTX2；最终文件为 `7,849,220` bytes，比原始 `29,473,708` bytes 减少 `73.37%`。
+2048×2048 UASTC KTX2；最终文件为 `7,849,116` bytes，比原始 `29,473,708` bytes 减少 `73.37%`。
 
 `castleknight3ddemo` 新增独立 `/viewer.html`：默认查看该骑士，也可打开或拖放其他自包含 GLB；支持 orbit/zoom、
 动画切换、播放/暂停、重播、时间轴、调速、循环模式和骨架显示。原 `/` 城堡棋盘未接入骑士且行为保持不变。
@@ -16,7 +16,7 @@
   - `attack` 1.30 秒、`idle` 2.03 秒、`victory` 1.53 秒、`walk` 2.03 秒；每段 60 个 transform channels。
   - 3 张内嵌 `image/ktx2` UASTC 纹理，均为 2048×2048、12 级 mipmap；GLB required extension 为
     `KHR_texture_basisu`，无 PNG/WebP fallback 或外部 URI。
-  - SHA-256：`3e0f396ba2a21283b3afa128a94c6a9a8c28ea1e1d0e8dda6bed5fce346f49e4`。
+  - SHA-256：`efb42a0ffcd39a1a00158ffb6b597148c6bf32265690893102c404800aa4c2f5`。
 - `apps/castleknight3ddemo/viewer.html`
   - 独立查看器页面及可访问名称明确的控制面板。
 - `apps/castleknight3ddemo/src/model-viewer.ts`
@@ -131,6 +131,11 @@ passing、high point 及左右镜像。大腿最大摆幅从 24° 降至 12°，
 混入约 2.4cm 横向位移；第四版先加入左右相反的 local Z 补偿，再在每个 gait key pose 数值求解 thigh Z，使左右
 foot bone 的世界 X 回到各自固定轨道。最终左脚横向/前后范围为 0.080cm/10.480cm，右脚为
 0.088cm/10.473cm，横向比例均小于 1%；validator 将 3% 设为显式失败门禁，并在 Three.js 两个半步中复验。
+
+用户再次指出外八观感，并明确范围是 `walk` 起点。几何主轴检测显示原始左鞋、右鞋分别外偏约 29.5°、21.8°；
+第五版不修改另外三个动作，而是在 walk 第 1 帧及其余 8 个 gait key poses 根据蒙皮后鞋面几何数值求解 foot Z，
+将脚尖持续对准角色正前方。最终 GLB 密集采样最大朝向偏差为左脚 0.164°、右脚 0.075°，validator 以 2° 为失败
+门禁；Blender 九相位渲染和真实 Three.js viewer 的 walk 起点均已复验。
 
 ## 剩余风险
 
