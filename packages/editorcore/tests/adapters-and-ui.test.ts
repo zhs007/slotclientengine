@@ -19,6 +19,7 @@ import {
   ingestAndDiscoverDefaultEditorAssets,
   inspectEditorGameLayoutEventCatalog,
   validateEditorGameLayoutEventGroup,
+  type EditorGameLayoutEventCatalog,
   type EditorGameLayoutEventGroup,
 } from "../src/assets/adapters/index.js";
 import { mergeEditorAssetCatalog } from "../src/assets/core/index.js";
@@ -628,12 +629,15 @@ describe("default adapters", () => {
     setEventSearch(pickerHost, "spin");
     expect(eventChoiceValues(pickerHost, "family")).toEqual(["spin-lifecycle"]);
     setEventSearch(pickerHost, "");
-    pickEventChoice(pickerHost, "symbol-state", "family");
-    for (const value of ["base", "A", "win", "column", "1", "entered"])
+    pickEventChoice(pickerHost, "spin-lifecycle", "family");
+    for (const value of ["main", "reel-spin", "all", "started"])
       pickEventChoice(pickerHost, value, "pick");
+    expect(pickerHost.textContent).toContain("全部轴（x=* 通配符）");
     click(required(pickerHost, '[data-event-action="save-row"]'));
     await flush();
-    expect(pickedAddress).toBe(columnWin!.descriptor.address);
+    expect(pickedAddress).toBe(
+      "gamelayout:/reel/main/spin/reel-spin/x/*/lifecycle/started",
+    );
     picker.destroy();
 
     const second = await controller.prepareImport([
@@ -668,6 +672,51 @@ describe("default adapters", () => {
     ).toBe(true);
     dialog.destroy();
     controller.destroy();
+  });
+
+  it("selects exact and wildcard Spin lifecycle scopes from catalog facets", async () => {
+    const standardCatalog = await inspectSpinEventCatalog("standard");
+    const gridCellCatalog = await inspectSpinEventCatalog("grid-cell");
+
+    await expectSpinSearchProjection(standardCatalog, {
+      query: "通配符",
+      spin: "reel-spin",
+      scopes: ["all"],
+      label: "全部轴（x=* 通配符）",
+    });
+    await expectSpinSearchProjection(gridCellCatalog, {
+      query: "整列",
+      spin: "grid-cell",
+      scopes: ["column"],
+      label: "整列（y=* 通配符）",
+    });
+    await expectSpinSearchProjection(gridCellCatalog, {
+      query: "整行",
+      spin: "cell-spin",
+      scopes: ["row"],
+      label: "整行（x=* 通配符）",
+    });
+    await expectSpinSearchProjection(gridCellCatalog, {
+      query: "全部格",
+      spin: "cell-spin",
+      scopes: ["all"],
+      label: "全部格（x=*, y=* 通配符）",
+    });
+
+    await expectSpinSelections(standardCatalog, [
+      spinSelection("reel-spin", "axis", ["1"]),
+      spinSelection("reel-spin", "all"),
+      spinSelection("cell-spin", "cell", ["1", "1"]),
+      spinSelection("cell-spin", "column", ["1"]),
+      spinSelection("cell-spin", "row", ["1"]),
+      spinSelection("cell-spin", "all"),
+    ]);
+    await expectSpinSelections(gridCellCatalog, [
+      spinSelection("grid-cell", "cell", ["1", "1"]),
+      spinSelection("grid-cell", "column", ["1"]),
+      spinSelection("grid-cell", "row", ["1"]),
+      spinSelection("grid-cell", "all"),
+    ]);
   });
 
   it("binds Spine skeleton -> atlas -> page during prepare", async () => {
@@ -1000,7 +1049,11 @@ async function mappedEntries(
   ]);
 }
 
-async function gameLayoutEventEntries(state: "win" | "appear", symbol = "A") {
+async function gameLayoutEventEntries(
+  state: "win" | "appear",
+  symbol = "A",
+  renderMode: "standard" | "grid-cell" = "standard",
+) {
   const packageManifest = {
     version: 1,
     kind: "symbol-package",
@@ -1060,7 +1113,7 @@ async function gameLayoutEventEntries(state: "win" | "appear", symbol = "A") {
         manifest: "base-symbols.package.json",
         reel: "main",
         reelSet: "main",
-        renderMode: "standard",
+        renderMode,
       },
     },
     gameModes: {
@@ -1294,4 +1347,156 @@ function expectZipHas(bytes: Uint8Array, paths: readonly string[]): void {
 
 async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+interface SpinSelection {
+  readonly spin: "reel-spin" | "grid-cell" | "cell-spin";
+  readonly scope: "axis" | "cell" | "column" | "row" | "all";
+  readonly coordinates: readonly string[];
+}
+
+function spinSelection(
+  spin: SpinSelection["spin"],
+  scope: SpinSelection["scope"],
+  coordinates: readonly string[] = [],
+): SpinSelection {
+  return { spin, scope, coordinates };
+}
+
+async function inspectSpinEventCatalog(
+  renderMode: "standard" | "grid-cell",
+): Promise<EditorGameLayoutEventCatalog> {
+  const controller = createTestController();
+  try {
+    const preparation = await controller.prepareImport([
+      source(
+        `${renderMode}-event-layout.zip`,
+        createDeterministicZip(
+          await gameLayoutEventEntries("win", "A", renderMode),
+        ),
+      ),
+    ]);
+    expect(preparation.blockingErrors).toEqual([]);
+    await controller.commitImport(preparation);
+    return inspectEditorGameLayoutEventCatalog(
+      controller.snapshot,
+      "event-layout-layout.manifest.json",
+    );
+  } finally {
+    controller.destroy();
+  }
+}
+
+async function expectSpinSearchProjection(
+  catalog: EditorGameLayoutEventCatalog,
+  options: {
+    readonly query: string;
+    readonly spin: SpinSelection["spin"];
+    readonly scopes: readonly SpinSelection["scope"][];
+    readonly label: string;
+  },
+): Promise<void> {
+  const root = document.createElement("div");
+  document.body.append(root);
+  const dialog = mountEditorGameLayoutEventDialog({
+    root,
+    sources: [{ key: catalog.rootKey, label: "Spin Layout" }],
+    value: { rootKey: catalog.rootKey, events: [] },
+    inspectCatalog: () => catalog,
+    onConfirm() {},
+  });
+  try {
+    dialog.open();
+    await flush();
+    click(required(root, '[data-event-action="add"]'));
+    setEventSearch(root, options.query);
+    expect(eventChoiceValues(root, "family")).toEqual(["spin-lifecycle"]);
+    pickEventChoice(root, "spin-lifecycle", "family");
+    pickEventChoice(root, "main", "pick");
+    expect(eventChoiceValues(root, "pick")).toContain(options.spin);
+    pickEventChoice(root, options.spin, "pick");
+    expect(eventChoiceValues(root, "pick")).toEqual(options.scopes);
+    expect(root.textContent).toContain(options.label);
+  } finally {
+    dialog.destroy();
+  }
+}
+
+async function expectSpinSelections(
+  catalog: EditorGameLayoutEventCatalog,
+  selections: readonly SpinSelection[],
+): Promise<void> {
+  const root = document.createElement("div");
+  document.body.append(root);
+  const confirmation: { value: EditorGameLayoutEventGroup | null } = {
+    value: null,
+  };
+  const dialog = mountEditorGameLayoutEventDialog({
+    root,
+    sources: [{ key: catalog.rootKey, label: "Spin Layout" }],
+    value: { rootKey: catalog.rootKey, events: [] },
+    inspectCatalog: () => catalog,
+    onConfirm(value) {
+      confirmation.value = value;
+    },
+  });
+  const expectedAddresses: string[] = [];
+  try {
+    dialog.open();
+    await flush();
+    for (const selection of selections) {
+      for (const lifecycle of ["started", "stopped"] as const) {
+        const values = [
+          "main",
+          selection.spin,
+          selection.scope,
+          ...selection.coordinates,
+          lifecycle,
+        ];
+        const expected = catalog.entries.find(
+          (entry) =>
+            entry.family === "spin-lifecycle" &&
+            entry.facets.map(({ value }) => value).join("\u0000") ===
+              values.join("\u0000"),
+        );
+        if (!expected)
+          throw new Error(`missing Spin catalog entry: ${values.join("/")}`);
+        expectedAddresses.push(expected.descriptor.address);
+        click(required(root, '[data-event-action="add"]'));
+        pickEventChoice(root, "spin-lifecycle", "family");
+        for (const value of values) pickEventChoice(root, value, "pick");
+        expect(root.textContent).toContain(expected.descriptor.address);
+        expect(root.textContent).toContain(spinScopeLabel(selection));
+        if (selection.scope === "axis")
+          expect(
+            [
+              ...root.querySelectorAll<HTMLElement>(".editor-event-result dt"),
+            ].map((element) => element.textContent),
+          ).toContain("轴");
+        expect(root.textContent).toContain(
+          lifecycle === "started" ? "开始（started）" : "停止（stopped）",
+        );
+        click(required(root, '[data-event-action="save-row"]'));
+        expect(root.textContent).toContain(expected.descriptor.address);
+        expect(root.textContent).toContain(spinScopeLabel(selection));
+      }
+    }
+    click(required(root, "[data-event-confirm]"));
+    await flush();
+    expect(confirmation.value?.events.map(({ address }) => address)).toEqual(
+      expectedAddresses,
+    );
+  } finally {
+    dialog.destroy();
+  }
+}
+
+function spinScopeLabel(selection: SpinSelection): string {
+  if (selection.scope === "axis") return "具体轴";
+  if (selection.scope === "cell") return "具体格";
+  if (selection.scope === "column") return "整列（y=* 通配符）";
+  if (selection.scope === "row") return "整行（x=* 通配符）";
+  return selection.spin === "reel-spin"
+    ? "全部轴（x=* 通配符）"
+    : "全部格（x=*, y=* 通配符）";
 }

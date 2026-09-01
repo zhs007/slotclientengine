@@ -19,7 +19,10 @@ lifecycle 不由 EditorCore 预置。Dialog 左侧维护有序 event 列表，�
 命中深层内容时只保留能到达命中 event 的祖先分支，筛选本身不修改选择 draft。
 `spin-lifecycle` 与其它 family 一样完全来自 shared catalog；转轮类型、具体轴/cell、列/行/全体 wildcard 和
 单元 started/stopped、整体 started/ended、all-stopped 只按 catalog 的 reel/spin/scope/x/y/lifecycle facets 展示，
-不解析 address 猜测。
+不解析 address 猜测。选择器把 `scope` 显示为具体轴、具体格、整列（`y=*`）、整行（`x=*`）、全部轴
+（`x=*`）或全部格（`x=*, y=*`），通配维度不要求再次选择 `*`；保存值仍是对应 catalog entry 的 exact canonical
+address。选择按钮、breadcrumb、结果与已保存行使用同一组显示标签，`通配符`、`全部轴`、`整列`、`整行`、
+`全部格` 也会参与全 catalog 搜索，但不会生成 catalog 中不存在的坐标组合。
 
 只需要选择一个 exact event 的宿主使用 `mountEditorGameLayoutEventPickerDialog()`。它复用相同的 source、catalog
 和渐进 facet 选择器，但不显示 event 组列表；确认后只返回一个 immutable event item。

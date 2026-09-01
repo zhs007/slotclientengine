@@ -592,7 +592,10 @@ export function mountEditorGameLayoutEventDialog<
     );
     const summary = entry
       ? entry.facets
-          .map(({ key, value }) => `${facetLabel(key)}: ${value}`)
+          .map(
+            ({ key, value }) =>
+              `${facetKeyLabel(entry, key)}: ${facetValueLabel(entry, key, value)}`,
+          )
           .join(" · ")
       : "当前 ZIP 中不存在";
     const configuredSummary =
@@ -618,10 +621,11 @@ export function mountEditorGameLayoutEventDialog<
       return `<div class="editor-event-placeholder">${singleSelection ? "正在准备 Event 选择器…" : "从左侧添加或修改一个 event。选择器每次只展开一个层级。"}</div>`;
     const matches = matchingEntries();
     const families = [...new Set(matches.map(({ family }) => family))];
-    const breadcrumbs = selection.family
-      ? `<button type="button" data-event-action="family-back">${escapeHtml(familyLabel(selection.family))}</button>${selection.facets.map((facet, index) => `<button type="button" data-event-action="truncate" data-count="${index}">${escapeHtml(facetLabel(facet.key))}: ${escapeHtml(facet.value)}</button>`).join("")}`
-      : "";
     const selected = selectedEntry();
+    const breadcrumbEntries = selected ? [selected] : candidates();
+    const breadcrumbs = selection.family
+      ? `<button type="button" data-event-action="family-back">${escapeHtml(familyLabel(selection.family))}</button>${selection.facets.map((facet, index) => `<button type="button" data-event-action="truncate" data-count="${index}">${escapeHtml(facetChoiceKeyLabel(breadcrumbEntries, facet.key))}: ${escapeHtml(facetChoiceLabel(breadcrumbEntries, facet.key, facet.value))}</button>`).join("")}`
+      : "";
     const next = nextFacet();
     return `<header><strong>${singleSelection ? "选择 Event" : editIndex === null ? "添加 Event" : `修改第 ${editIndex + 1} 项`}</strong>${singleSelection ? "" : '<button type="button" data-event-action="cancel-row">取消编辑</button>'}</header>
       <nav class="editor-event-breadcrumbs" aria-label="当前选择路径">${breadcrumbs || "尚未选择类型"}</nav>
@@ -629,13 +633,13 @@ export function mountEditorGameLayoutEventDialog<
         <label>筛选 Event<input type="search" data-event-search aria-label="筛选 Event" value="${escapeHtml(selection.query)}" placeholder="输入类型、属性或 canonical address" /></label>
         <span>${selection.query.trim() ? `${matches.length} / ${catalog.entries.length} 个匹配 Event` : `${catalog.entries.length} 个 Event`}</span>
       </section>
-      ${!selection.family ? `<div class="editor-event-choices"><h3>选择 Event 类型</h3>${families.map((family) => `<button type="button" data-event-action="family" data-value="${escapeHtml(family)}"><strong>${escapeHtml(familyLabel(family))}</strong><span>${matches.filter((entry) => entry.family === family).length} 个选项</span></button>`).join("") || `<p class="editor-event-search-empty">没有匹配的 Event。</p>`}</div>` : !candidates().length ? `<div class="editor-event-placeholder">没有匹配的 Event。清空筛选可恢复当前选择路径。</div>` : selected ? `<div class="editor-event-result"><strong>选择完成</strong><code>${escapeHtml(selected.descriptor.address)}</code><button type="button" data-event-action="copy" data-address="${escapeHtml(selected.descriptor.address)}">复制 canonical address</button><dl>${selected.facets.map(({ key, value }) => `<dt>${escapeHtml(facetLabel(key))}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl></div>${options.configuration ? '<section class="editor-event-configuration" data-event-configuration></section>' : ""}` : next ? renderNextFacet(next) : `<div class="editor-event-error">当前选择路径无法唯一确定 event。</div>`}
+      ${!selection.family ? `<div class="editor-event-choices"><h3>选择 Event 类型</h3>${families.map((family) => `<button type="button" data-event-action="family" data-value="${escapeHtml(family)}"><strong>${escapeHtml(familyLabel(family))}</strong><span>${matches.filter((entry) => entry.family === family).length} 个选项</span></button>`).join("") || `<p class="editor-event-search-empty">没有匹配的 Event。</p>`}</div>` : !candidates().length ? `<div class="editor-event-placeholder">没有匹配的 Event。清空筛选可恢复当前选择路径。</div>` : selected ? `<div class="editor-event-result"><strong>选择完成</strong><code>${escapeHtml(selected.descriptor.address)}</code><button type="button" data-event-action="copy" data-address="${escapeHtml(selected.descriptor.address)}">复制 canonical address</button><dl>${selected.facets.map(({ key, value }) => `<dt>${escapeHtml(facetKeyLabel(selected, key))}</dt><dd>${escapeHtml(facetValueLabel(selected, key, value))}</dd>`).join("")}</dl></div>${options.configuration ? '<section class="editor-event-configuration" data-event-configuration></section>' : ""}` : next ? renderNextFacet(next) : `<div class="editor-event-error">当前选择路径无法唯一确定 event。</div>`}
       <footer><button type="button" data-event-action="save-row" ${selected ? "" : "disabled"}>${singleSelection ? "选定 Event" : editIndex === null ? "添加到组" : "保存修改"}</button></footer>`;
   }
 
   function renderNextFacet(next: { key: string; values: string[] }): string {
-    return `<div class="editor-event-choices"><h3>选择${escapeHtml(facetLabel(next.key))}</h3>
-      <div class="editor-event-choice-scroll">${next.values.map((value) => `<button type="button" data-event-action="pick" data-value="${escapeHtml(value)}"><strong>${escapeHtml(value)}</strong><span>${countAfter(next.key, value)} 个后续</span></button>`).join("")}</div>
+    return `<div class="editor-event-choices"><h3>选择${escapeHtml(facetChoiceKeyLabel(candidates(), next.key))}</h3>
+      <div class="editor-event-choice-scroll">${next.values.map((value) => `<button type="button" data-event-action="pick" data-value="${escapeHtml(value)}"><strong>${escapeHtml(facetChoiceLabel(entriesAfter(next.key, value), next.key, value))}</strong><span>${countAfter(next.key, value)} 个后续</span></button>`).join("")}</div>
     </div>`;
   }
 
@@ -688,12 +692,15 @@ export function mountEditorGameLayoutEventDialog<
     };
   }
   function countAfter(key: string, value: string): number {
+    return entriesAfter(key, value).length;
+  }
+  function entriesAfter(key: string, value: string) {
     const index = selection.facets.length;
     return candidates().filter(
       (entry) =>
         entry.facets[index]?.key === key &&
         entry.facets[index]?.value === value,
-    ).length;
+    );
   }
   function invalidEvents(): string[] {
     if (!catalog) return [];
@@ -818,7 +825,13 @@ function eventMatchesSearch(
   if (!normalizedQuery) return true;
   const fields = [
     entry.descriptor.address,
-    ...entry.facets.flatMap(({ key, value }) => [key, facetLabel(key), value]),
+    ...entry.facets.flatMap(({ key, value }) => [
+      key,
+      facetLabel(key),
+      facetKeyLabel(entry, key),
+      value,
+      facetValueLabel(entry, key, value),
+    ]),
   ];
   return fields.some((field) =>
     normalizeEventSearchText(field).includes(normalizedQuery),
@@ -847,6 +860,85 @@ function familyLabel(value: string): string {
 function facetLabel(value: string): string {
   return FACET_LABELS[value] ?? value;
 }
+
+function facetChoiceKeyLabel(
+  entries: readonly EditorGameLayoutEventCatalog["entries"][number][],
+  key: string,
+): string {
+  const entry = entries[0];
+  return entry ? facetKeyLabel(entry, key) : facetLabel(key);
+}
+
+function facetKeyLabel(
+  entry: EditorGameLayoutEventCatalog["entries"][number],
+  key: string,
+): string {
+  if (
+    entry.family === "spin-lifecycle" &&
+    key === "x" &&
+    entry.facets.some(
+      (facet) => facet.key === "spin" && facet.value === "reel-spin",
+    )
+  )
+    return "轴";
+  return facetLabel(key);
+}
+
+function facetChoiceLabel(
+  entries: readonly EditorGameLayoutEventCatalog["entries"][number][],
+  key: string,
+  value: string,
+): string {
+  const entry =
+    key === "scope" && value === "all"
+      ? (entries.find((candidate) =>
+          candidate.facets.some(
+            (facet) =>
+              facet.key === "lifecycle" &&
+              (facet.value === "started" || facet.value === "stopped"),
+          ),
+        ) ?? entries[0])
+      : entries[0];
+  return entry ? facetValueLabel(entry, key, value) : value;
+}
+
+function facetValueLabel(
+  entry: EditorGameLayoutEventCatalog["entries"][number],
+  key: string,
+  value: string,
+): string {
+  if (entry.family !== "spin-lifecycle") return value;
+  if (key === "spin") return SPIN_LABELS[value] ?? value;
+  if (key === "lifecycle") return SPIN_LIFECYCLE_LABELS[value] ?? value;
+  if (key !== "scope") return value;
+  const spin = entry.facets.find((facet) => facet.key === "spin")?.value;
+  const lifecycle = entry.facets.find(
+    (facet) => facet.key === "lifecycle",
+  )?.value;
+  if (value === "spin") return "整次 Spin（无坐标）";
+  if (value === "axis") return "具体轴";
+  if (value === "cell") return "具体格";
+  if (value === "column") return "整列（y=* 通配符）";
+  if (value === "row") return "整行（x=* 通配符）";
+  if (value !== "all") return value;
+  const reelSpin = spin === "reel-spin";
+  if (lifecycle === "all-stopped")
+    return reelSpin ? "全部参与轴" : "全部参与格";
+  return reelSpin ? "全部轴（x=* 通配符）" : "全部格（x=*, y=* 通配符）";
+}
+
+const SPIN_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  "reel-spin": "ReelSpin",
+  "grid-cell": "GridCell",
+  "cell-spin": "CellSpin",
+});
+
+const SPIN_LIFECYCLE_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  started: "开始（started）",
+  stopped: "停止（stopped）",
+  ended: "结束（ended）",
+  "all-stopped": "全部停止（all-stopped）",
+});
 
 const FAMILY_LABELS: Readonly<Record<string, string>> = Object.freeze({
   variant: "画面变体",
