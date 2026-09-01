@@ -505,9 +505,38 @@ describe("default adapters", () => {
     expect(host.textContent).toContain("Spin 生命周期");
     expect(host.textContent).toContain("Symbol 状态");
     expect(host.textContent).toContain("批量图标状态");
+
+    const spinSearch = setEventSearch(host, " SpIn ");
+    expect(document.activeElement).toBe(spinSearch);
+    expect(eventChoiceValues(host, "family")).toEqual(["spin-lifecycle"]);
+    expect(host.textContent).not.toContain("Symbol 状态");
+    expect(host.textContent).not.toContain("批量图标状态");
+
+    setEventSearch(host, "entered");
+    expect(eventChoiceValues(host, "family")).toContain("symbol-state");
+    expect(eventChoiceValues(host, "family")).not.toContain("spin-lifecycle");
+
+    setEventSearch(host, "missing-catalog-event");
+    expect(eventChoiceValues(host, "family")).toEqual([]);
+    expect(host.textContent).toContain("没有匹配的 Event");
+    expect(
+      required<HTMLButtonElement>(host, '[data-event-action="save-row"]')
+        .disabled,
+    ).toBe(true);
+
+    const addressQuery = columnWin!.descriptor.address.toUpperCase();
+    setEventSearch(host, addressQuery);
+    expect(eventChoiceValues(host, "family")).toEqual(["symbol-state"]);
     pickEventChoice(host, "symbol-state", "family");
-    for (const value of ["base", "A", "win", "column", "1", "entered"])
+    for (const value of ["base", "A", "win", "column", "1", "entered"]) {
+      expect(eventChoiceValues(host, "pick")).toEqual([value]);
       pickEventChoice(host, value, "pick");
+      expect(
+        required<HTMLInputElement>(host, "[data-event-search]").value,
+      ).toBe(addressQuery);
+    }
+    expect(host.textContent).toContain("选择完成");
+    setEventSearch(host, "");
     expect(host.textContent).toContain("选择完成");
     click(required(host, '[data-event-action="save-row"]'));
     expect(host.textContent).toContain(columnWin!.descriptor.address);
@@ -596,6 +625,9 @@ describe("default adapters", () => {
     await flush();
     expect(pickerHost.querySelector('[data-event-action="add"]')).toBeNull();
     expect(pickerHost.textContent).toContain("选择 Event");
+    setEventSearch(pickerHost, "spin");
+    expect(eventChoiceValues(pickerHost, "family")).toEqual(["spin-lifecycle"]);
+    setEventSearch(pickerHost, "");
     pickEventChoice(pickerHost, "symbol-state", "family");
     for (const value of ["base", "A", "win", "column", "1", "entered"])
       pickEventChoice(pickerHost, value, "pick");
@@ -1234,6 +1266,25 @@ function pickEventChoice(
   ].find((candidate) => candidate.dataset.value === value);
   if (!button) throw new Error(`test missing event choice ${action}:${value}`);
   click(button);
+}
+
+function eventChoiceValues(
+  root: ParentNode,
+  action: "family" | "pick",
+): string[] {
+  return [
+    ...root.querySelectorAll<HTMLButtonElement>(
+      `[data-event-action="${action}"]`,
+    ),
+  ].map((button) => button.dataset.value ?? "");
+}
+
+function setEventSearch(root: ParentNode, query: string): HTMLInputElement {
+  const input = required<HTMLInputElement>(root, "[data-event-search]");
+  input.focus();
+  input.value = query;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  return required<HTMLInputElement>(root, "[data-event-search]");
 }
 
 function expectZipHas(bytes: Uint8Array, paths: readonly string[]): void {

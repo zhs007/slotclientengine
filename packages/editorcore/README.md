@@ -13,8 +13,10 @@ Assets UI 默认可通过 `mountEditorAssetsDialog()` 作为一枚管理按钮�
 
 Game Layout event group 使用独立的 `mountEditorGameLayoutEventDialog()`。它只读取已经由统一 Assets 入口提交的
 `game-layout` root，并从该 root 的完整 ZIP closure 编译候选；具体 node、Symbol、state、Popup、mode、坐标和
-lifecycle 不由 EditorCore 预置。Dialog 左侧维护有序 event 列表，右侧一次只展开一个 catalog facet；候选较多时
-提供当前层搜索和可回退 breadcrumb，避免多层树状下拉。
+lifecycle 不由 EditorCore 预置。Dialog 左侧维护有序 event 列表，右侧一次只展开一个 catalog facet，并始终提供
+全 catalog 筛选和可回退 breadcrumb，避免多层树状下拉。筛选以大小写不敏感的包含匹配检索 family、facet、
+展示文案和值以及 canonical address；family id/展示名命中时优先只显示对应 family，否则再匹配 facet 与 address。
+命中深层内容时只保留能到达命中 event 的祖先分支，筛选本身不修改选择 draft。
 `spin-lifecycle` 与其它 family 一样完全来自 shared catalog；转轮类型、具体轴/cell、列/行/全体 wildcard 和
 单元 started/stopped、整体 started/ended、all-stopped 只按 catalog 的 reel/spin/scope/x/y/lifecycle facets 展示，
 不解析 address 猜测。

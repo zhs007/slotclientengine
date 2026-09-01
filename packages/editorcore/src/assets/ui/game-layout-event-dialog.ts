@@ -336,7 +336,7 @@ export function mountEditorGameLayoutEventDialog<
       selection = {
         family: button.dataset.value ?? null,
         facets: [],
-        query: "",
+        query: selection.query,
       };
       render();
       return;
@@ -347,13 +347,12 @@ export function mountEditorGameLayoutEventDialog<
       if (!next || value === undefined) return;
       selection.facets.push({ key: next.key, value });
       rowConfiguration = undefined;
-      selection.query = "";
       render();
       return;
     }
     if (action === "family-back") {
       rowConfiguration = undefined;
-      selection = emptySelection();
+      selection = { ...emptySelection(), query: selection.query };
       render();
       return;
     }
@@ -362,7 +361,6 @@ export function mountEditorGameLayoutEventDialog<
       if (!Number.isSafeInteger(count) || count < 0) return;
       selection.facets.splice(count);
       rowConfiguration = undefined;
-      selection.query = "";
       render();
       return;
     }
@@ -618,7 +616,8 @@ export function mountEditorGameLayoutEventDialog<
       return `<div class="editor-event-placeholder">修复 ZIP 检查错误后才能选择 event。</div>`;
     if (!editorActive)
       return `<div class="editor-event-placeholder">${singleSelection ? "正在准备 Event 选择器…" : "从左侧添加或修改一个 event。选择器每次只展开一个层级。"}</div>`;
-    const families = [...new Set(catalog.entries.map(({ family }) => family))];
+    const matches = matchingEntries();
+    const families = [...new Set(matches.map(({ family }) => family))];
     const breadcrumbs = selection.family
       ? `<button type="button" data-event-action="family-back">${escapeHtml(familyLabel(selection.family))}</button>${selection.facets.map((facet, index) => `<button type="button" data-event-action="truncate" data-count="${index}">${escapeHtml(facetLabel(facet.key))}: ${escapeHtml(facet.value)}</button>`).join("")}`
       : "";
@@ -626,24 +625,34 @@ export function mountEditorGameLayoutEventDialog<
     const next = nextFacet();
     return `<header><strong>${singleSelection ? "选择 Event" : editIndex === null ? "添加 Event" : `修改第 ${editIndex + 1} 项`}</strong>${singleSelection ? "" : '<button type="button" data-event-action="cancel-row">取消编辑</button>'}</header>
       <nav class="editor-event-breadcrumbs" aria-label="当前选择路径">${breadcrumbs || "尚未选择类型"}</nav>
-      ${!selection.family ? `<div class="editor-event-choices"><h3>选择 Event 类型</h3>${families.map((family) => `<button type="button" data-event-action="family" data-value="${escapeHtml(family)}"><strong>${escapeHtml(familyLabel(family))}</strong><span>${catalog!.entries.filter((entry) => entry.family === family).length} 个选项</span></button>`).join("")}</div>` : selected ? `<div class="editor-event-result"><strong>选择完成</strong><code>${escapeHtml(selected.descriptor.address)}</code><button type="button" data-event-action="copy" data-address="${escapeHtml(selected.descriptor.address)}">复制 canonical address</button><dl>${selected.facets.map(({ key, value }) => `<dt>${escapeHtml(facetLabel(key))}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl></div>${options.configuration ? '<section class="editor-event-configuration" data-event-configuration></section>' : ""}` : next ? renderNextFacet(next) : `<div class="editor-event-error">当前选择路径无法唯一确定 event。</div>`}
+      <section class="editor-event-search">
+        <label>筛选 Event<input type="search" data-event-search aria-label="筛选 Event" value="${escapeHtml(selection.query)}" placeholder="输入类型、属性或 canonical address" /></label>
+        <span>${selection.query.trim() ? `${matches.length} / ${catalog.entries.length} 个匹配 Event` : `${catalog.entries.length} 个 Event`}</span>
+      </section>
+      ${!selection.family ? `<div class="editor-event-choices"><h3>选择 Event 类型</h3>${families.map((family) => `<button type="button" data-event-action="family" data-value="${escapeHtml(family)}"><strong>${escapeHtml(familyLabel(family))}</strong><span>${matches.filter((entry) => entry.family === family).length} 个选项</span></button>`).join("") || `<p class="editor-event-search-empty">没有匹配的 Event。</p>`}</div>` : !candidates().length ? `<div class="editor-event-placeholder">没有匹配的 Event。清空筛选可恢复当前选择路径。</div>` : selected ? `<div class="editor-event-result"><strong>选择完成</strong><code>${escapeHtml(selected.descriptor.address)}</code><button type="button" data-event-action="copy" data-address="${escapeHtml(selected.descriptor.address)}">复制 canonical address</button><dl>${selected.facets.map(({ key, value }) => `<dt>${escapeHtml(facetLabel(key))}</dt><dd>${escapeHtml(value)}</dd>`).join("")}</dl></div>${options.configuration ? '<section class="editor-event-configuration" data-event-configuration></section>' : ""}` : next ? renderNextFacet(next) : `<div class="editor-event-error">当前选择路径无法唯一确定 event。</div>`}
       <footer><button type="button" data-event-action="save-row" ${selected ? "" : "disabled"}>${singleSelection ? "选定 Event" : editIndex === null ? "添加到组" : "保存修改"}</button></footer>`;
   }
 
   function renderNextFacet(next: { key: string; values: string[] }): string {
-    const query = selection.query.trim().toLocaleLowerCase();
-    const values = query
-      ? next.values.filter((value) => value.toLocaleLowerCase().includes(query))
-      : next.values;
     return `<div class="editor-event-choices"><h3>选择${escapeHtml(facetLabel(next.key))}</h3>
-      ${next.values.length > 8 ? `<input type="search" data-event-search value="${escapeHtml(selection.query)}" placeholder="筛选 ${escapeHtml(facetLabel(next.key))}" />` : ""}
-      <div class="editor-event-choice-scroll">${values.map((value) => `<button type="button" data-event-action="pick" data-value="${escapeHtml(value)}"><strong>${escapeHtml(value)}</strong><span>${countAfter(next.key, value)} 个后续</span></button>`).join("") || `<p>没有匹配项。</p>`}</div>
+      <div class="editor-event-choice-scroll">${next.values.map((value) => `<button type="button" data-event-action="pick" data-value="${escapeHtml(value)}"><strong>${escapeHtml(value)}</strong><span>${countAfter(next.key, value)} 个后续</span></button>`).join("")}</div>
     </div>`;
+  }
+
+  function matchingEntries() {
+    if (!catalog) return [];
+    const familyMatches = catalog.entries.filter((entry) =>
+      eventFamilyMatchesSearch(entry, selection.query),
+    );
+    if (familyMatches.length) return familyMatches;
+    return catalog.entries.filter((entry) =>
+      eventMatchesSearch(entry, selection.query),
+    );
   }
 
   function candidates() {
     if (!catalog || !selection.family) return [];
-    return catalog.entries.filter(
+    return matchingEntries().filter(
       (entry) =>
         entry.family === selection.family &&
         selection.facets.every(
@@ -799,6 +808,36 @@ export function mountEditorGameLayoutEventPickerDialog<TProject>(
 
 function emptySelection(): ProgressiveSelection {
   return { family: null, facets: [], query: "" };
+}
+
+function eventMatchesSearch(
+  entry: EditorGameLayoutEventCatalog["entries"][number],
+  query: string,
+): boolean {
+  const normalizedQuery = normalizeEventSearchText(query);
+  if (!normalizedQuery) return true;
+  const fields = [
+    entry.descriptor.address,
+    ...entry.facets.flatMap(({ key, value }) => [key, facetLabel(key), value]),
+  ];
+  return fields.some((field) =>
+    normalizeEventSearchText(field).includes(normalizedQuery),
+  );
+}
+
+function eventFamilyMatchesSearch(
+  entry: EditorGameLayoutEventCatalog["entries"][number],
+  query: string,
+): boolean {
+  const normalizedQuery = normalizeEventSearchText(query);
+  if (!normalizedQuery) return false;
+  return [entry.family, familyLabel(entry.family)].some((field) =>
+    normalizeEventSearchText(field).includes(normalizedQuery),
+  );
+}
+
+function normalizeEventSearchText(value: string): string {
+  return value.trim().toLocaleLowerCase();
 }
 
 function familyLabel(value: string): string {
