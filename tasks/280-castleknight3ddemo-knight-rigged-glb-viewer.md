@@ -405,3 +405,5 @@ dimensions/mips、bone/skin/triangle/clip facts、外部工具版本、实际验
 - 外部 validator 增加 attack/victory 双脚零位移/零旋转、attack 持剑手最小轨迹及 walk 双脚最小运动门禁。
 - 第二轮用户反馈要求修正 `walk` 的怪异观感：最终步态使用 9 个显式 contact/down/passing/high-point 相位，取消
   骨盆侧摆，缩短步幅和脚部旋转；validator 对 walk 渲染 9 个相位而非只抽 5 帧。
+- 第三轮用户反馈要求双脚沿角色正前方而非 splayed bone 的斜向 local X 轨迹运动；rig 在每个 gait key pose
+  数值求解 thigh Z 以锁定 foot world X，validator 要求横向/前后 range ratio 不超过 3%。
