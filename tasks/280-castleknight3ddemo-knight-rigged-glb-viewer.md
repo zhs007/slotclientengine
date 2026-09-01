@@ -403,3 +403,5 @@ dimensions/mips、bone/skin/triangle/clip facts、外部工具版本、实际验
 - `victory` 双脚和完整腿链在世界空间保持固定，庆祝 motion 只发生在躯干、头、手臂、披风和头饰。
 - `walk` 是无 root displacement 的原地循环动作，左右腿/膝/脚交替、手臂反向摆动，首尾无跳变。
 - 外部 validator 增加 attack/victory 双脚零位移/零旋转、attack 持剑手最小轨迹及 walk 双脚最小运动门禁。
+- 第二轮用户反馈要求修正 `walk` 的怪异观感：最终步态使用 9 个显式 contact/down/passing/high-point 相位，取消
+  骨盆侧摆，缩短步幅和脚部旋转；validator 对 walk 渲染 9 个相位而非只抽 5 帧。
