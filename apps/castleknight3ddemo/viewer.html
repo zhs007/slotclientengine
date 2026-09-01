@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#090713" />
+    <title>Castle Knight GLB Animation Viewer</title>
+  </head>
+  <body>
+    <main class="viewer-shell">
+      <section
+        id="viewer-stage"
+        class="viewer-stage"
+        aria-label="GLB 骨骼动画预览"
+      >
+        <div class="drop-hint">释放以查看 GLB</div>
+      </section>
+
+      <aside class="viewer-panel">
+        <p class="eyebrow">CASTLE KNIGHT TOOL</p>
+        <h1>GLB Animation Viewer</h1>
+        <p id="model-name" class="model-name">正在载入骑士模型…</p>
+
+        <label class="control-label" for="animation-select">动画片段</label>
+        <select id="animation-select" class="control"></select>
+
+        <div class="button-row">
+          <button id="play-toggle" type="button">暂停</button>
+          <button id="replay" type="button">重播</button>
+        </div>
+
+        <label class="control-label" for="timeline">
+          时间轴 <output id="timeline-value">0.00 / 0.00s</output>
+        </label>
+        <input
+          id="timeline"
+          class="range-control"
+          type="range"
+          min="0"
+          max="0"
+          step="0.001"
+          value="0"
+          disabled
+        />
+
+        <label class="control-label" for="speed">
+          播放速度 <output id="speed-value">1.00×</output>
+        </label>
+        <input
+          id="speed"
+          class="range-control"
+          type="range"
+          min="0.2"
+          max="2"
+          step="0.05"
+          value="1"
+        />
+
+        <div class="toggle-grid">
+          <label class="toggle-row">
+            <input id="loop-animation" type="checkbox" checked />
+            <span>循环动画</span>
+          </label>
+          <label class="toggle-row">
+            <input id="show-skeleton" type="checkbox" />
+            <span>显示骨架</span>
+          </label>
+        </div>
+
+        <dl id="model-stats" class="model-stats"></dl>
+
+        <label class="file-button" for="model-file">打开本地 GLB</label>
+        <input id="model-file" type="file" accept=".glb,model/gltf-binary" />
+
+        <p id="status" class="status" aria-live="polite">
+          拖动旋转 · 滚轮缩放 · 可将自包含 GLB 拖入画面
+        </p>
+        <a class="game-link" href="./">返回城堡场景</a>
+      </aside>
+    </main>
+
+    <script type="module" src="/src/model-viewer.ts"></script>
+  </body>
+</html>
