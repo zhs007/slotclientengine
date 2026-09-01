@@ -1366,6 +1366,105 @@ describe("scene layout package runtime", () => {
     }
   });
 
+  it("keeps a main-reel hole on the outgoing endpoint of explicit local reels", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        manifest: layoutManifest("grid-cell"),
+        files: files(),
+      });
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        reelPresentation: {
+          kind: "grid-cell",
+          version: 1,
+          direction: "forward",
+          order: "top-down-left-right",
+          timing: {
+            startStepMs: 0,
+            stopStepMs: 20,
+            settleAfterLastStartMs: 80,
+            minimumSpinCycles: 1,
+            speedSymbolsPerSecond: 20,
+          },
+          bounceStrength: 0,
+        },
+      });
+      await runtime.init({
+        reels: {
+          main: {
+            scene: [
+              [-1, 1],
+              [1, 1],
+            ],
+            localPhaseYs: [0, 0],
+          },
+        },
+      });
+      const startedReels: RenderReel[] = [];
+      const originalStart = RenderReel.prototype.start;
+      const atomicStart = vi
+        .spyOn(RenderReel.prototype, "start")
+        .mockImplementation(function (
+          this: RenderReel,
+          ...args: Parameters<RenderReel["start"]>
+        ) {
+          originalStart.apply(this, args);
+          startedReels.push(this);
+        });
+      runtime.spinMainReelToScene({
+        scene: [
+          [1, 1],
+          [1, 1],
+        ],
+        localPhaseYs: [0, 0],
+        localReels: [
+          [1, 1, 1, 1],
+          [1, 1, 1, 1],
+        ],
+        random: () => 0,
+      });
+
+      runtime.update(0);
+
+      expect(atomicStart).toHaveBeenCalledTimes(4);
+      expect(
+        atomicStart.mock.calls.every(
+          ([, options]) =>
+            options?.reels?.getName() === "scene-layout-local-spin",
+        ),
+      ).toBe(true);
+      const startedHole = startedReels.find(
+        (instance) => instance.getSnapshot().visibleScene[0] === -1,
+      );
+      expect(startedHole).toBeDefined();
+      expect(
+        startedHole
+          ?.getSlotRenderViews()
+          .map(({ code }) => code)
+          .every((code) => code === -1 || code === 1),
+      ).toBe(true);
+      expect(
+        (runtime.getReelPresentation("main") as RenderGridCellReelSet)
+          .getSnapshot()
+          .cells.find(({ x, y }) => x === 0 && y === 0),
+      ).toMatchObject({
+        phase: "spinning",
+        visibleSymbol: -1,
+        occupied: true,
+      });
+      atomicStart.mockRestore();
+      runtime.stopMainReelGridCellSpinImmediately();
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("starts and settles one targetless standard reel transaction", async () => {
     const load = vi
       .spyOn(Assets, "load")

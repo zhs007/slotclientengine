@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Container, Graphics } from "pixi.js";
 import {
   RenderGridCellReelSet,
+  RenderReel,
   createGridCellOrder,
   createGridCellReelOffsetMatrix,
   createGridCellReelSpinPlan,
@@ -16,7 +17,10 @@ import {
   type RenderReelSymbolStateObserver,
 } from "../../src/reel/index.js";
 import { createRenderObject } from "../../src/presentation/index.js";
-import { compileSlotCascadeFacts } from "@slotclientengine/logiccore";
+import {
+  LogicReelsModel,
+  compileSlotCascadeFacts,
+} from "@slotclientengine/logiccore";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
 import { observeSpinLifecycle } from "../../src/reel/spin-lifecycle.js";
 
@@ -210,6 +214,68 @@ describe("RenderGridCellReelSet", () => {
       occupied: false,
       presentationValue: null,
     });
+  });
+
+  it("keeps a settled hole as the outgoing endpoint of per-spin reels", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(
+      [
+        [-1, 0, 2],
+        [2, 1, 0],
+      ],
+      FINAL_YS,
+    );
+    const localReels = new LogicReelsModel("per-spin-only", [
+      [3, 3, 3, 3, 3, 3, 3, 3],
+      [3, 3, 3, 3, 3, 3, 3, 3],
+    ]);
+    const plan = createGridCellReelSpinPlan({
+      reels: localReels,
+      finalYs: FINAL_YS,
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order: createGridCellOrder({
+        columns: 2,
+        rows: 3,
+        mode: "top-down-left-right",
+      }),
+      timing: TIMING,
+      dimming: DIMMING,
+    });
+    const startedReels: RenderReel[] = [];
+    const originalStart = RenderReel.prototype.start;
+    const atomicStart = vi
+      .spyOn(RenderReel.prototype, "start")
+      .mockImplementation(function (
+        this: RenderReel,
+        ...args: Parameters<RenderReel["start"]>
+      ) {
+        originalStart.apply(this, args);
+        startedReels.push(this);
+      });
+
+    reelSet.spin(plan, { reels: localReels });
+    const update = reelSet.update(0);
+
+    expect(update.startedCells).toEqual([{ x: 0, y: 0, orderIndex: 0 }]);
+    expect(atomicStart).toHaveBeenCalledOnce();
+    expect(atomicStart.mock.calls[0]?.[1]?.reels).toBe(localReels);
+    const startedReel = startedReels[0];
+    expect(startedReel?.getSnapshot().visibleScene).toEqual([-1]);
+    expect(
+      startedReel
+        ?.getSlotRenderViews()
+        .map(({ code }) => code)
+        .every((code) => code === -1 || code === 2 || code === 3),
+    ).toBe(true);
+    expect(reelSet.getSnapshot().cells[0]).toMatchObject({
+      phase: "spinning",
+      visibleSymbol: -1,
+      occupied: true,
+    });
+
+    atomicStart.mockRestore();
   });
 
   it("exposes empty snapshots and replaces between empty and real symbols", () => {
@@ -458,11 +524,27 @@ describe("RenderGridCellReelSet", () => {
       dimming: DIMMING,
     });
 
+    const startedReels: RenderReel[] = [];
+    const originalStart = RenderReel.prototype.start;
+    const atomicStart = vi
+      .spyOn(RenderReel.prototype, "start")
+      .mockImplementation(function (
+        this: RenderReel,
+        ...args: Parameters<RenderReel["start"]>
+      ) {
+        originalStart.apply(this, args);
+        startedReels.push(this);
+      });
     reelSet.spinSelective(plan);
+    expect(reelSet.update(0).startedCells).toEqual([
+      { x: 0, y: 0, orderIndex: 0 },
+    ]);
+    expect(startedReels[0]?.getSnapshot().visibleScene).toEqual([-1]);
     reelSet.update(1);
 
     expect(reelSet.getSnapshot().spinning).toBe(false);
     expect(reelSet.getVisibleScene()).toEqual(target);
+    atomicStart.mockRestore();
   });
 
   it("awaits a preflighted visible-symbol batch and rejects release-bound playback", async () => {

@@ -858,6 +858,12 @@ gridReels.spin(plan);
 剩余 cadence 后直接进入 target-aware spin。grid-cell landing appear 在落点边界 immediate 进入，
 不会先等待 normal loop boundary；完成仍等待该次真实 once appear。
 
+稳定盘面中的 `-1` hole 进入 full、selective 或 continuous spin 时，当前 hole 会保留为该格临时 strip 的
+outgoing endpoint，并随同一轴向运动离开窗口；后续过程 code 只读取本次 `reels` option（Scene Layout 中为显式
+`localReels`，省略时为 active Symbols binding 的公开轮带），最终 target window 再由 authoritative scene 覆盖。
+grid-cell 不会先调用 constructor/default reels 预填 hole。公开轮带中的 configured empty symbol code 仍按轻量
+empty rolling slot 处理，不等同于 settled scene 的 `-1`，也不会创建完整 `SymbolPlayer`。
+
 `RenderReel.startContinuous({ localPhaseY })` 是单格 phase 起转的唯一原子 owner。
 `CellSpin.start()` 直接复用它；Crave 仍使用的 legacy grid-cell 只通过
 `cellLocalPhaseYs` 复用同一能力，不建立第二套 phase 状态机。Scene Layout grid-cell facade 的

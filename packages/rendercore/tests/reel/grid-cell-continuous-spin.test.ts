@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { LogicReelsModel } from "@slotclientengine/logiccore";
 import {
   RenderGridCellReelSet,
   RenderReel,
@@ -83,8 +84,9 @@ describe("grid-cell continuous spin", () => {
     });
   });
 
-  it("materializes a public-strip symbol when targetless rolling starts from a hole", () => {
+  it("keeps a hole outgoing before targetless public-strip symbols enter", () => {
     const reel = createSet();
+    const localReels = createLocalOnlyReels();
     reel.resetToScene(
       [
         [1, 0, -1],
@@ -92,12 +94,24 @@ describe("grid-cell continuous spin", () => {
       ],
       [0, 1],
     );
+    const startedReels: RenderReel[] = [];
+    const originalStart = RenderReel.prototype.startContinuous;
+    const atomicStart = vi
+      .spyOn(RenderReel.prototype, "startContinuous")
+      .mockImplementation(function (
+        this: RenderReel,
+        ...args: Parameters<RenderReel["startContinuous"]>
+      ) {
+        originalStart.apply(this, args);
+        startedReels.push(this);
+      });
 
     reel.startContinuous({
+      reels: localReels,
       direction: "forward",
       speedSymbolsPerSecond: 20,
     });
-    const update = reel.update(0.05);
+    const update = reel.update(0);
 
     expect(update.startedCells).toContainEqual({
       x: 0,
@@ -107,15 +121,30 @@ describe("grid-cell continuous spin", () => {
     expect(
       reel.getSnapshot().cells.find(({ x, y }) => x === 0 && y === 2),
     ).toMatchObject({ occupied: true, phase: "spinning" });
+    expect(
+      atomicStart.mock.calls.every(([options]) => options.reels === localReels),
+    ).toBe(true);
+    const startedHole = startedReels.find(
+      (instance) => instance.getSnapshot().visibleScene[0] === -1,
+    );
+    expect(startedHole).toBeDefined();
+    expect(
+      startedHole
+        ?.getSlotRenderViews()
+        .map(({ code }) => code)
+        .every((code) => code === -1 || code === 3),
+    ).toBe(true);
 
-    reel.settleContinuous(createPlan());
+    reel.settleContinuous(createPlan(localReels), { reels: localReels });
     for (let index = 0; index < 30 && reel.getSnapshot().spinning; index += 1)
       reel.update(0.05);
     expect(reel.getSnapshot().visibleScene).toEqual(TARGET);
+    atomicStart.mockRestore();
   });
 
   it("settles an initial hole when the response arrives before its staggered start", () => {
     const reel = createSet();
+    const localReels = createLocalOnlyReels();
     reel.resetToScene(
       [
         [1, 0, -1],
@@ -125,11 +154,35 @@ describe("grid-cell continuous spin", () => {
     );
 
     reel.startContinuous({
+      reels: localReels,
       direction: "forward",
       speedSymbolsPerSecond: 20,
       startStepMs: 10,
     });
-    reel.settleContinuous(createPlan());
+    const targetAwareReels: RenderReel[] = [];
+    const originalStart = RenderReel.prototype.start;
+    const targetAwareStart = vi
+      .spyOn(RenderReel.prototype, "start")
+      .mockImplementation(function (
+        this: RenderReel,
+        ...args: Parameters<RenderReel["start"]>
+      ) {
+        originalStart.apply(this, args);
+        targetAwareReels.push(this);
+      });
+    reel.settleContinuous(createPlan(localReels), { reels: localReels });
+
+    reel.update(0.02);
+    expect(
+      targetAwareReels.some(
+        (instance) => instance.getSnapshot().visibleScene[0] === -1,
+      ),
+    ).toBe(true);
+    expect(
+      targetAwareStart.mock.calls.every(
+        ([, options]) => options?.reels === localReels,
+      ),
+    ).toBe(true);
 
     for (let index = 0; index < 30 && reel.getSnapshot().spinning; index += 1)
       reel.update(0.05);
@@ -138,6 +191,7 @@ describe("grid-cell continuous spin", () => {
       completed: true,
       visibleScene: TARGET,
     });
+    targetAwareStart.mockRestore();
   });
 
   it("keeps unselected occurrences held and cancels targetless rolling", () => {
@@ -316,9 +370,9 @@ function createSet() {
   });
 }
 
-function createPlan() {
+function createPlan(reels = createBasicReels()) {
   return createGridCellReelSpinPlan({
-    reels: createBasicReels(),
+    reels,
     finalYs: [0, 1],
     targetScene: TARGET,
     columns: 2,
@@ -331,4 +385,11 @@ function createPlan() {
     timing: TIMING,
     dimming: DIMMING,
   });
+}
+
+function createLocalOnlyReels() {
+  return new LogicReelsModel("per-spin-only", [
+    [3, 3, 3, 3, 3, 3, 3, 3],
+    [3, 3, 3, 3, 3, 3, 3, 3],
+  ]);
 }

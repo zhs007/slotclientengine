@@ -142,7 +142,8 @@
 - grid-cell targetless pre-roll 必须复用 manifest timing 的 stable start group cadence；响应早于全部格启动时，
   pending cell 保留剩余 cadence 后进入 target-aware spin。落点 appear immediate 进入，不等待刚 reset 的
   stable loop boundary；稳定画面的 `-1` hole 允许直接进入 full/continuous spin，并在自身 start boundary
-  从该次公开本地轮带 phase 物化滚动 symbol，响应早于 start 时由后续 target-aware start 执行相同物化，app
+  保留为临时 strip 的 outgoing endpoint 并随轴向离开，后续滚动 symbol 只从该次公开本地轮带 phase 进入；不得先用
+  reel constructor 的默认轮带覆盖 current hole。响应早于 start 时由后续 target-aware start 执行相同边界，app
   不得预填伪造 symbol；低 FPS ticker 必须分片消费完整受控 elapsed delta，不得通过截断单帧时间拉长业务等待。
 - legacy grid-cell immediate stop 只接受已有 authoritative target 的 active target-aware spin：同步提交
   remaining selected cells，取消 active/scheduled cell effect、activation、clip、bounce 与 dimming 等

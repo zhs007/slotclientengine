@@ -1013,18 +1013,13 @@ export class RenderGridCellReelSet
             const waitingDeltaMs = Math.max(0, startAtMs - previousElapsedMs);
             if (waitingDeltaMs > 0) cell.reel.update(waitingDeltaMs / 1000);
             const localPhaseY = active.localPhaseYByKey.get(key);
-            if (!cell.occupied) {
-              cell.reel.resetToY(
-                localPhaseY ?? cell.reel.getSnapshot().currentY,
-              );
-              cell.occupied = true;
-            }
             cell.reel.startContinuous({
               reels: active.reels,
               direction: active.direction,
               speedSymbolsPerSecond: active.speedSymbolsPerSecond,
               ...(localPhaseY === undefined ? {} : { localPhaseY }),
             });
+            cell.occupied = true;
             cell.phase = "spinning";
             cell.hasStartedThisSpin = true;
             this.#spinLifecycle.started(cell.coordinate);
@@ -3416,16 +3411,13 @@ export class RenderGridCellReelSet
     }
 
     if (cell.phase === "waiting" && elapsedMs >= planCell.startAtMs) {
-      if (!cell.occupied) {
-        cell.reel.resetToY(planCell.axisPlan.startY);
-        cell.occupied = true;
-      }
       this.setCellClipMask(cell, true);
       cell.reel.start(planCell.axisPlan, {
         reels: this.#spinReels ?? this.#reels,
         targetVisibleSymbols: planCell.targetVisibleSymbols,
         targetVisiblePresentationValues: [cell.targetPresentationValue],
       });
+      cell.occupied = true;
       cell.phase = "spinning";
       cell.hasStartedThisSpin = true;
     }
