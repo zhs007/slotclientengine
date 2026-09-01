@@ -410,3 +410,6 @@ dimensions/mips、bone/skin/triangle/clip facts、外部工具版本、实际验
 - 第四轮用户反馈明确要求先处理 `walk` 起始姿态的脚尖朝向；只在 walk 中根据左右鞋几何主轴逐关键帧数值求解
   foot Z，使第 1 帧及整个循环的脚尖朝角色正前方。idle、attack、victory 的站姿保持不变；validator 对 walk
   密集采样的左右鞋朝向误差设置最大 2° 门禁。
+- 第五轮用户反馈指出鞋尖虽已校正，但髋—膝—踝腿链仍外张；walk 的每个 gait key pose 必须同时数值求解 thigh Z
+  与 shin Z，使同侧髋、膝、踝保持在角色前后平面内，再求解鞋尖朝向。validator 对关键帧间密集采样的膝/踝
+  横向偏差设置最大 5mm 门禁；另外三个动作不受影响。

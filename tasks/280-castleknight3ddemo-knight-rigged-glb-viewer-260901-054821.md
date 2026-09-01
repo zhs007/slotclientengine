@@ -16,7 +16,7 @@
   - `attack` 1.30 秒、`idle` 2.03 秒、`victory` 1.53 秒、`walk` 2.03 秒；每段 60 个 transform channels。
   - 3 张内嵌 `image/ktx2` UASTC 纹理，均为 2048×2048、12 级 mipmap；GLB required extension 为
     `KHR_texture_basisu`，无 PNG/WebP fallback 或外部 URI。
-  - SHA-256：`efb42a0ffcd39a1a00158ffb6b597148c6bf32265690893102c404800aa4c2f5`。
+  - SHA-256：`b7c20d9d4a1e20bf5e0d6b47c3b500e74741a9c80f7466305ae699e525b6ec51`。
 - `apps/castleknight3ddemo/viewer.html`
   - 独立查看器页面及可访问名称明确的控制面板。
 - `apps/castleknight3ddemo/src/model-viewer.ts`
@@ -136,6 +136,11 @@ foot bone 的世界 X 回到各自固定轨道。最终左脚横向/前后范围
 第五版不修改另外三个动作，而是在 walk 第 1 帧及其余 8 个 gait key poses 根据蒙皮后鞋面几何数值求解 foot Z，
 将脚尖持续对准角色正前方。最终 GLB 密集采样最大朝向偏差为左脚 0.164°、右脚 0.075°，validator 以 2° 为失败
 门禁；Blender 九相位渲染和真实 Three.js viewer 的 walk 起点均已复验。
+
+用户继续指出脚尖已变但腿链未变。诊断证实第五版 walk 中膝盖相对髋部仍向外约 4.3–4.5cm，脚踝向外 6.5cm；
+第六版在每个 gait key pose 联立数值求解 thigh Z 与 shin Z，使左右两侧的髋、膝、踝分别处于同一角色前后平面，
+再独立求解鞋尖朝向。最终 GLB 密集采样的腿链最大横向偏差约 0.05mm、鞋尖最大朝向偏差约 0.081°，脚踝保持
+约 10.385cm 的前后步幅；validator 增加 5mm 腿平面门禁，Blender 九相位和真实 Three.js viewer 起步/换步均通过。
 
 ## 剩余风险
 
