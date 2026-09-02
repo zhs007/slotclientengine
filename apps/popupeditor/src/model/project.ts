@@ -14,6 +14,7 @@ import {
   type PopupOverlayLayer,
   type PopupResourceSpec,
   type SingleStatePopupLayerV9,
+  type SpinePopupTapInfoAttachment,
   type PopupVisibilityState,
 } from "@slotclientengine/rendercore/popup/editor";
 import { validateOfficialSpineResource } from "@slotclientengine/rendercore";
@@ -80,6 +81,7 @@ export interface PopupEditorProject {
       loopAnimation: string;
       endAnimation: string;
     };
+    tapInfoAttachment: SpinePopupTapInfoAttachment | null;
     prompt: {
       enabled: boolean;
       font: string | null;
@@ -242,6 +244,7 @@ export function createPopupEditorProject(
         loopAnimation: "",
         endAnimation: "",
       },
+      tapInfoAttachment: null,
       prompt: {
         enabled: false,
         font: null,
@@ -394,6 +397,13 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
           mode: "segmented-animations",
           ...project.spine.playback,
         },
+        ...(project.spine.tapInfoAttachment
+          ? {
+              tapInfoObject: {
+                attachment: structuredClone(project.spine.tapInfoAttachment),
+              },
+            }
+          : {}),
         ...(project.spine.overlays.length
           ? { overlays: project.spine.overlays.map(canonicalOverlay) }
           : {}),
@@ -998,6 +1008,21 @@ export function assertPopupLayerCanDelete(
     );
 }
 
+export function assertPopupSpineOverlayCanDelete(
+  project: PopupEditorProject,
+  layerId: string,
+): void {
+  assertPopupLayerCanDelete(project.spine.overlays, layerId);
+  const attachment = project.spine.tapInfoAttachment;
+  if (
+    attachment?.kind === "vni-text-layer" &&
+    attachment.vniLayerId === layerId
+  )
+    throw new Error(
+      `图层 ${layerId} 仍被 Tap info 子对象作为父节点，禁止删除。`,
+    );
+}
+
 export function validatePopupEditorAttachments(
   project: PopupEditorProject,
 ): void {
@@ -1053,6 +1078,28 @@ export function validatePopupEditorAttachments(
       () => getPopupSpineAttachmentTargets(project, { kind: "spine-popup" }),
       () => getPopupVniTextLayerTargets(project, { kind: "spine-popup" }),
     );
+    const tapInfoAttachment = project.spine.tapInfoAttachment;
+    if (tapInfoAttachment?.kind === "spine-slot") {
+      const mainSpine = getPopupSpineAttachmentTargets(project, {
+        kind: "spine-popup",
+      }).find(({ key }) => key === "main-spine");
+      if (!mainSpine?.slotNames.includes(tapInfoAttachment.slot))
+        throw new Error(
+          `Tap info 子对象引用的主 Spine slot 不存在：${tapInfoAttachment.slot}。`,
+        );
+    } else if (tapInfoAttachment?.kind === "vni-text-layer") {
+      const matches = getPopupVniTextLayerTargets(project, {
+        kind: "spine-popup",
+      }).some(
+        ({ vniLayerId, textLayerId }) =>
+          vniLayerId === tapInfoAttachment.vniLayerId &&
+          textLayerId === tapInfoAttachment.textLayerId,
+      );
+      if (!matches)
+        throw new Error(
+          `Tap info 子对象引用的 VNI 文字层不存在：${tapInfoAttachment.vniLayerId}/${tapInfoAttachment.textLayerId}。`,
+        );
+    }
     return;
   }
   if (project.type === "single-state" || project.type === "popup-object") {

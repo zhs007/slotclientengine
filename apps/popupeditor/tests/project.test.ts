@@ -26,6 +26,7 @@ import {
   addAwardTextLayer,
   applyImportedResourceBindings,
   assertPopupLayerCanDelete,
+  assertPopupSpineOverlayCanDelete,
   createPopupAmountFormat,
   createPopupEditorProject,
   detectPopupAmountFormatPreset,
@@ -437,17 +438,53 @@ describe("popup editor filename-key project", () => {
       loopAnimation: "Loop",
       endAnimation: "End",
     };
+    project.spine.tapInfoAttachment = {
+      kind: "spine-slot",
+      target: { kind: "main-spine" },
+      slot: "Value",
+    };
     expect(
       getPopupSpineAttachmentTargets(project, { kind: "spine-popup" }),
     ).toMatchObject([{ key: "main-spine", slotNames: ["Value"] }]);
     const exported = await exportPopupZip(project, { prepare: false });
+    const reopened = await importPopupZip(exported.bytes, { prepare: false });
+    expect(reopened.spine.tapInfoAttachment).toEqual(
+      project.spine.tapInfoAttachment,
+    );
+    const reopenedManifest = projectToManifest(reopened);
+    if (reopenedManifest.type !== "spine" || reopenedManifest.version !== 9)
+      throw new Error("Expected v9 Spine popup project.");
+    expect(reopenedManifest.spine.tapInfoObject?.attachment).toEqual(
+      project.spine.tapInfoAttachment,
+    );
+    expect(reopenedManifest.resources).toEqual(
+      projectToManifest(project).resources,
+    );
+    const reexported = await exportPopupZip(reopened, { prepare: false });
+    const reexportedEntries = extractBoundedZip(reexported.bytes, {
+      limits: POPUP_ZIP_LIMITS,
+    });
+    const reexportedManifest = JSON.parse(
+      new TextDecoder().decode(reexportedEntries.get("popup.manifest.json")),
+    );
+    expect(reexportedManifest.spine.tapInfoObject?.attachment).toEqual(
+      project.spine.tapInfoAttachment,
+    );
     const entries = extractBoundedZip(exported.bytes, {
       limits: POPUP_ZIP_LIMITS,
     });
     const manifest = JSON.parse(
       new TextDecoder().decode(entries.get("popup.manifest.json")),
     );
+    expect(manifest.spine.tapInfoObject).toEqual({
+      attachment: {
+        kind: "spine-slot",
+        target: { kind: "main-spine" },
+        slot: "Value",
+      },
+    });
     manifest.version = 1;
+    delete manifest.spine.tapInfoObject;
     delete manifest.audio;
     manifest.designViewport = { width: 1080, height: 1920 };
     delete manifest.name;
@@ -482,6 +519,7 @@ describe("popup editor filename-key project", () => {
     expect(imported.formatVersion).toBe(9);
     expect(imported.spine.prompt.font).toBeNull();
     expect(imported.spine.prompt.enabled).toBe(false);
+    expect(imported.spine.tapInfoAttachment).toBeNull();
     expect(imported.spine.overlays).toContainEqual(
       expect.objectContaining({ id: "prompt", kind: "text", name: "prompt" }),
     );
@@ -1082,6 +1120,24 @@ describe("popup editor filename-key project", () => {
     expect(
       getPopupVniTextLayerTargets(project, { kind: "spine-popup" }),
     ).toHaveLength(1);
+    project.type = "spine";
+    project.spine.tapInfoAttachment = {
+      kind: "vni-text-layer",
+      vniLayerId: "layer-0",
+      textLayerId: "layer_text_mqz6k97v_z",
+    };
+    expect(() => validatePopupEditorAttachments(project)).not.toThrow();
+    expect(() => assertPopupSpineOverlayCanDelete(project, "layer-0")).toThrow(
+      /Tap info 子对象/,
+    );
+    project.spine.tapInfoAttachment = {
+      ...project.spine.tapInfoAttachment,
+      textLayerId: "missing",
+    };
+    expect(() => validatePopupEditorAttachments(project)).toThrow(
+      /Tap info 子对象.*layer-0\/missing/,
+    );
+    project.spine.tapInfoAttachment = null;
     project.singleState.layers = [structuredClone(vni) as any];
     expect(
       getPopupVniTextLayerTargets(project, { kind: "single-state" }),

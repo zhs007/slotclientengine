@@ -395,6 +395,83 @@ describe("popup manifest", () => {
     expect(() => parsePopupManifest(value)).toThrow(/vni-host -> vni-host/);
   });
 
+  it("parses optional v9 Tap info object parents and rejects wider targets", () => {
+    const current = structuredClone(
+      loadPopupManifest(v2SpineManifestFixture()).manifest,
+    ) as any;
+    expect(current.version).toBe(9);
+    expect(current.spine).not.toHaveProperty("tapInfoObject");
+
+    current.spine.tapInfoObject = {
+      attachment: {
+        kind: "spine-slot",
+        target: { kind: "main-spine" },
+        slot: "TapInfo",
+      },
+    };
+    const spineSlotManifest = parsePopupManifest(current);
+    if (spineSlotManifest.type !== "spine" || spineSlotManifest.version !== 9)
+      throw new Error("Expected v9 Spine popup.");
+    expect(spineSlotManifest.spine.tapInfoObject).toEqual(
+      current.spine.tapInfoObject,
+    );
+
+    current.resources.vni = {
+      kind: "vni",
+      project: `assets/${"d".repeat(64)}.json`,
+    };
+    current.spine.overlays = [
+      {
+        id: "tap-host",
+        kind: "vni",
+        order: 0,
+        alpha: 1,
+        resource: "vni",
+        attachment: { kind: "popup-root" },
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        playback: { mode: "once" },
+        visibleStates: ["start", "loop", "end"],
+      },
+    ];
+    current.spine.tapInfoObject = {
+      attachment: {
+        kind: "vni-text-layer",
+        vniLayerId: "tap-host",
+        textLayerId: "label",
+      },
+    };
+    const vniTextManifest = parsePopupManifest(current);
+    if (vniTextManifest.type !== "spine" || vniTextManifest.version !== 9)
+      throw new Error("Expected v9 Spine popup.");
+    expect(vniTextManifest.spine.tapInfoObject).toEqual(
+      current.spine.tapInfoObject,
+    );
+
+    const legacy = structuredClone(current);
+    legacy.version = 8;
+    expect(() => parsePopupManifest(legacy)).toThrow(/tapInfoObject/);
+
+    const root = structuredClone(current);
+    root.spine.tapInfoObject.attachment = { kind: "popup-root" };
+    expect(() => parsePopupManifest(root)).toThrow(/kind/);
+
+    const overlaySpine = structuredClone(current);
+    overlaySpine.spine.tapInfoObject.attachment = {
+      kind: "spine-slot",
+      target: { kind: "layer", layerId: "tap-host" },
+      slot: "TapInfo",
+    };
+    expect(() => parsePopupManifest(overlaySpine)).toThrow(/target/);
+
+    const missingVni = structuredClone(current);
+    missingVni.spine.tapInfoObject.attachment.vniLayerId = "missing";
+    expect(() => parsePopupManifest(missingVni)).toThrow(/missing VNI overlay/);
+
+    const unknown = structuredClone(current);
+    unknown.spine.tapInfoObject.extra = true;
+    expect(() => parsePopupManifest(unknown)).toThrow(/unknown key/);
+  });
+
   it.each([
     ["name", (value: any) => delete value.name],
     ["adaptation", (value: any) => delete value.adaptation],

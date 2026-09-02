@@ -18,6 +18,8 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 普通 Spine 类型不再提供独立 prompt authoring；提示语与其它文案一样使用命名的字体文字 overlay。旧 v1/v2 prompt 在导入边界自动结构化迁移为 `name=prompt` 的文字层，名称、order 或资源冲突会使整次导入失败。可追加任意数量 image、字体文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/项目状态可见性。
 
+普通 Spine 类型的项目页可选配置“Tap info 子对象”父节点：主 Spine 的 exact slot，或当前 Spine overlays 中某个 VNI 的 exact 文字层。项目只保存这条窄 attachment metadata，不选择、导入或预览 Tap info 对象；未配置时 manifest 完全省略该字段。候选不包含 Popup root、overlay Spine slot或只存在于资源库而未放入画面的 VNI；删除被引用 VNI、覆盖后 slot/text layer 消失、导入悬空引用都会显式失败，不会自动改挂根节点或首项。
+
 所有获奖档位与普通 Spine overlay 都可添加多个命名字体文字和 manual ImgNumber。字体文字可明确选择已导入的 WOFF2/WOFF/TTF/OTF；未选择资源时才使用 `system-ui, sans-serif`。文字支持单行默认文案、字号、字距、色板或 canonical color string、纯色/线性渐变、描边、投影、正负 Curved Text、anchor 与旋转；还可配置 local typographic `minWidth/maxWidth`，`0/0` 表示关闭，启用时 runtime 只调字号使文字落入区间。普通 Spine overlay 还可编辑三阶段可见性。每个获奖档仍必须恰好有一个 exact id 为 `win-amount` 的 ImgNumber，再次添加 ImgNumber 会创建可独立命名和设值的 manual 节点。游戏通过 exact layer name 获取 rendercore handle 并原子 `setText()/resetText()`；Editor 预览不提供临时节点覆盖入口。
 
 production preview 使用与 runtime 相同的无界 maximized-focus transform：重点区域始终完整可见，宿主宽高比所需的额外空间以 focus 几何中心向外扩展，宿主 placement 再叠加到该矩阵。预览 canvas 后方的颜色持续按红、蓝、黄、绿循环，只用于观察适配和全屏 backdrop，不进入 project、manifest 或 ZIP。guides 开启时，启用 `widthRange` 的文字上方显示蓝色 max、黄色 min 两个完整粗框和静态斜线；线宽按当前 preview scale 补偿，关闭 guides 后连同 viewport、中心和重点区域参考线一起立即移除，所有 guide 都不持久化。production canvas/keyboard binding 仍负责 award advance 与 Spine dismiss，但 input、textarea、select、button 和 contenteditable 的键盘事件会透传，不再阻止表单输入。

@@ -320,6 +320,10 @@ describe("PopupEditorApp", () => {
 
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
     expect(root.textContent).toContain("格式 v9 · Spine 弹窗");
+    expect(root.querySelector("#tap-info-parent")).not.toBeNull();
+    expect(
+      root.querySelector<HTMLSelectElement>("#tap-info-parent")!.options,
+    ).toHaveLength(1);
     expect(
       root.querySelectorAll('[data-project-field^="backdrop-state-"]'),
     ).toHaveLength(3);
@@ -630,6 +634,44 @@ describe("PopupEditorApp", () => {
     font.value = "Prompt.woff2";
     font.dispatchEvent(new Event("change"));
     expect(root.querySelectorAll("[data-delete-overlay]")).toHaveLength(5);
+
+    root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
+    const tapInfoParent =
+      root.querySelector<HTMLSelectElement>("#tap-info-parent")!;
+    expect([...tapInfoParent.options].map(({ value }) => value)).toEqual(
+      expect.arrayContaining([
+        "",
+        "spine:main-spine",
+        expect.stringMatching(/^vni:/),
+      ]),
+    );
+    tapInfoParent.value = "spine:main-spine";
+    tapInfoParent.dispatchEvent(new Event("change"));
+    const tapInfoSlot =
+      root.querySelector<HTMLSelectElement>("#tap-info-slot")!;
+    expect([...tapInfoSlot.options].map(({ value }) => value)).toEqual([
+      "",
+      "Value",
+      "Background",
+    ]);
+    tapInfoSlot.value = "Value";
+    tapInfoSlot.dispatchEvent(new Event("change"));
+    expect(root.textContent).toContain('"tapInfoObject"');
+    const vniTarget = [
+      ...root.querySelector<HTMLSelectElement>("#tap-info-parent")!.options,
+    ].find(({ value }) => value.startsWith("vni:"))!.value;
+    root.querySelector<HTMLSelectElement>("#tap-info-parent")!.value =
+      vniTarget;
+    root
+      .querySelector<HTMLSelectElement>("#tap-info-parent")!
+      .dispatchEvent(new Event("change"));
+    expect(root.textContent).toContain('"vni-text-layer"');
+    root.querySelector<HTMLSelectElement>("#tap-info-parent")!.value = "";
+    root
+      .querySelector<HTMLSelectElement>("#tap-info-parent")!
+      .dispatchEvent(new Event("change"));
+    expect(root.textContent).not.toContain('"tapInfoObject"');
+    root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
 
     const fontSize = root.querySelector<HTMLInputElement>(
       '[data-overlay-field="fontSize"]',

@@ -127,6 +127,17 @@ export type PopupLayerAttachment =
       readonly target: PopupSpineSlotTarget;
       readonly slot: string;
     };
+export type SpinePopupTapInfoAttachment =
+  | {
+      readonly kind: "vni-text-layer";
+      readonly vniLayerId: string;
+      readonly textLayerId: string;
+    }
+  | {
+      readonly kind: "spine-slot";
+      readonly target: { readonly kind: "main-spine" };
+      readonly slot: string;
+    };
 export type PopupVniPlayback =
   | {
       readonly mode: "segmented";
@@ -756,6 +767,9 @@ export interface SpinePopupManifestV9 extends PopupManifestBaseV9<PopupSegment> 
   readonly type: "spine";
   readonly spine: Omit<SpinePopupManifestV8["spine"], "overlays"> & {
     readonly overlays?: readonly SpinePopupOverlayLayerV9[];
+    readonly tapInfoObject?: {
+      readonly attachment: SpinePopupTapInfoAttachment;
+    };
   };
 }
 export interface SingleStatePopupManifestV9 extends PopupManifestBaseV9<"active"> {
