@@ -28,6 +28,7 @@ import {
   type LayoutSpineAssetForPopupReview,
   type PopupSpineAssetConflict,
 } from "../io/imported-popup-package.js";
+import { importPopupObjectPackageZip } from "../io/imported-popup-object-package.js";
 import {
   createSymbolPackageResource,
   parseSymbolPackageManifest,
@@ -94,11 +95,14 @@ import {
   bindGameModePopup,
   deleteGameMode,
   deletePopupDependency,
+  deletePopupObjectDependency,
   importPopupDependency,
+  importPopupObjectDependency,
   importSymbolDependency,
   deleteSymbolDependency,
   replaceSymbolDependency,
   replacePopupDependency,
+  replacePopupObjectDependency,
   renameGameMode,
   createGameModeTransition,
   deleteGameModeTransition,
@@ -115,6 +119,7 @@ import {
   setPopupOrder,
   setPopupPlacement,
   setPopupProgrammatic,
+  setTapInfoObjectDependency,
 } from "../model/game-mode-commands.js";
 import { setNodeOrder, setReelOrder } from "../model/layer-order.js";
 import {
@@ -659,7 +664,9 @@ export class GameLayoutEditorApp {
           const popupId = this.#selectedPopupId;
           const variant = input.dataset.popupPlacement as SceneLayoutVariantId;
           const field = input.dataset.popupPlacementField as
-            "x" | "y" | "scale";
+            | "x"
+            | "y"
+            | "scale";
           if (!popupId) {
             this.#store.setExternalError(
               new Error("尚未选择 popup dependency。"),
@@ -710,7 +717,8 @@ export class GameLayoutEditorApp {
       "change",
       (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          "standard" | "grid-cell";
+          | "standard"
+          | "grid-cell";
         this.runTransaction((draft) => {
           const mode = draft.gameModes.modes.find(
             (candidate) => candidate.id === this.#selectedGameMode,
@@ -1749,7 +1757,9 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLSelectElement>("[data-transition-kind]")
       ?.addEventListener("change", (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          "none" | "spine" | "video";
+          | "none"
+          | "spine"
+          | "video";
         this.runTransaction((draft) => {
           const transition = draft.gameModes.transitions.find(
             (candidate) =>
@@ -1807,7 +1817,9 @@ export class GameLayoutEditorApp {
           const variant = input.dataset
             .transitionPopupPlacement as SceneLayoutVariantId;
           const field = input.dataset.transitionPopupPlacementField as
-            "x" | "y" | "scale";
+            | "x"
+            | "y"
+            | "scale";
           this.runTransaction((draft) => {
             const transition = draft.gameModes.transitions.find(
               (candidate) =>
@@ -1951,7 +1963,11 @@ export class GameLayoutEditorApp {
     );
     status?.addEventListener("change", () => {
       this.#session.resourceStatus = status.value as
-        "all" | "referenced" | "runtime" | "unused" | "error";
+        | "all"
+        | "referenced"
+        | "runtime"
+        | "unused"
+        | "error";
       this.renderWorkspace(this.#store.getSnapshot());
     });
     panel
@@ -2371,6 +2387,25 @@ export class GameLayoutEditorApp {
           draft.id = (event.currentTarget as HTMLInputElement).value;
         }),
       );
+    panel
+      .querySelector<HTMLSelectElement>("[data-tap-info-object]")
+      ?.addEventListener("change", (event) =>
+        this.runTransaction((draft) => {
+          const value = (event.currentTarget as HTMLSelectElement).value;
+          setTapInfoObjectDependency(draft, value || null);
+        }),
+      );
+    panel
+      .querySelector<HTMLButtonElement>("[data-delete-popup-object]")
+      ?.addEventListener("click", () => {
+        const name = panel.querySelector<HTMLSelectElement>(
+          "[data-popup-object-library]",
+        )?.value;
+        if (!name) return;
+        this.runTransaction((draft) =>
+          deletePopupObjectDependency(draft, name),
+        );
+      });
   }
 
   private selectOutline(key: string): void {
@@ -2678,7 +2713,8 @@ export class GameLayoutEditorApp {
       .forEach((input) =>
         input.addEventListener("change", () => {
           const variant = input.dataset.pickerVariant as
-            "landscape" | "portrait";
+            | "landscape"
+            | "portrait";
           state.variants = input.checked
             ? [...new Set([...state.variants, variant])]
             : state.variants.filter((item) => item !== variant);
@@ -2887,6 +2923,7 @@ export class GameLayoutEditorApp {
           [
             "symbols.package.json",
             "popup.manifest.json",
+            "popup-object.manifest.json",
             "image-string.manifest.json",
             "layout.manifest.json",
             "manifest.json",
@@ -2919,6 +2956,29 @@ export class GameLayoutEditorApp {
           this.renderSymbolsMetadata();
           this.showFeedback(
             `已通过统一导入器提交 Symbols ${this.#selectedSymbolId}。`,
+          );
+          return;
+        }
+        if (entries.has("popup-object.manifest.json")) {
+          const imported = await importPopupObjectPackageZip(zipBytes);
+          if (
+            !confirmDependencyImportReview(
+              "Popup Object",
+              imported.files,
+              files,
+            )
+          )
+            return;
+          if (project.popupObjectDependencies.has(imported.manifest.name))
+            replacePopupObjectDependency(
+              project,
+              imported.manifest.name,
+              imported,
+            );
+          else importPopupObjectDependency(project, imported);
+          this.#store.replace(project);
+          this.showFeedback(
+            `已导入 Popup Object ${imported.manifest.name}；请在项目页显式选择。`,
           );
           return;
         }
@@ -3452,6 +3512,25 @@ export class GameLayoutEditorApp {
                   ],
                 ),
               ),
+            }
+          : {}),
+        ...(snapshot.project.tapInfoObjectName
+          ? {
+              tapInfoObjectFiles: (() => {
+                const dependency = snapshot.project.popupObjectDependencies.get(
+                  snapshot.project.tapInfoObjectName!,
+                );
+                if (!dependency)
+                  throw new Error(
+                    `Tap info Popup Object dependency 不存在：${snapshot.project.tapInfoObjectName}`,
+                  );
+                return dependencyFiles(
+                  snapshot.project,
+                  dependency.rootKey,
+                  dependency.keys,
+                  "popup-object.manifest.json",
+                );
+              })(),
             }
           : {}),
       });
@@ -4175,7 +4254,7 @@ function confirmImportReview(
 }
 
 function confirmDependencyImportReview(
-  kind: "Symbols" | "Popup",
+  kind: "Symbols" | "Popup" | "Popup Object",
   dependencyFiles: ReadonlyMap<string, Uint8Array>,
   sourceFiles: readonly File[],
   popupSpineConflicts: readonly PopupSpineAssetConflict[] = [],
@@ -4248,7 +4327,10 @@ function dependencyFiles(
   project: EditorProject,
   rootKey: string,
   keys: readonly string[],
-  sentinel: "symbols.package.json" | "popup.manifest.json",
+  sentinel:
+    | "symbols.package.json"
+    | "popup.manifest.json"
+    | "popup-object.manifest.json",
 ): ReadonlyMap<string, Uint8Array> {
   return new Map(
     keys.map((key) => {

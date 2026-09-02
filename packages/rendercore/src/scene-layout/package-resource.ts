@@ -41,15 +41,24 @@ import {
   type SymbolPackageResource,
 } from "../symbol/package.js";
 import {
+  createPopupObjectPackageResourceFromResolvedFiles,
   collectPopupPackagePaths,
   createPopupPackageResourceFromResolvedFiles,
 } from "../popup/package-resource.js";
 import {
+  collectMappedPopupObjectAssetKeys,
+  collectPopupObjectPackagePaths,
+  collectPopupObjectDirectPaths,
   collectPopupDirectPaths,
   loadPopupManifest,
+  parsePopupObjectManifest,
+  POPUP_OBJECT_MANIFEST_PATH,
   type LatestPopupManifest,
 } from "../popup/data/index.js";
-import type { PopupPackageResource } from "../popup/core/types.js";
+import type {
+  PopupPackageResource,
+  PopupPreparedObject,
+} from "../popup/core/types.js";
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
 import { SceneLayoutError } from "./errors.js";
 import {
@@ -252,6 +261,28 @@ export function collectSceneLayoutPackagePaths(options: {
     }
   }
 
+  if (manifest.version === 7 && manifest.tapInfoObject) {
+    const binding = manifest.tapInfoObject;
+    const nested = parsePopupObjectManifest(
+      parseJsonBytes(
+        requireBytes(options.files, binding.manifest),
+        binding.manifest,
+      ),
+    );
+    if (!mapped && nested.name !== binding.manifest.split("/").at(-2))
+      throw new SceneLayoutError(
+        `Scene layout tap info Popup Object name mismatch at "${binding.manifest}".`,
+      );
+    const nestedFiles = mapped
+      ? mappedPopupObjectFiles(options.files, binding.manifest, nested)
+      : extractPrefixedFiles(options.files, directoryOf(binding.manifest));
+    for (const path of collectPopupObjectPackagePaths({
+      manifest: nested,
+      files: nestedFiles,
+    }))
+      expected.add(mapped ? path : resolvePackagePath(binding.manifest, path));
+  }
+
   const sortedExpected = [...expected].sort(comparePaths);
   assertNoPackagePathCollisions(sortedExpected);
   const sortedActual = actual.sort(comparePaths);
@@ -330,6 +361,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   const symbolPackages: Record<string, SymbolPackageResource> = {};
   const popupPackages: Record<string, PopupPackageResource> = {};
   const popupManifests: Record<string, LatestPopupManifest> = {};
+  let tapInfoObject: PopupPreparedObject | null = null;
   const popupDefinitions: Record<
     string,
     {
@@ -481,6 +513,30 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       popupDefinitions[popupId] = definition;
       if (!options.lazyPopupResources)
         popupPackages[popupId] = await createPopupResource(definition);
+    }
+
+    if (manifest.tapInfoObject) {
+      const binding = manifest.tapInfoObject;
+      const nested = parsePopupObjectManifest(
+        parseJsonBytes(requireBytes(files, binding.manifest), binding.manifest),
+      );
+      const nestedFiles = mapped
+        ? mappedPopupObjectFiles(files, binding.manifest, nested)
+        : extractPrefixedFiles(files, directoryOf(binding.manifest));
+      const objectDirectory = `${directoryOf(binding.manifest)}/`;
+      tapInfoObject = await createPopupObjectPackageResourceFromResolvedFiles({
+        manifest: nested,
+        files: nestedFiles,
+        ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+        ...(options.resolveAssetUrl
+          ? {
+              resolveAssetUrl: mapped
+                ? options.resolveAssetUrl
+                : (path: string) =>
+                    options.resolveAssetUrl?.(`${objectDirectory}${path}`),
+            }
+          : {}),
+      });
     }
 
     const audioUrls = new Map<string, string>();
@@ -847,6 +903,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       symbolPackages: Object.freeze({ ...symbolPackages }),
       popupManifests: Object.freeze({ ...popupManifests }),
       popupPackages: Object.freeze({ ...popupPackages }),
+      tapInfoObject,
       getLoadedPopupPackage(id: string): PopupPackageResource | null {
         return popupPackages[id] ?? null;
       },
@@ -988,6 +1045,10 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         const popupDestructions = Object.values(popupPackages).map((popup) =>
           Promise.resolve(popup.destroy()),
         );
+        if (tapInfoObject)
+          popupDestructions.push(
+            Promise.resolve(tapInfoObject.resource.destroy()),
+          );
         for (const resource of lazyImageStrings) void resource.destroy();
         for (const url of lazyRuntimeObjectUrls) URL.revokeObjectURL(url);
         lazyRuntimeObjectUrls.clear();
@@ -1005,6 +1066,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     symbolPackage?.destroy();
     for (const resource of Object.values(symbolPackages)) resource.destroy();
     for (const popup of Object.values(popupPackages)) await popup.destroy();
+    await tapInfoObject?.resource.destroy();
     throw error instanceof SceneLayoutError
       ? error
       : new SceneLayoutError(formatError(error));
@@ -1360,12 +1422,85 @@ export async function loadSceneLayoutPackageFromUrl(options: {
       files,
     );
   }
+  if (manifest.version === 7 && manifest.tapInfoObject) {
+    const binding = manifest.tapInfoObject;
+    const nested = parsePopupObjectManifest(
+      parseJsonBytes(requireBytes(files, binding.manifest), binding.manifest),
+    );
+    const nestedFiles = new Map<string, Uint8Array>([
+      [POPUP_OBJECT_MANIFEST_PATH, requireBytes(files, binding.manifest)],
+    ]);
+    for (const path of collectPopupObjectDirectPaths(nested)) {
+      const full = resolvePackagePath(binding.manifest, path);
+      if (!files.has(full))
+        files.set(
+          full,
+          await fetchBytes(fetchImpl, containedUrl(manifestUrl, full)),
+        );
+      nestedFiles.set(path, requireBytes(files, full));
+    }
+    await fetchPopupObjectTransitive(
+      fetchImpl,
+      manifestUrl,
+      nested,
+      nestedFiles,
+      binding.manifest,
+      files,
+    );
+  }
   return createSceneLayoutPackageResource({
     manifest,
     files,
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
     loadSymbolTextures: options.loadSymbolTextures,
   });
+}
+
+async function fetchPopupObjectTransitive(
+  fetchImpl: typeof fetch,
+  layoutManifestUrl: URL,
+  manifest: ReturnType<typeof parsePopupObjectManifest>,
+  nestedFiles: Map<string, Uint8Array>,
+  objectManifestPath: string,
+  layoutFiles: Map<string, Uint8Array>,
+): Promise<void> {
+  for (const resource of Object.values(manifest.resources)) {
+    if (resource.kind === "image-string") {
+      const nested = parseImageStringManifest(
+        parseJsonBytes(
+          requireBytes(nestedFiles, resource.manifest),
+          resource.manifest,
+        ),
+      );
+      for (const path of collectImageStringAssetPaths(nested)) {
+        const objectPath = resolvePackagePath(resource.manifest, path);
+        const layoutPath = resolvePackagePath(objectManifestPath, objectPath);
+        const bytes = await fetchBytes(
+          fetchImpl,
+          containedUrl(layoutManifestUrl, layoutPath),
+        );
+        nestedFiles.set(objectPath, bytes);
+        layoutFiles.set(layoutPath, bytes);
+      }
+    } else if (resource.kind === "vni") {
+      const project = assertVNIProject(
+        parseJsonBytes(
+          requireBytes(nestedFiles, resource.project),
+          resource.project,
+        ),
+      );
+      for (const asset of project.assets) {
+        const objectPath = resolvePackagePath(resource.project, asset.path);
+        const layoutPath = resolvePackagePath(objectManifestPath, objectPath);
+        const bytes = await fetchBytes(
+          fetchImpl,
+          containedUrl(layoutManifestUrl, layoutPath),
+        );
+        nestedFiles.set(objectPath, bytes);
+        layoutFiles.set(layoutPath, bytes);
+      }
+    }
+  }
 }
 
 async function fetchPopupTransitive(
@@ -1702,6 +1837,20 @@ function mappedPopupFiles(
   ]);
   for (const key of keys) result.set(key, requireBytes(files, key).slice());
   collectPopupPackagePaths({ manifest, files: result });
+  return result;
+}
+
+function mappedPopupObjectFiles(
+  files: ReadonlyMap<string, Uint8Array>,
+  rootKey: string,
+  manifest: ReturnType<typeof parsePopupObjectManifest>,
+): ReadonlyMap<string, Uint8Array> {
+  const keys = collectMappedPopupObjectAssetKeys({ manifest, files });
+  const result = new Map<string, Uint8Array>([
+    [POPUP_OBJECT_MANIFEST_PATH, requireBytes(files, rootKey).slice()],
+  ]);
+  for (const key of keys) result.set(key, requireBytes(files, key).slice());
+  collectPopupObjectPackagePaths({ manifest, files: result });
   return result;
 }
 

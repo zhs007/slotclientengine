@@ -10,6 +10,13 @@ import { createSpinePopupPlayer } from "../../src/popup/editor.js";
 
 const promptSetText = vi.hoisted(() => vi.fn());
 const createPromptText = vi.hoisted(() => vi.fn());
+const objectRuntime = vi.hoisted(() => ({
+  create: vi.fn(),
+  init: vi.fn(),
+  setActive: vi.fn(),
+  update: vi.fn(),
+  destroy: vi.fn(),
+}));
 vi.mock("../../src/popup/prompt-text.js", async (original) => {
   const actual =
     await original<typeof import("../../src/popup/prompt-text.js")>();
@@ -20,8 +27,63 @@ vi.mock("../../src/popup/prompt-text.js", async (original) => {
   }));
   return { ...actual, createPopupPromptText: createPromptText };
 });
+vi.mock("../../src/popup/object-runtime.js", async (original) => {
+  const actual =
+    await original<typeof import("../../src/popup/object-runtime.js")>();
+  const { Container: ObjectContainer } = await import("pixi.js");
+  objectRuntime.create.mockImplementation(() => ({
+    container: new ObjectContainer(),
+    handle: {} as never,
+    init: objectRuntime.init,
+    setActive: objectRuntime.setActive,
+    update: objectRuntime.update,
+    destroy: objectRuntime.destroy,
+  }));
+  return {
+    ...actual,
+    createPopupObjectInstanceRuntime: objectRuntime.create,
+  };
+});
 
 describe("spine popup player", () => {
+  it("mounts and drives one external tap info object only when both bindings exist", async () => {
+    for (const spy of Object.values(objectRuntime)) spy.mockClear();
+    const leaf = new FakeSpineSlotPlayer();
+    const runtime = createSpinePopupRuntime({
+      resource: spineResourceWithTapInfo(),
+      tapInfoObject: {} as never,
+      playerFactory: () => leaf,
+    });
+
+    await runtime.init();
+    expect(objectRuntime.create).toHaveBeenCalledTimes(1);
+    expect(objectRuntime.init).toHaveBeenCalledTimes(1);
+    expect(leaf.attachCount).toBe(1);
+    expect(runtime.objects).toEqual([]);
+
+    runtime.start();
+    expect(objectRuntime.setActive).toHaveBeenLastCalledWith(true);
+    runtime.update(0.25);
+    expect(objectRuntime.update).toHaveBeenLastCalledWith(0.25);
+    leaf.results.push({ completed: true, events: [] });
+    runtime.update(0.1);
+    runtime.requestDismiss();
+    expect(objectRuntime.setActive.mock.calls).toEqual([[true], [false]]);
+
+    runtime.destroy();
+    expect(objectRuntime.destroy).toHaveBeenCalledTimes(1);
+    expect(leaf.removeCount).toBe(1);
+
+    objectRuntime.create.mockClear();
+    const noLayoutObject = createSpinePopupRuntime({
+      resource: spineResourceWithTapInfo(),
+      playerFactory: () => new FakeSpineSlotPlayer(),
+    });
+    await noLayoutObject.init();
+    expect(objectRuntime.create).not.toHaveBeenCalled();
+    noLayoutObject.destroy();
+  });
+
   it("keeps the game runtime command/query surface snapshot-free", async () => {
     const transitions: unknown[] = [];
     const runtime = createSpinePopupRuntime({
@@ -230,6 +292,20 @@ class FakeSpinePlayer implements RendercoreSpinePlayer {
   }
 }
 
+class FakeSpineSlotPlayer extends FakeSpinePlayer {
+  readonly slotRoot = new Container();
+  attachCount = 0;
+  removeCount = 0;
+  attachSlotObject({ object }: { readonly object: Container }): void {
+    this.attachCount += 1;
+    this.slotRoot.addChild(object);
+  }
+  removeSlotObject(object: Container): void {
+    this.removeCount += 1;
+    if (object.parent === this.slotRoot) this.slotRoot.removeChild(object);
+  }
+}
+
 function spineResource(): PopupPackageResource<SpinePopupManifestV1> {
   const manifest: SpinePopupManifestV1 = {
     version: 1,
@@ -265,6 +341,39 @@ function spineResource(): PopupPackageResource<SpinePopupManifestV1> {
       },
     },
     destroy() {},
+  };
+}
+
+function spineResourceWithTapInfo(): PopupPackageResource {
+  const base = spineResource();
+  return {
+    ...base,
+    manifest: {
+      ...base.manifest,
+      version: 9,
+      name: "Free Game",
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 1, right: 1, top: 1, bottom: 1 },
+      },
+      backdrop: {
+        enabled: false,
+        color: "#000000",
+        alpha: 0,
+        visibleStates: ["start", "loop", "end"],
+      },
+      audio: { version: 1, effects: [], cues: [] },
+      spine: {
+        ...base.manifest.spine,
+        tapInfoObject: {
+          attachment: {
+            kind: "spine-slot",
+            target: { kind: "main-spine" },
+            slot: "TapInfo",
+          },
+        },
+      },
+    } as PopupPackageResource["manifest"],
   };
 }
 

@@ -16,6 +16,7 @@ import type {
   SceneLayoutNodePlacement,
   SceneLayoutOrientationVariantId,
   SceneLayoutRuntimeAllocationV2,
+  SceneLayoutTapInfoObjectBinding,
 } from "./types.js";
 
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]*$/;
@@ -31,6 +32,7 @@ const ROOT_KEYS = new Set([
   "symbolPackage",
   "symbolPackages",
   "popups",
+  "tapInfoObject",
   "runtimeResources",
   "gameModes",
   "audio",
@@ -119,6 +121,9 @@ export function parseSceneLayoutManifestV7(
 
   const validation = createV6ValidationDocument(root, main, modes);
   const parsed = parseSceneLayoutManifestV6(validation.document);
+  const tapInfoObject = Object.hasOwn(root, "tapInfoObject")
+    ? parseTapInfoObjectBinding(root.tapInfoObject)
+    : undefined;
   const graphicNodes = new Map(
     parsed.nodes
       .filter((node) => node.id !== validation.syntheticNodeId)
@@ -147,6 +152,7 @@ export function parseSceneLayoutManifestV7(
     ...(parsed.symbolPackage ? { symbolPackage: parsed.symbolPackage } : {}),
     ...(parsed.symbolPackages ? { symbolPackages: parsed.symbolPackages } : {}),
     ...(parsed.popups ? { popups: parsed.popups } : {}),
+    ...(tapInfoObject ? { tapInfoObject } : {}),
     ...(parsed.runtimeResources
       ? { runtimeResources: parsed.runtimeResources }
       : {}),
@@ -166,6 +172,50 @@ export function parseSceneLayoutManifestV7(
     draft,
   );
   return deepFreeze({ ...draft, runtimeAllocation });
+}
+
+function parseTapInfoObjectBinding(
+  value: unknown,
+): SceneLayoutTapInfoObjectBinding {
+  const binding = record(value, "scene layout tapInfoObject");
+  known(binding, new Set(["manifest"]), "scene layout tapInfoObject");
+  return deepFreeze({
+    manifest: popupObjectDependencyPath(
+      binding.manifest,
+      "scene layout tapInfoObject.manifest",
+    ),
+  });
+}
+
+function popupObjectDependencyPath(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0)
+    fail(`${label} must be a non-empty string.`);
+  if (!value.includes("/")) {
+    if (
+      value.normalize("NFC") !== value ||
+      value === "." ||
+      value === ".." ||
+      value.includes("\\") ||
+      !/\.[^.]+$/u.test(value) ||
+      [...value].some((character) => {
+        const codePoint = character.codePointAt(0)!;
+        return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+      })
+    )
+      fail(`asset filename key is invalid: ${value}`);
+    return value;
+  }
+  if (
+    value !== value.normalize("NFC") ||
+    value !== value.toLowerCase() ||
+    !/^dependencies\/popup-objects\/([a-z0-9]+(?:-[a-z0-9]+)*)\/popup-object\.manifest\.json$/u.test(
+      value,
+    )
+  )
+    fail(
+      `${label} must be dependencies/popup-objects/<name>/popup-object.manifest.json.`,
+    );
+  return value;
 }
 
 function validateV7PresentationOrders(
@@ -896,7 +946,8 @@ function legacyNodeContexts(
   node: SceneLayoutGraphicNode,
   orientation: SceneLayoutOrientationVariantId,
   backgroundScope:
-    Record<string, SceneLayoutOrientationVariantId[]> | undefined,
+    | Record<string, SceneLayoutOrientationVariantId[]>
+    | undefined,
   modeVariants: ReadonlyMap<
     string,
     Readonly<Record<SceneLayoutOrientationVariantId, LegacyVariant>>

@@ -29,6 +29,7 @@ import {
   type AwardCelebrationPlaybackOptions,
   type PopupBackdropController,
   type PopupInteractionDispatchResult,
+  type PopupPreparedObject,
   type PopupRuntimeStateObserver,
   type PopupRuntimeStateTransition,
   type PopupStringNodeHandle,
@@ -361,6 +362,7 @@ export function createSceneLayoutPackageRuntime(options: {
   }) => RendercoreSpinePlayer;
   readonly createSpinePopupRuntime?: (options: {
     readonly resource: SceneLayoutPackageResource["popupPackages"][string];
+    readonly tapInfoObject?: PopupPreparedObject;
     readonly backdropController?: PopupBackdropController;
     readonly observeState?: PopupRuntimeStateObserver;
   }) => SpinePopupRuntime;
@@ -432,11 +434,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #layout;
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
   readonly #areaSpinFunction:
-    import("../reel/index.js").AreaSpinFunction | undefined;
+    | import("../reel/index.js").AreaSpinFunction
+    | undefined;
   readonly #symbolValueTextBindings:
-    import("../symbol/index.js").SymbolValueTextBindingMap | undefined;
+    | import("../symbol/index.js").SymbolValueTextBindingMap
+    | undefined;
   readonly #symbolValueTextFormatters:
-    import("../symbol/index.js").SymbolValueTextFormatterMap | undefined;
+    | import("../symbol/index.js").SymbolValueTextFormatterMap
+    | undefined;
   readonly #gridCellPresentation:
     | {
         readonly createEffectController?: (options: {
@@ -448,12 +453,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #createGridCellReel: (() => RenderGridCellReelSet) | undefined;
   readonly #hostUpdatesMainReel: boolean;
   readonly #formatPopupAmount:
-    import("../popup/data/types.js").PopupAmountFormatter | undefined;
+    | import("../popup/data/types.js").PopupAmountFormatter
+    | undefined;
   readonly #createTransitionPlayer: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
   readonly #createSpinePopupRuntime: (options: {
     readonly resource: SceneLayoutPackageResource["popupPackages"][string];
+    readonly tapInfoObject?: PopupPreparedObject;
     readonly backdropController?: PopupBackdropController;
     readonly observeState?: PopupRuntimeStateObserver;
   }) => SpinePopupRuntime;
@@ -558,9 +565,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     reelPresentation: SlotReelPresentationProfileV1 | undefined,
     areaSpinFunction: import("../reel/index.js").AreaSpinFunction | undefined,
     symbolValueTextBindings:
-      import("../symbol/index.js").SymbolValueTextBindingMap | undefined,
+      | import("../symbol/index.js").SymbolValueTextBindingMap
+      | undefined,
     symbolValueTextFormatters:
-      import("../symbol/index.js").SymbolValueTextFormatterMap | undefined,
+      | import("../symbol/index.js").SymbolValueTextFormatterMap
+      | undefined,
     gridCellPresentation:
       | {
           readonly createEffectController?: (options: {
@@ -572,7 +581,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     createGridCellReel: (() => RenderGridCellReelSet) | undefined,
     hostUpdatesMainReel: boolean,
     formatPopupAmount:
-      import("../popup/data/types.js").PopupAmountFormatter | undefined,
+      | import("../popup/data/types.js").PopupAmountFormatter
+      | undefined,
     createTransitionPlayer:
       | ((options: {
           readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
@@ -581,6 +591,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     spinePopupRuntimeFactory:
       | ((options: {
           readonly resource: SceneLayoutPackageResource["popupPackages"][string];
+          readonly tapInfoObject?: PopupPreparedObject;
+          readonly backdropController?: PopupBackdropController;
+          readonly observeState?: PopupRuntimeStateObserver;
         }) => SpinePopupRuntime)
       | undefined,
     createVideoTransitionPlayer:
@@ -591,7 +604,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       | undefined,
     audioBackend: AudioBackend | undefined,
     renderObjectFactoryDependencies:
-      SceneLayoutRenderObjectFactoryDependencies | undefined,
+      | SceneLayoutRenderObjectFactoryDependencies
+      | undefined,
   ) {
     this.#renderObjectMotionRuntime = createRenderObjectMotionRuntime({
       createError: (message) => new SceneLayoutError(message),
@@ -4307,6 +4321,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       resource.manifest.type === "spine"
         ? this.#createSpinePopupRuntime({
             resource,
+            ...(this.#resource.tapInfoObject
+              ? { tapInfoObject: this.#resource.tapInfoObject }
+              : {}),
             backdropController: this.#popupBackdrop,
             observeState: (transition) =>
               this.observePopupState(id, transition),
@@ -5317,7 +5334,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const finished = createPopupSessionDeferred();
     const sessionId = this.#nextPopupSessionId++;
     let popupInstance:
-      ProgrammaticPopupSessionController["popupInstance"] | undefined;
+      | ProgrammaticPopupSessionController["popupInstance"]
+      | undefined;
     if (capturedRequest.instanceId !== undefined) {
       const root = new Container();
       root.label = `scene-layout-popup-instance:${id}:${capturedRequest.instanceId}`;

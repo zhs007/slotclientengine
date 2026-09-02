@@ -100,6 +100,24 @@ describe("typed asset reference rewriting", () => {
       kind: "image",
       path: "alpha.webp",
     });
+    const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
+    const withTapInfoObject = rewriteLayoutManifest(
+      {
+        ...latest,
+        tapInfoObject: {
+          manifest: "tap-to-continue-popup-object.manifest.json",
+        },
+      },
+      new Map([
+        [
+          "tap-to-continue-popup-object.manifest.json",
+          "tap-to-continue.hash.json",
+        ],
+      ]),
+    );
+    expect(withTapInfoObject).toMatchObject({
+      tapInfoObject: { manifest: "tap-to-continue.hash.json" },
+    });
     const imageString = rewriteImageStringManifest(
       {
         version: 1,
