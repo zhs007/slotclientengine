@@ -8,6 +8,7 @@ import {
   type SlotGameMountContext,
 } from "@slotclientengine/gameframeworks";
 import { createLeoSlotGameUiFactory } from "../src/index.js";
+import { TEST_FRAME_POLICY } from "./test-helpers.js";
 
 describe("Leo UI with the public gameframeworks contract", () => {
   it("mounts the adapter host and reflects connect, spin, present, collect, and idle", async () => {
@@ -25,6 +26,7 @@ describe("Leo UI with the public gameframeworks contract", () => {
         live: { serverUrl: "wss://gameserv.rgstest.slammerstudios.com/" },
         liveSession: session,
         betOptions: [{ bet: 5, lines: 30 }],
+        framePolicy: TEST_FRAME_POLICY,
         currency: "USD",
         locale: "en-US",
         uiFactory: createLeoSlotGameUiFactory(),

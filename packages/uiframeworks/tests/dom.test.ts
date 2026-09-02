@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { applyFrameScale, createSlotUiDom, renderState } from "../src/dom.js";
+import { createSlotUiDom, renderState } from "../src/dom.js";
 import { createMoneyFormatter } from "../src/index.js";
 import { BET_OPTIONS, createStateSnapshot } from "./test-helpers.js";
 
@@ -10,7 +10,7 @@ describe("dom", () => {
     document.body.append(root);
     const dom = createSlotUiDom({
       root,
-      designSize: { width: 941, height: 1672 },
+      framePolicy: createTestFramePolicy(),
       brandLabel: "HYPER GAMING",
       clock: stableClock(),
       formatMoney: createMoneyFormatter(),
@@ -69,7 +69,7 @@ describe("dom", () => {
     const root = document.createElement("div");
     const dom = createSlotUiDom({
       root,
-      designSize: { width: 941, height: 1672 },
+      framePolicy: createTestFramePolicy(),
       brandLabel: "HYPER GAMING",
       clock: false,
       buyBonus: { enabled: false },
@@ -124,7 +124,7 @@ describe("dom", () => {
     const clicks: string[] = [];
     const dom = createSlotUiDom({
       root,
-      designSize: { width: 941, height: 1672 },
+      framePolicy: createTestFramePolicy(),
       clock: false,
       formatMoney: createMoneyFormatter(),
       getBetControls: () => ({ canDecrease: true, canIncrease: true }),
@@ -162,7 +162,7 @@ describe("dom", () => {
     const clearSpy = vi.spyOn(window, "clearInterval");
     const dom = createSlotUiDom({
       root,
-      designSize: { width: 941, height: 1672 },
+      framePolicy: createTestFramePolicy(),
       clock: stableClock(),
       formatMoney: createMoneyFormatter(),
       getBetControls: () => ({ canDecrease: true, canIncrease: true }),
@@ -181,7 +181,7 @@ describe("dom", () => {
     const clicks: string[] = [];
     const dom = createSlotUiDom({
       root,
-      designSize: { width: 941, height: 1672 },
+      framePolicy: createTestFramePolicy(),
       clock: false,
       formatMoney: createMoneyFormatter(),
       getBetControls: () => ({ canDecrease: false, canIncrease: false }),
@@ -218,7 +218,7 @@ describe("dom", () => {
     const root = document.createElement("div");
     const dom = createSlotUiDom({
       root,
-      designSize: { width: 941, height: 1672 },
+      framePolicy: createTestFramePolicy(),
       clock: false,
       buyBonus: false,
       formatMoney: createMoneyFormatter(),
@@ -237,7 +237,7 @@ describe("dom", () => {
     const root = document.createElement("div");
     const dom = createSlotUiDom({
       root,
-      designSize: { width: 941, height: 1672 },
+      framePolicy: createTestFramePolicy(),
       clock: false,
       showFastToggle: false,
       formatMoney: createMoneyFormatter(),
@@ -247,15 +247,6 @@ describe("dom", () => {
 
     expect(dom.elements.fastButton.hidden).toBe(true);
     dom.destroy();
-  });
-
-  it("applies scale from root dimensions", () => {
-    const root = document.createElement("div");
-    setRootSize(root, 470.5, 836);
-    const frame = document.createElement("div");
-    const scale = applyFrameScale(frame, root, { width: 941, height: 1672 });
-    expect(scale).toBe(0.5);
-    expect(frame.style.transform).toBe("translate(0px, 0px) scale(0.5)");
   });
 
   it("clips the page without creating a scroll container", () => {
@@ -276,7 +267,6 @@ describe("dom", () => {
     setRootSize(root, 1125, 2000);
     const dom = createSlotUiDom({
       root,
-      designSize: { width: 1125, height: 2000 },
       framePolicy: createFocusPolicy(),
       clock: false,
       formatMoney: createMoneyFormatter(),
@@ -323,7 +313,6 @@ describe("dom", () => {
     setRootSize(root, 1125, 2000);
     const dom = createSlotUiDom({
       root,
-      designSize: { width: 1125, height: 2000 },
       framePolicy: createFocusPolicy(),
       clock: false,
       formatMoney: createMoneyFormatter(),
@@ -374,6 +363,16 @@ function createFocusPolicy() {
       top: 60,
       bottom: 60,
     },
+  };
+}
+
+function createTestFramePolicy() {
+  return {
+    mode: "maximized-focus" as const,
+    resolveViewportSize: (pageSize: {
+      readonly width: number;
+      readonly height: number;
+    }) => Object.freeze({ ...pageSize }),
   };
 }
 

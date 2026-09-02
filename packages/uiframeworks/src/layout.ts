@@ -6,13 +6,10 @@ import type {
   SlotUiViewportSnapshot,
 } from "./types.js";
 
-export const DEFAULT_SLOT_UI_DESIGN_SIZE: SlotUiDesignSize = Object.freeze({
-  width: 941,
-  height: 1672,
-});
+const SLOT_UI_REFERENCE_SHORT_SIDE = 941;
 
 export interface SlotUiLayout {
-  readonly designSize: SlotUiDesignSize;
+  readonly frameDesignSize: SlotUiDesignSize;
   readonly topInset: number;
   readonly sideInset: number;
   readonly bottomHudHeight: number;
@@ -25,35 +22,20 @@ export interface SlotUiLayout {
   readonly betStepButtonDiameter: number;
 }
 
-export function validateDesignSize(
-  designSize: SlotUiDesignSize = DEFAULT_SLOT_UI_DESIGN_SIZE,
-): SlotUiDesignSize {
-  assertPositiveFinite(designSize.width, "designSize.width");
-  assertPositiveFinite(designSize.height, "designSize.height");
+function validateSize(size: SlotUiDesignSize, label: string): SlotUiDesignSize {
+  assertPositiveFinite(size.width, `${label}.width`);
+  assertPositiveFinite(size.height, `${label}.height`);
 
   return Object.freeze({
-    width: designSize.width,
-    height: designSize.height,
+    width: size.width,
+    height: size.height,
   });
-}
-
-export function calculateFrameScale(
-  viewportWidth: number,
-  viewportHeight: number,
-  designSize: SlotUiDesignSize = DEFAULT_SLOT_UI_DESIGN_SIZE,
-): number {
-  const size = validateDesignSize(designSize);
-  assertPositiveFinite(viewportWidth, "viewportWidth");
-  assertPositiveFinite(viewportHeight, "viewportHeight");
-
-  return Math.min(viewportWidth / size.width, viewportHeight / size.height);
 }
 
 export function calculateSlotUiFrameViewport(options: {
   readonly viewportWidth: number;
   readonly viewportHeight: number;
-  readonly designSize?: SlotUiDesignSize;
-  readonly policy?: SlotUiFramePolicy;
+  readonly policy: SlotUiFramePolicy;
 }): SlotUiViewportSnapshot {
   assertPositiveFinite(options.viewportWidth, "viewportWidth");
   assertPositiveFinite(options.viewportHeight, "viewportHeight");
@@ -82,15 +64,15 @@ export function calculateSlotUiFrameViewport(options: {
 }
 
 export function createDefaultSlotLayout(
-  designSize: SlotUiDesignSize = DEFAULT_SLOT_UI_DESIGN_SIZE,
+  frameDesignSize: SlotUiDesignSize,
 ): SlotUiLayout {
-  const size = validateDesignSize(designSize);
+  const size = validateSize(frameDesignSize, "frameDesignSize");
   const shortSide = Math.min(size.width, size.height);
   const longSide = Math.max(size.width, size.height);
-  const uiScale = shortSide / DEFAULT_SLOT_UI_DESIGN_SIZE.width;
+  const uiScale = shortSide / SLOT_UI_REFERENCE_SHORT_SIDE;
 
   return Object.freeze({
-    designSize: size,
+    frameDesignSize: size,
     topInset: clamp(longSide * 0.014, 18, 34),
     sideInset: clamp(shortSide * 0.024, 20, 34),
     bottomHudHeight: clamp(longSide * 0.138, 188, 238),
@@ -107,13 +89,11 @@ export function createDefaultSlotLayout(
 function calculateFrameDesignSize(options: {
   readonly viewportWidth: number;
   readonly viewportHeight: number;
-  readonly designSize?: SlotUiDesignSize;
-  readonly policy?: SlotUiFramePolicy;
+  readonly policy: SlotUiFramePolicy;
 }): SlotUiDesignSize {
-  const designSize = validateDesignSize(options.designSize);
-  const policy = options.policy ?? { mode: "fixed" as const };
-  if (policy.mode === "fixed") {
-    return designSize;
+  const policy = options.policy;
+  if (typeof policy !== "object" || policy === null) {
+    throw new SlotUiConfigError("framePolicy is required.");
   }
   if (policy.mode === "focus") {
     return calculateFocusFrameDesignSize({
@@ -156,16 +136,17 @@ function calculateFrameDesignSize(options: {
         "framePolicy maximized-focus resolveViewportSize must be a function.",
       );
     }
-    return validateDesignSize(
+    return validateSize(
       policy.resolveViewportSize({
         width: options.viewportWidth,
         height: options.viewportHeight,
       }),
+      "framePolicy resolved viewport",
     );
   }
 
   throw new SlotUiConfigError(
-    "framePolicy.mode must be fixed, focus, orientation-focus, or maximized-focus.",
+    "framePolicy.mode must be focus, orientation-focus, or maximized-focus.",
   );
 }
 
@@ -177,9 +158,13 @@ function calculateFocusFrameDesignSize(options: {
   readonly focusRect: SlotUiFocusFramePolicy["focusRect"];
   readonly minFocusMargin: SlotUiFocusFramePolicy["minFocusMargin"];
 }): SlotUiDesignSize {
-  const maxDesignSize = validateDesignSize(options.maxDesignSize);
-  const preferredPortraitSize = validateDesignSize(
+  const maxDesignSize = validateSize(
+    options.maxDesignSize,
+    "framePolicy.maxDesignSize",
+  );
+  const preferredPortraitSize = validateSize(
     options.preferredPortraitSize,
+    "framePolicy.preferredPortraitSize",
   );
   const focusWidth = readPositiveFinite(
     options.focusRect.width,

@@ -1,8 +1,17 @@
 import type {
+  SlotGameFramePolicy,
   SlotGameStateSnapshot,
   SlotGameUiCommands,
   SlotGameUiCreateContext,
 } from "@slotclientengine/gameframeworks";
+
+export const TEST_FRAME_POLICY: SlotGameFramePolicy = Object.freeze({
+  mode: "maximized-focus",
+  resolveViewportSize: (pageSize: {
+    readonly width: number;
+    readonly height: number;
+  }) => Object.freeze({ ...pageSize }),
+});
 
 export const BET_OPTIONS = Object.freeze([
   Object.freeze({ bet: 100, lines: 30 }),
@@ -50,8 +59,7 @@ export function createContext(
 ): SlotGameUiCreateContext {
   return Object.freeze({
     root: options.root ?? document.createElement("div"),
-    designSize: Object.freeze({ width: 2000, height: 2000 }),
-    framePolicy: Object.freeze({ mode: "fixed" as const }),
+    framePolicy: TEST_FRAME_POLICY,
     betOptions: BET_OPTIONS,
     initialState: options.state ?? createState(),
     brandLabel: "game002",

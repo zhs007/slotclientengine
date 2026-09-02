@@ -50,7 +50,7 @@ describe("state", () => {
     expect(new SlotGameConfigError("bad")).toBeInstanceOf(Error);
   });
 
-  it("updates state and exposes a UI-compatible snapshot", () => {
+  it("updates state", () => {
     const store = new SlotGameStateStore({ betOptions: BET_OPTIONS });
     store.increaseBet();
     expect(store.getState().betIndex).toBe(1);
@@ -77,11 +77,6 @@ describe("state", () => {
       autoMode: true,
       spinState: "presenting",
     });
-    expect(store.getUiState()).toMatchObject({
-      designSize: { width: 941, height: 1672 },
-      spinState: "presenting",
-    });
-
     store.setError("boom");
     expect(store.getState()).toMatchObject({
       error: "boom",

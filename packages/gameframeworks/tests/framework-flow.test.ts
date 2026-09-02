@@ -9,6 +9,7 @@ import {
   BET_OPTIONS,
   MockAdapter,
   MockClient,
+  TEST_FRAME_POLICY,
   createMockGameLogic,
   createSpinResult,
 } from "./test-helpers.js";
@@ -29,6 +30,7 @@ describe("framework flow", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost", token: "secret" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => client,
       performanceObserver: {
         now: () => ++clock,
@@ -85,6 +87,7 @@ describe("framework flow", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => new MockClient(),
       performanceObserver: {
         onEvent: () => {
@@ -108,6 +111,7 @@ describe("framework flow", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       initialMuted: true,
       initialFastMode: true,
       initialAutoMode: true,
@@ -144,6 +148,7 @@ describe("framework flow", () => {
       gameAdapter: adapter,
       live: { serverUrl: "ws://localhost", token: "t", gamecode: "g" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       initialBetIndex: 1,
       clientFactory: () => client,
       onStateChange: (state) => states.push(state.spinState),
@@ -195,6 +200,7 @@ describe("framework flow", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => client,
       logicFactory: () => createMockGameLogic(0),
     });
@@ -219,6 +225,7 @@ describe("framework flow", () => {
       gameAdapter: adapter,
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => client,
     });
     await framework.connect();
@@ -241,6 +248,7 @@ describe("framework flow", () => {
       gameAdapter: failedAdapter,
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => failedClient,
     });
     await failed.connect();
@@ -264,6 +272,7 @@ describe("framework flow", () => {
         gameAdapter: adapter,
         live: { serverUrl: "ws://localhost" },
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
         clientFactory: () => new MockClient(),
       }),
     ).toThrow(/must be provided together/);
@@ -278,6 +287,7 @@ describe("framework flow", () => {
       gameAdapter: adapter,
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       liveSession,
     });
 
@@ -299,6 +309,7 @@ describe("framework flow", () => {
         gameAdapter: new MockAdapter(),
         live: { serverUrl: "ws://localhost" },
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
         liveSession: new MockLiveSession(),
         clientFactory: () => new MockClient(),
       }),
@@ -313,6 +324,7 @@ describe("framework flow", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => zeroClient,
     });
     await zeroFramework.connect();
@@ -326,6 +338,7 @@ describe("framework flow", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => multiClient,
     });
     await multiFramework.connect();
@@ -343,6 +356,7 @@ describe("framework flow", () => {
       gameAdapter: adapter,
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => adapterClient,
     });
     await framework.connect();
@@ -358,6 +372,7 @@ describe("framework flow", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => collectClient,
     });
     await collectFramework.connect();
@@ -374,6 +389,7 @@ describe("framework flow", () => {
       gameAdapter: adapter,
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => client,
       buildSpinRequest: () => ({ ctrlname: "spin2", autonums: 3 }),
     });
@@ -414,6 +430,7 @@ describe("framework flow", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => client,
       buildSpinRequest: () => ({
         autonums: -1,
@@ -463,6 +480,7 @@ describe("framework flow", () => {
         gameAdapter: new MockAdapter(),
         live: { serverUrl: "ws://localhost" },
         betOptions: [],
+        framePolicy: TEST_FRAME_POLICY,
         clientFactory: () => new MockClient(),
         rngConsole: { target: constructorTarget },
       }),
@@ -480,6 +498,7 @@ describe("framework flow", () => {
       },
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => new MockClient(),
       rngConsole: { target: mountTarget },
     });
@@ -497,7 +516,6 @@ describe("framework flow", () => {
       gameAdapter: adapter,
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
-      designSize: { width: 1125, height: 2000 },
       framePolicy: createFocusPolicy(),
       clientFactory: () => new MockClient(),
     });
@@ -538,7 +556,6 @@ describe("framework flow", () => {
       gameAdapter: adapter,
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
-      designSize: { width: 1125, height: 2000 },
       framePolicy: createFocusPolicy(),
       clientFactory: () => new MockClient(),
       onError: (error) => errors.push(error),
@@ -566,6 +583,7 @@ describe("framework flow", () => {
         gameAdapter: new MockAdapter(),
         live: { serverUrl: "ws://localhost" },
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
       }),
     ).toThrow(/root/);
     expect(() =>
@@ -574,6 +592,7 @@ describe("framework flow", () => {
         gameAdapter: {} as never,
         live: { serverUrl: "ws://localhost" },
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
       }),
     ).toThrow(/gameAdapter/);
     expect(() =>
@@ -582,6 +601,7 @@ describe("framework flow", () => {
         gameAdapter: new MockAdapter(),
         live: {} as never,
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
       }),
     ).toThrow(/serverUrl/);
 
@@ -590,6 +610,7 @@ describe("framework flow", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => new MockClient(),
       buildSpinRequest: () => null as never,
     });

@@ -1,9 +1,4 @@
-import {
-  DEFAULT_SLOT_UI_DESIGN_SIZE,
-  validateBetOptions,
-  validateDesignSize,
-  type SlotUiStateSnapshot,
-} from "@slotclientengine/uiframeworks";
+import { validateBetOptions } from "@slotclientengine/uiframeworks";
 import { SlotGameConfigError } from "./errors.js";
 import type {
   SlotGameBetOption,
@@ -12,7 +7,6 @@ import type {
 } from "./types.js";
 
 export interface SlotGameStateInit {
-  readonly designSize?: { readonly width: number; readonly height: number };
   readonly betOptions: readonly SlotGameBetOption[];
   readonly initialBetIndex?: number;
   readonly initialBalance?: number;
@@ -23,14 +17,10 @@ export interface SlotGameStateInit {
 }
 
 export class SlotGameStateStore {
-  readonly #designSize: { readonly width: number; readonly height: number };
   readonly #betOptions: readonly SlotGameBetOption[];
   #state: SlotGameStateSnapshot;
 
   constructor(init: SlotGameStateInit) {
-    this.#designSize = validateDesignSize(
-      init.designSize ?? DEFAULT_SLOT_UI_DESIGN_SIZE,
-    );
     this.#betOptions = validateBetOptions(init.betOptions);
     const betIndex = init.initialBetIndex ?? 0;
     assertBetIndex(betIndex, this.#betOptions);
@@ -51,23 +41,12 @@ export class SlotGameStateStore {
     });
   }
 
-  get designSize(): { readonly width: number; readonly height: number } {
-    return this.#designSize;
-  }
-
   get betOptions(): readonly SlotGameBetOption[] {
     return this.#betOptions;
   }
 
   getState(): SlotGameStateSnapshot {
     return this.#state;
-  }
-
-  getUiState(): SlotUiStateSnapshot {
-    return Object.freeze({
-      designSize: Object.freeze({ ...this.#designSize }),
-      ...this.#state,
-    });
   }
 
   setConnected(connected: boolean): SlotGameStateSnapshot {

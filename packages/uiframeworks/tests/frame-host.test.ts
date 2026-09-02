@@ -1,11 +1,11 @@
 import { createSlotUiFrameHost } from "../src/index.js";
 
 describe("slot UI frame host", () => {
-  it("synchronously creates stable hosts and a fixed viewport", () => {
+  it("synchronously creates stable hosts from an explicit viewport policy", () => {
     const root = sizedRoot(470.5, 836);
     const host = createSlotUiFrameHost({
       root,
-      designSize: { width: 941, height: 1672 },
+      framePolicy: constantViewportPolicy(941, 1672),
     });
 
     expect(root.firstElementChild).toBe(host.elements.page);
@@ -29,7 +29,6 @@ describe("slot UI frame host", () => {
     const root = sizedRoot(1125, 2000);
     const host = createSlotUiFrameHost({
       root,
-      designSize: { width: 1125, height: 2000 },
       framePolicy: {
         mode: "focus",
         maxDesignSize: { width: 2000, height: 2000 },
@@ -60,7 +59,6 @@ describe("slot UI frame host", () => {
     const portraitRoot = sizedRoot(390, 844);
     const orientationHost = createSlotUiFrameHost({
       root: portraitRoot,
-      designSize: { width: 1280, height: 720 },
       framePolicy: {
         mode: "orientation-focus",
         variants: {
@@ -82,7 +80,6 @@ describe("slot UI frame host", () => {
     const resolver = vi.fn(() => ({ width: 840, height: 1200 }));
     const maximizedHost = createSlotUiFrameHost({
       root: sizedRoot(1200, 1200),
-      designSize: { width: 2000, height: 2000 },
       framePolicy: { mode: "maximized-focus", resolveViewportSize: resolver },
     });
     expect(resolver).toHaveBeenCalledWith({ width: 1200, height: 1200 });
@@ -99,11 +96,11 @@ describe("slot UI frame host", () => {
     const secondRoot = sizedRoot(800, 400);
     const first = createSlotUiFrameHost({
       root: firstRoot,
-      designSize: { width: 1000, height: 1000 },
+      framePolicy: constantViewportPolicy(1000, 1000),
     });
     const second = createSlotUiFrameHost({
       root: secondRoot,
-      designSize: { width: 1000, height: 1000 },
+      framePolicy: constantViewportPolicy(1000, 1000),
     });
     const firstListener = vi.fn();
     const secondListener = vi.fn();
@@ -121,6 +118,13 @@ describe("slot UI frame host", () => {
     second.destroy();
   });
 });
+
+function constantViewportPolicy(width: number, height: number) {
+  return {
+    mode: "maximized-focus" as const,
+    resolveViewportSize: () => Object.freeze({ width, height }),
+  };
+}
 
 function sizedRoot(width: number, height: number): HTMLElement {
   const root = document.createElement("div");

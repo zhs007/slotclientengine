@@ -17,7 +17,6 @@ import {
   validateInspectedSlotTemplateCompatibility,
   validateSlotTemplateCompatibility,
   type SceneLayoutManifest,
-  type SceneLayoutManifestLatest,
   type SlotTemplateCompatibilitySnapshot,
   type SlotTemplatePresentationProfileV1,
 } from "@slotclientengine/rendercore/scene-layout/editor";
@@ -173,7 +172,6 @@ export async function createSceneLayoutSlotGameTemplate(options: {
       live,
       betOptions: readiness.normalizedConfig.wager.betOptions,
       initialBetIndex: readiness.normalizedConfig.wager.initialBetIndex,
-      designSize: resolveInitialDesignSize(resource.manifest),
       framePolicy,
       brandLabel: readiness.normalizedConfig.title,
       ...(options.liveSession ? { liveSession: options.liveSession } : {}),
@@ -308,26 +306,6 @@ function parseBetOption(value: unknown, path: string): SlotGameBetOption {
     lines,
     ...(times === undefined ? {} : { times }),
     ...(label ? { label } : {}),
-  };
-}
-
-function resolveInitialDesignSize(manifest: SceneLayoutManifestLatest): {
-  readonly width: number;
-  readonly height: number;
-} {
-  const mode = manifest.gameModes.modes.find(
-    (candidate) => candidate.id === manifest.gameModes.initialMode,
-  )!;
-  const variant = mode.main.variants.landscape;
-  return {
-    width:
-      variant.focusRect.width +
-      (variant.minFocusMargin?.left ?? 0) +
-      (variant.minFocusMargin?.right ?? 0),
-    height:
-      variant.focusRect.height +
-      (variant.minFocusMargin?.top ?? 0) +
-      (variant.minFocusMargin?.bottom ?? 0),
   };
 }
 

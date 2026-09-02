@@ -1,15 +1,12 @@
 import { assertFiniteMoneyAmount } from "./format.js";
-import { DEFAULT_SLOT_UI_DESIGN_SIZE, validateDesignSize } from "./layout.js";
 import { SlotUiConfigError } from "./errors.js";
 import type {
   SlotUiBetOption,
-  SlotUiDesignSize,
   SlotUiSpinState,
   SlotUiStateSnapshot,
 } from "./types.js";
 
 export interface SlotUiStateInit {
-  readonly designSize?: SlotUiDesignSize;
   readonly betOptions: readonly SlotUiBetOption[];
   readonly initialBetIndex?: number;
   readonly initialBalance?: number;
@@ -25,20 +22,15 @@ export interface BetControlsState {
 }
 
 export class SlotUiStateStore {
-  readonly #designSize: SlotUiDesignSize;
   readonly #betOptions: readonly SlotUiBetOption[];
   #state: SlotUiStateSnapshot;
 
   constructor(init: SlotUiStateInit) {
-    this.#designSize = validateDesignSize(
-      init.designSize ?? DEFAULT_SLOT_UI_DESIGN_SIZE,
-    );
     this.#betOptions = validateBetOptions(init.betOptions);
     const betIndex = init.initialBetIndex ?? 0;
     assertBetIndex(betIndex, this.#betOptions);
 
     this.#state = freezeState({
-      designSize: this.#designSize,
       connected: false,
       spinState: "idle",
       balance:
@@ -212,7 +204,6 @@ function assertSpinState(value: SlotUiSpinState): void {
 function freezeState(state: SlotUiStateSnapshot): SlotUiStateSnapshot {
   return Object.freeze({
     ...state,
-    designSize: Object.freeze({ ...state.designSize }),
     betOption: Object.freeze({ ...state.betOption }),
   });
 }

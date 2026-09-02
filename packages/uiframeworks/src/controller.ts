@@ -1,6 +1,5 @@
 import { createSlotUiDom } from "./dom.js";
 import { createMoneyFormatter } from "./format.js";
-import { DEFAULT_SLOT_UI_DESIGN_SIZE, validateDesignSize } from "./layout.js";
 import { SlotUiStateStore, getBetControls } from "./state.js";
 import { SlotUiConfigError } from "./errors.js";
 import type {
@@ -13,11 +12,7 @@ export function createSlotUiController(
   options: SlotUiControllerOptions,
 ): SlotUiController {
   validateControllerOptions(options);
-  const designSize = validateDesignSize(
-    options.designSize ?? DEFAULT_SLOT_UI_DESIGN_SIZE,
-  );
   const stateStore = new SlotUiStateStore({
-    designSize,
     betOptions: options.betOptions,
     initialBetIndex: options.initialBetIndex,
     initialBalance: options.initialBalance,
@@ -32,7 +27,6 @@ export function createSlotUiController(
 
   const dom = createSlotUiDom({
     root: options.root,
-    designSize,
     framePolicy: options.framePolicy,
     brandLabel: options.brandLabel,
     clock: options.clock,

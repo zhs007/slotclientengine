@@ -84,10 +84,7 @@ function freezeUiCreateContext(
 ): SlotGameUiCreateContext {
   return Object.freeze({
     root: context.root,
-    designSize: context.designSize,
-    ...(context.framePolicy === undefined
-      ? {}
-      : { framePolicy: freezeFramePolicy(context.framePolicy) }),
+    framePolicy: freezeFramePolicy(context.framePolicy),
     betOptions: context.betOptions,
     initialState: context.initialState,
     ...(context.brandLabel === undefined
@@ -103,7 +100,10 @@ function freezeUiCreateContext(
 }
 
 function freezeFramePolicy(policy: SlotGameFramePolicy): SlotGameFramePolicy {
-  if (policy.mode === "fixed" || policy.mode === "maximized-focus") {
+  if (typeof policy !== "object" || policy === null) {
+    throw new SlotGameConfigError("framePolicy is required.");
+  }
+  if (policy.mode === "maximized-focus") {
     return Object.freeze({ ...policy });
   }
   if (policy.mode === "focus") {

@@ -10,6 +10,7 @@ import {
 import {
   BET_OPTIONS,
   MockClient,
+  TEST_FRAME_POLICY,
   createStateSnapshot,
   createMockGameLogic,
   createSpinResult,
@@ -35,6 +36,7 @@ describe("public exports and framework", () => {
     const controller = createSlotUiController({
       root,
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       initialBalance: 100,
       handlers: {
         onSpin: () => calls.push("spin"),
@@ -81,6 +83,7 @@ describe("public exports and framework", () => {
       gameAdapter: adapter,
       live: { serverUrl: "ws://localhost", token: "t", gamecode: "g" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       initialBetIndex: 1,
       brandLabel: "HYPER GAMING",
       clock: { format: () => "18:25", updateIntervalMs: 60_000 },
@@ -163,6 +166,7 @@ describe("public exports and framework", () => {
       gameAdapter: createAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => client,
       logicFactory: createMockGameLogic,
     });
@@ -177,6 +181,7 @@ describe("public exports and framework", () => {
       gameAdapter: createAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => failing,
       logicFactory: createMockGameLogic,
       onError: (error) => errors.push(error.message),
@@ -200,6 +205,7 @@ describe("public exports and framework", () => {
       },
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => client,
       logicFactory: createMockGameLogic,
     });
@@ -219,6 +225,7 @@ describe("public exports and framework", () => {
         gameAdapter: createAdapter(),
         live: { serverUrl: "http://localhost" },
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
       }),
     ).toThrow(/ws/);
     expect(() =>
@@ -227,6 +234,7 @@ describe("public exports and framework", () => {
         gameAdapter: createAdapter(),
         live: { serverUrl: "ws://localhost" },
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
       }),
     ).toThrow(/root/);
     expect(() =>
@@ -235,6 +243,7 @@ describe("public exports and framework", () => {
         gameAdapter: { mount: () => undefined } as unknown as SlotGameAdapter,
         live: { serverUrl: "ws://localhost" },
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
       }),
     ).toThrow(/gameAdapter/);
     expect(() =>
@@ -243,6 +252,7 @@ describe("public exports and framework", () => {
         gameAdapter: createAdapter(),
         live: {} as never,
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
       }),
     ).toThrow(/serverUrl/);
     expect(() =>
@@ -251,6 +261,7 @@ describe("public exports and framework", () => {
         gameAdapter: createAdapter(),
         live: { serverUrl: "ws://localhost" },
         betOptions: BET_OPTIONS,
+        framePolicy: TEST_FRAME_POLICY,
         clock: { updateIntervalMs: 0 },
       }),
     ).toThrow(/clock\.updateIntervalMs/);

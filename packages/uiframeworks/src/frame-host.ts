@@ -1,10 +1,8 @@
 import {
-  calculateFrameScale,
   calculateSlotUiFrameViewport,
   createDefaultSlotLayout,
 } from "./layout.js";
 import type {
-  SlotUiDesignSize,
   SlotUiFramePolicy,
   SlotUiViewportListener,
   SlotUiViewportSnapshot,
@@ -12,8 +10,7 @@ import type {
 
 export interface SlotUiFrameHostOptions {
   readonly root: HTMLElement;
-  readonly designSize: SlotUiDesignSize;
-  readonly framePolicy?: SlotUiFramePolicy;
+  readonly framePolicy: SlotUiFramePolicy;
 }
 
 export interface SlotUiFrameHostElements {
@@ -82,33 +79,21 @@ export function createSlotUiFrameHost(
   });
 }
 
-export function applyFrameScale(
-  frame: HTMLElement,
-  root: HTMLElement,
-  designSize: SlotUiDesignSize,
-): number {
-  const viewport = calculateSlotUiFrameViewport({
-    ...readRootViewport(root),
-    designSize,
-    policy: { mode: "fixed" },
-  });
-  applyFrameViewport(frame, viewport);
-  return calculateFrameScale(
-    viewport.pageSize.width,
-    viewport.pageSize.height,
-    designSize,
-  );
-}
-
 export function applyFrameViewport(
   frame: HTMLElement,
   viewport: SlotUiViewportSnapshot,
 ): void {
   const layout = createDefaultSlotLayout(viewport.frameDesignSize);
-  frame.style.width = `${layout.designSize.width}px`;
-  frame.style.height = `${layout.designSize.height}px`;
-  frame.style.setProperty("--slot-ui-width", `${layout.designSize.width}px`);
-  frame.style.setProperty("--slot-ui-height", `${layout.designSize.height}px`);
+  frame.style.width = `${layout.frameDesignSize.width}px`;
+  frame.style.height = `${layout.frameDesignSize.height}px`;
+  frame.style.setProperty(
+    "--slot-ui-width",
+    `${layout.frameDesignSize.width}px`,
+  );
+  frame.style.setProperty(
+    "--slot-ui-height",
+    `${layout.frameDesignSize.height}px`,
+  );
   frame.style.setProperty(
     "--slot-ui-bottom-hud-height",
     `${layout.bottomHudHeight}px`,
@@ -147,7 +132,6 @@ export function applyFrameViewport(
 function createViewport(options: SlotUiFrameHostOptions) {
   return calculateSlotUiFrameViewport({
     ...readRootViewport(options.root),
-    designSize: options.designSize,
     policy: options.framePolicy,
   });
 }

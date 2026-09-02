@@ -2,6 +2,7 @@ import type { GameLogic } from "@slotclientengine/logiccore";
 import type { SpinParams, UserInfo } from "@slotclientengine/netcore";
 import type {
   SlotUiBetOption,
+  SlotUiFramePolicy,
   SlotUiStateSnapshot,
   SlotcraftClientLike,
 } from "../src/index.js";
@@ -12,12 +13,19 @@ export const BET_OPTIONS: readonly SlotUiBetOption[] = Object.freeze([
   Object.freeze({ bet: 5, lines: 20 }),
 ]);
 
+export const TEST_FRAME_POLICY: SlotUiFramePolicy = Object.freeze({
+  mode: "maximized-focus",
+  resolveViewportSize: (pageSize: {
+    readonly width: number;
+    readonly height: number;
+  }) => Object.freeze({ ...pageSize }),
+});
+
 export function createStateSnapshot(
   overrides: Partial<SlotUiStateSnapshot> = {},
 ): SlotUiStateSnapshot {
   const betIndex = overrides.betIndex ?? 0;
   return Object.freeze({
-    designSize: Object.freeze({ width: 941, height: 1672 }),
     connected: true,
     spinState: "idle",
     balance: 1000,
@@ -57,6 +65,10 @@ export function createMockGameLogic(): GameLogic {
     getComponentScenes: () => [],
     getComponentOtherScenes: () => [],
     getComponentResults: () => [],
+    getFeatureBar2Data: () => undefined,
+    getLastComponentScenes: () => [],
+    getLastComponentOtherScenes: () => [],
+    getLastComponentResults: () => [],
   };
 }
 

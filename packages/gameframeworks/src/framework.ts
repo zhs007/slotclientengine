@@ -64,7 +64,6 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       this.#options = options;
       this.#emitPerformance("startup", 0, "framework-created");
       this.#state = new SlotGameStateStore({
-        designSize: options.designSize,
         betOptions: options.betOptions,
         initialBetIndex: options.initialBetIndex,
         initialBalance: options.initialBalance,
@@ -86,7 +85,6 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       const uiFactory = options.uiFactory ?? createDefaultSlotGameUiFactory();
       this.#ui = createAndValidateUi(uiFactory, {
         root: options.root,
-        designSize: this.#state.designSize,
         framePolicy: options.framePolicy,
         betOptions: this.#state.betOptions,
         initialState: this.#state.getState(),
