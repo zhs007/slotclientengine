@@ -1,5 +1,6 @@
 import {
   parsePopupManifest,
+  parsePopupObjectManifest,
   AWARD_POPUP_STATES,
   POPUP_SEGMENTS,
   migrateLegacyPopupSegments,
@@ -9,6 +10,7 @@ import {
   type PopupAmountFormat,
   type PopupLayer,
   type PopupManifest,
+  type PopupObjectManifestV1,
   type PopupOverlayLayer,
   type PopupResourceSpec,
   type SingleStatePopupLayerV9,
@@ -55,7 +57,7 @@ export interface PopupSpineAttachmentTarget {
 export interface PopupEditorProject {
   formatVersion: 9;
   name: string;
-  type: "award-celebration" | "spine" | "single-state";
+  type: "award-celebration" | "spine" | "single-state" | "popup-object";
   id: string;
   adaptation: {
     focus: { left: number; right: number; top: number; bottom: number };
@@ -124,7 +126,7 @@ export function popupEditorVisibilityStates(
 ): readonly PopupVisibilityState[] {
   return type === "award-celebration"
     ? AWARD_POPUP_STATES
-    : type === "single-state"
+    : type === "single-state" || type === "popup-object"
       ? (["active"] as const)
       : POPUP_SEGMENTS;
 }
@@ -138,7 +140,7 @@ export function migratePopupEditorVisibility(
   const layers =
     project.type === "award-celebration"
       ? [...project.tiers.values()].flatMap(({ layers }) => layers)
-      : project.type === "single-state"
+      : project.type === "single-state" || project.type === "popup-object"
         ? project.singleState.layers
         : project.spine.overlays;
   for (const layer of layers) {
@@ -147,7 +149,8 @@ export function migratePopupEditorVisibility(
       delete (layer as { visibleSegments?: unknown }).visibleSegments;
       continue;
     }
-    if (project.type === "single-state") continue;
+    if (project.type === "single-state" || project.type === "popup-object")
+      continue;
     if (!legacy && "visibleStates" in layer && layer.visibleStates) continue;
     const legacySegments =
       "visibleSegments" in layer && layer.visibleSegments
@@ -185,7 +188,11 @@ export function createPopupEditorProject(
   options: {
     readonly name?: string;
     readonly id?: string;
-    readonly type?: "award-celebration" | "spine" | "single-state";
+    readonly type?:
+      | "award-celebration"
+      | "spine"
+      | "single-state"
+      | "popup-object";
   } = {},
 ): PopupEditorProject {
   const empty = (): PopupEditorTier => ({
@@ -288,6 +295,8 @@ export function clonePopupEditorProject(
 }
 
 export function projectToManifest(project: PopupEditorProject): PopupManifest {
+  if (project.type === "popup-object")
+    throw new Error("Popup Object 项目必须导出 popup-object manifest。");
   const common = {
     version: 9 as const,
     kind: "popup" as const,
@@ -434,6 +443,35 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
   });
 }
 
+export function projectToPopupObjectManifest(
+  project: PopupEditorProject,
+): PopupObjectManifestV1 {
+  if (project.type !== "popup-object")
+    throw new Error("只有 Popup Object 项目可以导出 popup-object manifest。");
+  const used = new Set(
+    project.singleState.layers.flatMap(({ resource }) =>
+      resource ? [resource] : [],
+    ),
+  );
+  const resources = Object.fromEntries(
+    [...used].sort().map((id) => {
+      const resource = project.resources.get(id);
+      if (!resource)
+        throw new Error(`Popup Object 图层引用缺失 resource：${id}`);
+      if (resource.kind === "popup-object")
+        throw new Error("Popup Object 不允许嵌套另一个 Popup Object。");
+      return [id, resource.spec];
+    }),
+  );
+  return parsePopupObjectManifest({
+    version: 1,
+    kind: "popup-object",
+    name: project.name,
+    resources,
+    layers: structuredClone(project.singleState.layers),
+  });
+}
+
 export function migratePopupPromptToTextLayer(
   project: PopupEditorProject,
 ): boolean {
@@ -501,9 +539,11 @@ export function popupEditorProjectDiagnostics(
       ]);
     }
   }
-  if (project.type === "single-state") {
+  if (project.type === "single-state" || project.type === "popup-object") {
     try {
-      projectToManifest(project);
+      if (project.type === "popup-object")
+        projectToPopupObjectManifest(project);
+      else projectToManifest(project);
       return Object.freeze([]);
     } catch (error) {
       return Object.freeze([
@@ -629,7 +669,9 @@ export function addSingleStateLayer(
           ? { ...base, kind: "image", anchor: { x: 0.5, y: 0.5 } }
           : resource.kind === "vni"
             ? { ...base, kind: "vni" }
-            : { ...base, kind: "spine" };
+            : resource.kind === "popup-object"
+              ? { ...base, kind: "popup-object" }
+              : { ...base, kind: "spine" };
   project.singleState.layers = [...layers, layer];
 }
 
@@ -799,6 +841,8 @@ export function addLayer(
         keepParticlesAlive: true,
       },
     };
+  else if (resource.kind === "popup-object")
+    layer = { ...base, kind: "popup-object" };
   else
     layer = {
       ...base,
@@ -959,7 +1003,9 @@ export function validatePopupEditorAttachments(
 ): void {
   const validateScope = (
     layers: readonly (
-      PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV9
+      | PopupLayer
+      | PopupOverlayLayer
+      | SingleStatePopupLayerV9
     )[],
     label: string,
     allowMainSpine: boolean,
@@ -1009,7 +1055,7 @@ export function validatePopupEditorAttachments(
     );
     return;
   }
-  if (project.type === "single-state") {
+  if (project.type === "single-state" || project.type === "popup-object") {
     validateScope(
       project.singleState.layers,
       "singleState.layers",
@@ -1075,7 +1121,7 @@ export function applyImportedResourceBindings(
 ): void {
   const resource = project.resources.get(resourceKey);
   if (!resource) throw new Error(`resource 不存在：${resourceKey}`);
-  if (project.type === "single-state") {
+  if (project.type === "single-state" || project.type === "popup-object") {
     addSingleStateLayer(project, resourceKey);
     return;
   }

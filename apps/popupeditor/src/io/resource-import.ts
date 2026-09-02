@@ -2,6 +2,7 @@ import {
   createBoundedSourceIndex,
   extractBoundedZip,
   resolvePackagePath,
+  sha256Hex,
   type SourceFileLike,
 } from "@slotclientengine/browserartifactio";
 import {
@@ -11,6 +12,7 @@ import {
   commitEditorAssetImport,
   createEditorAssetEntry,
   createEmptyEditorAssetWorkspace,
+  decodeEditorAssetsMap,
   normalizeEditorPackageZipEntries,
   resolveEditorAssetImportReview,
   reviewEditorAssetImport,
@@ -30,7 +32,14 @@ import {
   parseWinAmountAnimationManifest,
   validateOfficialSpineResource,
 } from "@slotclientengine/rendercore";
-import { validatePopupFontBytes } from "@slotclientengine/rendercore/popup/editor";
+import {
+  collectMappedPopupObjectAssetKeys,
+  parsePopupObjectManifest,
+  namespaceMappedPopupObjectPackageFiles,
+  POPUP_OBJECT_MANIFEST_PATH,
+  resolvePopupObjectPackageFiles,
+  validatePopupFontBytes,
+} from "@slotclientengine/rendercore/popup/editor";
 import type {
   AwardTierId,
   PopupResourceSpec,
@@ -43,6 +52,7 @@ import {
 } from "@slotclientengine/vnicore/data";
 import {
   clonePopupEditorProject,
+  garbageCollectResourceStorage,
   validatePopupEditorAttachments,
   type PopupEditorProject,
   type PopupEditorResource,
@@ -120,16 +130,22 @@ export async function discoverPopupResources(
     if (isZip(bytes)) {
       const entries = normalizeEditorPackageZipEntries(
         extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS }),
-        ["image-string.manifest.json", "manifest.json"],
+        [
+          "image-string.manifest.json",
+          "manifest.json",
+          POPUP_OBJECT_MANIFEST_PATH,
+        ],
       );
       accept({
-        candidate: entries.has("image-string.manifest.json")
-          ? await discoverImageStringZip(path, bytes)
-          : await discoverVniBundleZip(
-              path,
-              entries,
-              options.vniProfileSelections?.get(path),
-            ),
+        candidate: entries.has(POPUP_OBJECT_MANIFEST_PATH)
+          ? await discoverPopupObjectZip(path, entries)
+          : entries.has("image-string.manifest.json")
+            ? await discoverImageStringZip(path, bytes)
+            : await discoverVniBundleZip(
+                path,
+                entries,
+                options.vniProfileSelections?.get(path),
+              ),
         consumed: new Set([path]),
       });
     }
@@ -150,6 +166,13 @@ export async function discoverPopupResources(
   if (looseImageStringManifest)
     throw new Error(
       `${looseImageStringManifest} 是散装 ImgNumber；请导入 ImgNumber Editor 导出的 ZIP。`,
+    );
+  const loosePopupObjectManifest = [...jsonValues.keys()].find((path) =>
+    path.toLowerCase().endsWith(POPUP_OBJECT_MANIFEST_PATH),
+  );
+  if (loosePopupObjectManifest)
+    throw new Error(
+      `${loosePopupObjectManifest} 是散装 Popup Object；请导入 Popup Editor 导出的 ZIP。`,
     );
   const looseVniProject = [...jsonValues].find(([, value]) => {
     try {
@@ -421,6 +444,7 @@ export async function commitImportReview(
     adapter: popupProjectAdapter,
   });
   candidateProject.assets = new Map(committed.workspace.entries);
+  garbageCollectResourceStorage(candidateProject);
   Object.assign(project, candidateProject);
   return Object.freeze({ assets: resolvedAssets, candidates });
 }
@@ -487,6 +511,73 @@ async function discoverImageStringZip(
     files: nested,
   });
   return createImageStringCandidate(path, manifest, resolved.files);
+}
+
+async function discoverPopupObjectZip(
+  sourcePath: string,
+  files: ReadonlyMap<string, Uint8Array>,
+): Promise<PopupImportReviewCandidate> {
+  const rootBytes = required(files, POPUP_OBJECT_MANIFEST_PATH);
+  const manifest = parsePopupObjectManifest(parseJson(rootBytes));
+  const resolved = await resolvePopupObjectPackageFiles({ manifest, files });
+  const keyPrefix = `${manifest.name}-${await popupObjectClosureDigest(resolved)}`;
+  const namespaced = namespaceMappedPopupObjectPackageFiles({
+    manifest,
+    files: resolved,
+    keyPrefix,
+  });
+  const rootKey = `${manifest.name}-${POPUP_OBJECT_MANIFEST_PATH}`;
+  const validationFiles = new Map(namespaced.files);
+  validationFiles.set(
+    POPUP_OBJECT_MANIFEST_PATH,
+    required(namespaced.files, namespaced.rootKey),
+  );
+  validationFiles.delete(namespaced.rootKey);
+  const keys = collectMappedPopupObjectAssetKeys({
+    manifest: namespaced.manifest,
+    files: validationFiles,
+  });
+  const map = decodeEditorAssetsMap(required(files, "assets.map.json"));
+  const assets: EditorAssetEntry[] = [
+    await createEditorAssetEntry({
+      key: rootKey,
+      mediaType: "application/json",
+      bytes: required(namespaced.files, namespaced.rootKey),
+    }),
+  ];
+  for (const key of keys) {
+    const sourceKey = key.slice(`${keyPrefix}-`.length);
+    const entry = map.files[sourceKey];
+    if (!entry)
+      throw new Error(`Popup Object assets.map 缺少 key：${sourceKey}`);
+    assets.push(
+      await createEditorAssetEntry({
+        key,
+        mediaType: entry.mediaType,
+        bytes: required(namespaced.files, key),
+      }),
+    );
+  }
+  return candidate({
+    rootKey,
+    kind: "popup-object",
+    primarySource: sourcePath,
+    dependencyCount: keys.length,
+    summary: `${manifest.name} · ${manifest.layers.length} layers`,
+    spec: { kind: "popup-object", manifest: rootKey },
+    assets,
+  });
+}
+
+async function popupObjectClosureDigest(
+  files: ReadonlyMap<string, Uint8Array>,
+): Promise<string> {
+  const identities: string[] = [];
+  for (const [key, bytes] of [...files].sort(([left], [right]) =>
+    left.localeCompare(right, "en"),
+  ))
+    identities.push(`${key}:${await sha256Hex(bytes)}`);
+  return sha256Hex(new TextEncoder().encode(identities.join("\n")));
 }
 
 async function discoverImageStringDirectory(
@@ -811,6 +902,34 @@ const popupProjectAdapter: EditorAssetRewriteAdapter<PopupEditorProject> = {
   validateProject(project, workspace) {
     const candidate = clonePopupEditorProject(project);
     candidate.assets = new Map(workspace.entries);
+    if (
+      candidate.type === "popup-object" &&
+      [...candidate.resources.values()].some(
+        ({ kind }) => kind === "popup-object",
+      )
+    )
+      throw new Error("Popup Object 项目不允许导入另一个 Popup Object。");
+    const files = new Map(
+      [...workspace.entries].map(([key, entry]) => [key, entry.bytes] as const),
+    );
+    for (const resource of candidate.resources.values()) {
+      if (resource.kind !== "popup-object") continue;
+      const rootBytes = files.get(resource.rootKey);
+      if (!rootBytes)
+        throw new Error(`Popup Object root 缺失：${resource.rootKey}`);
+      const manifest = parsePopupObjectManifest(parseJson(rootBytes));
+      const expected = [
+        resource.rootKey,
+        ...collectMappedPopupObjectAssetKeys({ manifest, files }),
+      ].sort((left, right) => left.localeCompare(right, "en"));
+      const actual = [...resource.keys].sort((left, right) =>
+        left.localeCompare(right, "en"),
+      );
+      if (JSON.stringify(actual) !== JSON.stringify(expected))
+        throw new Error(
+          `Popup Object owner closure 不一致：${resource.rootKey}`,
+        );
+    }
     validatePopupEditorAttachments(candidate);
   },
 };
@@ -826,6 +945,8 @@ function renamePopupSpec(
     return { ...spec, manifest: spec.manifest === from ? to : spec.manifest };
   if (spec.kind === "vni")
     return { ...spec, project: spec.project === from ? to : spec.project };
+  if (spec.kind === "popup-object")
+    return { ...spec, manifest: spec.manifest === from ? to : spec.manifest };
   return {
     ...spec,
     skeleton: spec.skeleton === from ? to : spec.skeleton,

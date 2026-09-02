@@ -11,7 +11,9 @@ import {
 } from "@slotclientengine/audiocore/data";
 import {
   loadPopupManifest,
+  parsePopupObjectManifest,
   type LatestPopupManifest,
+  type PopupObjectManifestV1,
   type PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup/data";
 import {
@@ -80,6 +82,11 @@ export function rewriteLayoutPackageReferences(options: {
         );
       } else if (isRecord(raw) && raw.kind === "popup") {
         rewritten = rewritePopupManifest(raw, options.optimization.keyMapping);
+      } else if (isRecord(raw) && raw.kind === "popup-object") {
+        rewritten = rewritePopupObjectManifest(
+          raw,
+          options.optimization.keyMapping,
+        );
       } else if (looksLikeVniProject(raw)) {
         rewritten = rewriteVniProject(raw, options.optimization.keyMapping);
       }
@@ -428,6 +435,37 @@ export function rewritePopupManifest(
   }).manifest;
 }
 
+export function rewritePopupObjectManifest(
+  value: unknown,
+  mapping: ReadonlyMap<string, string>,
+): PopupObjectManifestV1 {
+  const manifest = parsePopupObjectManifest(value);
+  const resources: Record<string, PopupResourceSpec> = {};
+  const resourceIds = new Map<string, string>();
+  for (const [id, resource] of Object.entries(manifest.resources)) {
+    const rewritten = rewritePopupResource(resource, mapping);
+    const oldRoot = popupResourceRoot(resource);
+    const nextRoot = popupResourceRoot(rewritten);
+    const nextId = id === oldRoot ? nextRoot : id;
+    if (resources[nextId])
+      throw new Error(`Popup Object resource key 转换冲突：${id} -> ${nextId}`);
+    resources[nextId] = rewritten;
+    resourceIds.set(id, nextId);
+  }
+  return parsePopupObjectManifest({
+    ...manifest,
+    resources,
+    layers: manifest.layers.map((layer) => ({
+      ...layer,
+      ...(layer.resource
+        ? {
+            resource: resourceIds.get(layer.resource) ?? layer.resource,
+          }
+        : {}),
+    })),
+  });
+}
+
 export function rewriteVniProject(
   value: unknown,
   mapping: ReadonlyMap<string, string>,
@@ -592,6 +630,8 @@ function rewritePopupResource(
     return { ...resource, manifest: rewriteRef(resource.manifest, mapping) };
   if (resource.kind === "vni")
     return { ...resource, project: rewriteRef(resource.project, mapping) };
+  if (resource.kind === "popup-object")
+    return { ...resource, manifest: rewriteRef(resource.manifest, mapping) };
   return {
     ...resource,
     skeleton: rewriteRef(resource.skeleton, mapping),
@@ -605,6 +645,7 @@ function popupResourceRoot(resource: PopupResourceSpec): string {
     return resource.path;
   if (resource.kind === "image-string") return resource.manifest;
   if (resource.kind === "vni") return resource.project;
+  if (resource.kind === "popup-object") return resource.manifest;
   return resource.skeleton;
 }
 

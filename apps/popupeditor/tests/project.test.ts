@@ -35,6 +35,7 @@ import {
   migratePopupEditorVisibility,
   popupEditorProjectDiagnostics,
   projectToManifest,
+  projectToPopupObjectManifest,
   removePopupResource,
   renameSingleStateLayer,
   reuseAwardLayerInTier,
@@ -199,6 +200,119 @@ describe("popup editor filename-key project", () => {
     ]);
     expect(manifest).not.toHaveProperty("awardCelebration");
     expect(manifest).not.toHaveProperty("spine");
+  });
+
+  it("round-trips a name-only Popup Object and imports it as a namespaced resource", async () => {
+    const project = createPopupEditorProject({
+      type: "popup-object",
+      name: "tap-to-continue",
+    });
+    const image = await createEditorAssetEntry({
+      key: "prompt.png",
+      bytes: png(1, 1),
+      mediaType: "image/png",
+    });
+    project.assets.set(image.key, image);
+    project.resources.set(image.key, {
+      rootKey: image.key,
+      kind: "image",
+      spec: {
+        kind: "image",
+        path: image.key,
+        size: { width: 1, height: 1 },
+      },
+      keys: [image.key],
+    });
+    addSingleStateLayer(project, image.key);
+    const manifest = projectToPopupObjectManifest(project);
+    expect(manifest).toMatchObject({
+      version: 1,
+      kind: "popup-object",
+      name: "tap-to-continue",
+    });
+    expect(manifest).not.toHaveProperty("adaptation");
+    expect(manifest).not.toHaveProperty("backdrop");
+
+    const exported = await exportPopupZip(project, { prepare: false });
+    expect(exported.fileName).toBe("tap-to-continue-popup-object.zip");
+    const imported = await importPopupZip(exported.bytes, { prepare: false });
+    expect(projectToPopupObjectManifest(imported)).toEqual(manifest);
+
+    const review = await discoverPopupResources([
+      new File([exported.bytes.slice().buffer], exported.fileName),
+    ]);
+    expect(review[0]).toMatchObject({
+      rootKey: "tap-to-continue-popup-object.manifest.json",
+      kind: "popup-object",
+    });
+    expect(review[0]!.exactKeys).toContain(
+      "tap-to-continue-popup-object.manifest.json",
+    );
+    expect(review[0]!.exactKeys).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^tap-to-continue-[0-9a-f]{64}-prompt\.png$/u),
+      ]),
+    );
+  });
+
+  it("keeps two versions of one Popup Object as complete owner candidates", async () => {
+    const objectZip = async (seed: number) => {
+      const object = createPopupEditorProject({
+        type: "popup-object",
+        name: "tap-to-continue",
+      });
+      const imageBytes = png(1, 1);
+      imageBytes[12] = seed;
+      const image = await createEditorAssetEntry({
+        key: "prompt.png",
+        bytes: imageBytes,
+        mediaType: "image/png",
+      });
+      object.assets.set(image.key, image);
+      object.resources.set(image.key, {
+        rootKey: image.key,
+        kind: "image",
+        spec: {
+          kind: "image",
+          path: image.key,
+          size: { width: 1, height: 1 },
+        },
+        keys: [image.key],
+      });
+      addSingleStateLayer(object, image.key);
+      return exportPopupZip(object, { prepare: false });
+    };
+    const host = createPopupEditorProject({ type: "single-state" });
+    const firstZip = await objectZip(1);
+    const first = await discoverPopupResources([
+      new File([firstZip.bytes.slice().buffer], firstZip.fileName),
+    ]);
+    await commitImportReview(host, first);
+    addSingleStateLayer(host, first[0]!.rootKey);
+
+    const secondZip = await objectZip(2);
+    const second = await discoverPopupResources([
+      new File([secondZip.bytes.slice().buffer], secondZip.fileName),
+    ]);
+    const review = await reviewPopupImportTransaction(host, second);
+    const conflictIndex = review.assets.items.findIndex(
+      ({ action }) => action === "overwrite",
+    );
+    expect(conflictIndex).toBeGreaterThanOrEqual(0);
+    expect(
+      review.assets.items.filter(({ action }) => action === "overwrite"),
+    ).toHaveLength(1);
+    await commitImportReview(host, second, [
+      { itemIndex: conflictIndex, resolution: "keep-both" },
+    ]);
+    const keptRoot = [...host.resources.keys()].find((key) =>
+      key.endsWith("popup-object.manifest-1.json"),
+    );
+    expect(keptRoot).toBeDefined();
+    addSingleStateLayer(host, keptRoot!);
+    await expect(
+      exportPopupZip(host, { prepare: false }),
+    ).resolves.toMatchObject({ fileName: "untitled-popup-popup.zip" });
   });
   it("uses project-specific states for new layers and legacy migration", () => {
     const award = createPopupEditorProject();

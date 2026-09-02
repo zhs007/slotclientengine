@@ -54,11 +54,16 @@ import {
   attachPopupLayerRuntimes,
   type PopupLayerAttachmentHandle,
 } from "./layer-attachment.js";
+import {
+  createPopupObjectInstanceRuntime,
+  type PopupObjectInstanceHandle,
+} from "./object-runtime.js";
 
 export interface PopupLayerRuntime {
   readonly container: Container;
   readonly animated: boolean;
   readonly spinePlayer?: RendercoreSpineSlotPlayer;
+  readonly objectHandle?: PopupObjectInstanceHandle;
   readonly stringNode?: {
     readonly kind: "text" | "image-string";
     readonly name: string;
@@ -167,6 +172,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   readonly #runtimeVariants = new Map<string, PopupLayerRuntime>();
   readonly #initializedRuntimes = new WeakSet<PopupLayerRuntime>();
   readonly #destroyedRuntimes = new WeakSet<PopupLayerRuntime>();
+  readonly #objectsById = new Map<string, PopupObjectInstanceHandle>();
   #initialized = false;
   #initializing: Promise<void> | null = null;
   #destroyed = false;
@@ -225,6 +231,9 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   get imageStringNodes(): readonly PopupStringNodeHandle[] {
     return this.#nodes.imageStringNodes;
   }
+  get objects(): readonly PopupObjectInstanceHandle[] {
+    return [...this.#objectsById.values()];
+  }
   getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
     this.assertUsable();
     return this.#nodes.getTextNode(selector);
@@ -232,6 +241,12 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
     this.assertUsable();
     return this.#nodes.getImageStringNode(selector);
+  }
+  getObject(id: string): PopupObjectInstanceHandle {
+    this.assertUsable();
+    const object = this.#objectsById.get(id);
+    if (!object) throw new Error(`Unknown popup object layer: ${id}.`);
+    return object;
   }
   applyViewport(
     viewportSize: Parameters<
@@ -437,6 +452,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#amount = null;
     this.#tiers.clear();
     this.#runtimeVariants.clear();
+    this.#objectsById.clear();
     this.#active = null;
     this.#showing.clear();
     this.#ending = [];
@@ -541,6 +557,14 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
           layerSpecs.push(layer);
           layersById.set(layer.id, runtime);
           runtimesById.set(layer.id, runtime);
+          if (runtime.objectHandle) {
+            const existing = this.#objectsById.get(layer.id);
+            if (existing && existing !== runtime.objectHandle)
+              throw new Error(
+                `popup object layer has inconsistent tier variants: ${layer.id}.`,
+              );
+            this.#objectsById.set(layer.id, runtime.objectHandle);
+          }
           if (runtime.stringNode)
             (
               tier.stringNodes as Map<string, PopupLayerRuntime["stringNode"]>
@@ -598,6 +622,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       this.#amount = null;
       this.#tiers.clear();
       this.#runtimeVariants.clear();
+      this.#objectsById.clear();
       throw error;
     } finally {
       this.#initializing = null;
@@ -887,8 +912,10 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       if (
         tier.amountMount &&
         this.#amount?.container.parent === tier.amountMount
-      )
-        tier.amountMount.removeChild(this.#amount.container);
+      ) {
+        const amount = this.#amount;
+        if (amount) tier.amountMount.removeChild(amount.container);
+      }
       tier.attachmentHandle?.destroy();
       tier.disposeAmountParent?.();
       if (tier.amountParent !== tier.container)
@@ -928,6 +955,9 @@ class AwardCelebrationEditorPlayer implements AwardCelebrationPlayer {
   }
   get imageStringNodes() {
     return this.#runtime.imageStringNodes;
+  }
+  get objects() {
+    return this.#runtime.objects;
   }
   applyViewport(
     ...args: Parameters<NonNullable<AwardCelebrationRuntime["applyViewport"]>>
@@ -974,6 +1004,9 @@ class AwardCelebrationEditorPlayer implements AwardCelebrationPlayer {
   }
   getImageStringNode(selector: PopupStringNodeSelector) {
     return this.#runtime.getImageStringNode(selector);
+  }
+  getObject(id: string) {
+    return this.#runtime.getObject(id);
   }
   destroy() {
     this.#runtime.destroy();
@@ -1244,6 +1277,52 @@ function defaultLayerFactory(options: {
       },
       destroy() {
         renderer.destroy();
+        container.destroy({ children: false });
+      },
+    };
+  }
+  if (layer.kind === "popup-object" && resource?.kind === "popup-object") {
+    const object = createPopupObjectInstanceRuntime({ resource });
+    container.addChild(object.handle.container);
+    let active = false;
+    return {
+      container,
+      objectHandle: object.handle,
+      animated: false,
+      configure(nextLayer) {
+        if (
+          nextLayer.kind !== "popup-object" ||
+          nextLayer.resource !== layer.resource
+        )
+          throw new Error(`popup object binding changed for ${layer.id}.`);
+      },
+      async init() {
+        await object.init();
+      },
+      enter() {
+        active = true;
+        object.setActive(true);
+      },
+      updateAmount() {},
+      update(delta) {
+        if (active) object.update(delta);
+      },
+      isLoopReady() {
+        return true;
+      },
+      requestEnd() {
+        active = false;
+        object.setActive(false);
+      },
+      isEndComplete() {
+        return true;
+      },
+      applySegment(segment) {
+        active = segment !== "end";
+        object.setActive(active);
+      },
+      destroy() {
+        object.destroy();
         container.destroy({ children: false });
       },
     };

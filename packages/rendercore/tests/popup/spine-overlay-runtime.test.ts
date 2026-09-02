@@ -1,6 +1,10 @@
 import { Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import { createSpinePopupOverlayRuntime } from "../../src/popup/spine-overlay-runtime.js";
+import {
+  parsePopupObjectManifest,
+  popupObjectToSingleStateManifest,
+} from "../../src/popup/data/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 
 describe("spine popup overlay runtime", () => {
@@ -173,6 +177,50 @@ describe("spine popup overlay runtime", () => {
     runtime.update(0.1);
     runtime.destroy();
     expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it("mounts a Popup Object as one atomic overlay and exposes its local handle", async () => {
+    const manifest = parsePopupObjectManifest({
+      version: 1,
+      kind: "popup-object",
+      name: "tap-to-continue",
+      resources: {},
+      layers: [],
+    });
+    const runtime = createSpinePopupOverlayRuntime({
+      popupId: "free-game",
+      layer: {
+        id: "continue",
+        kind: "popup-object",
+        order: 2,
+        resource: "continue-object",
+        transform: { x: 10, y: 20, scale: 0.5, rotation: 0 },
+        alpha: 1,
+        attachment: { kind: "popup-root" },
+        visibleStates: ["loop"],
+      },
+      resource: {
+        kind: "popup-object",
+        manifest,
+        resource: {
+          manifest: popupObjectToSingleStateManifest(manifest),
+          resources: {},
+          destroy() {},
+        },
+      },
+    });
+    await runtime.init();
+    expect(runtime.objectHandle).toMatchObject({ name: "tap-to-continue" });
+    runtime.start();
+    expect(runtime.container.visible).toBe(false);
+    runtime.applySegment("loop");
+    expect(runtime.container.visible).toBe(true);
+    expect(() => runtime.objectHandle!.getLayer("outside-object")).toThrow(
+      /not found/,
+    );
+    runtime.applySegment("end");
+    expect(runtime.container.visible).toBe(false);
+    runtime.destroy();
   });
 
   it("runs segmented VNI overlays and requests their authored end", async () => {

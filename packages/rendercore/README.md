@@ -231,6 +231,8 @@ Popup 使用三个显式入口：`popup/data` 提供 v1–v9 strict source parse
 
 `loadPopupManifest()` 接受任一受支持版本，先按 source version strict validate，再确定性升级并复验为 `LATEST_POPUP_MANIFEST_VERSION`（当前为 v9）。v8 新增无强制图层的 `single-state`，v9 为字体文字增加 required `widthRange`，并保留 v7 package-local audio 合同；未知未来版本继续显式失败。
 
+Popup v9 还可引用独立 `popup-object.manifest.json` v1。对象不是新的 Popup type：它只有 stable `name`、五类内部资源与 single-state 图层，没有 adaptation/backdrop/input/completion，并禁止对象嵌套。三类 Popup 都把对象实例作为 opaque Container；`getObject(id)` 返回局部 `getLayer/getTextNode/getImageStringNode` handle，不把 child name 合入宿主 registry。Popup latest 因此仍为 v9。
+
 Popup v4–v9 的通用 `attachment` 允许 image、字体 text、image-string、VNI 与 Spine child 选择 `popup-root`、作用域内 official Spine exact slot或 VNI exact text layer。data 层按同一有向图拒绝 VNI/Spine self与混合循环、同 resolved parent重复 order和错误 target kind；core 在任何 display-tree mutation 前用 prepared resource复验 exact slot及 VNI `type="text"` layer。VNI文字层使用一个 stable group承载有序 caller-owned Container，detach/destroy只解除挂载，不接管 child runtime ownership。
 
 三类 Popup 都只有一份 Core 状态。游戏和 Scene Layout 从 `@slotclientengine/rendercore/popup/core` 使用 `createAwardCelebrationRuntime()` / `createSpinePopupRuntime()` / `createSingleStatePopupRuntime()`：`update(deltaSeconds): void` 只推进状态，阶段判断使用 `getPhase()` / `isPlaying()`，不会构造完整 snapshot。Popup Editor 从 `@slotclientengine/rendercore/popup/editor` 使用 player wrapper；wrapper 委托同一个 Runtime，并额外提供 `update() -> snapshot` 与 `getSnapshot()`。游戏 facade 不导出 editor package adapter、factory/player 或 snapshot。

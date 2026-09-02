@@ -19,10 +19,15 @@ import { resolvePopupLayerAttachment } from "../data/attachment.js";
 import { collectPopupPackagePaths } from "../data/package-closure.js";
 import { collectPopupDirectPaths } from "../data/manifest.js";
 import { loadPopupManifest } from "../data/normalize.js";
+import {
+  parsePopupObjectManifest,
+  popupObjectToSingleStateManifest,
+} from "../data/object-manifest.js";
 import type { LatestPopupManifest } from "../data/normalize.js";
 import type {
   PopupLayer,
   PopupOverlayLayer,
+  SingleStatePopupManifestV9,
   SingleStatePopupLayerV9,
 } from "../data/types.js";
 import {
@@ -139,6 +144,40 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
           project,
           assetUrls: resolveProjectAssetUrls(project, assetUrls),
         };
+      } else if (spec.kind === "popup-object") {
+        const objectManifest = parsePopupObjectManifest(
+          parseJson(requireBytes(files, spec.manifest), spec.manifest),
+        );
+        const objectFiles = mapped
+          ? files
+          : extractPrefix(
+              files,
+              spec.manifest.slice(0, spec.manifest.lastIndexOf("/")),
+            );
+        const objectDirectory = spec.manifest.slice(
+          0,
+          spec.manifest.lastIndexOf("/") + 1,
+        );
+        const resource = (await createPopupPackageResourceFromResolvedFiles({
+          manifest: popupObjectToSingleStateManifest(objectManifest),
+          files: objectFiles,
+          ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+          ...(options.loadTexture ? { loadTexture: options.loadTexture } : {}),
+          ...(options.loadFont ? { loadFont: options.loadFont } : {}),
+          ...(options.resolveAssetUrl
+            ? {
+                resolveAssetUrl: mapped
+                  ? options.resolveAssetUrl
+                  : (path: string) =>
+                      options.resolveAssetUrl?.(`${objectDirectory}${path}`),
+              }
+            : {}),
+        })) as PopupPackageResource<SingleStatePopupManifestV9>;
+        prepared[id] = {
+          kind: "popup-object",
+          manifest: objectManifest,
+          resource,
+        };
       } else {
         const skeleton = parseJson(
           requireBytes(files, spec.skeleton),
@@ -221,7 +260,8 @@ async function releasePrepared(
   urls: readonly string[],
 ): Promise<void> {
   for (const value of Object.values(prepared))
-    if (value.kind === "image-string") await value.resource.destroy();
+    if (value.kind === "image-string" || value.kind === "popup-object")
+      await value.resource.destroy();
   for (const font of fonts) font.release();
   for (const texture of textures) texture.destroy(false);
   for (const url of urls) URL.revokeObjectURL(url);
@@ -286,6 +326,11 @@ function validateAnimationBindings(
           throw new Error(
             `popup VNI overlay ${overlay.id} loopEndTime exceeds project duration.`,
           );
+      } else if (
+        overlay.kind === "popup-object" &&
+        overlayResource?.kind !== "popup-object"
+      ) {
+        throw new Error("Spine popup object resource mismatch.");
       }
     }
     validatePopupVniTextLayerAttachments(
@@ -326,6 +371,11 @@ function validateAnimationBindings(
             layer.id,
           ),
         });
+      } else if (
+        layer.kind === "popup-object" &&
+        resource?.kind !== "popup-object"
+      ) {
+        throw new Error("single-state popup object resource mismatch.");
       }
     }
     validatePopupVniTextLayerAttachments(
@@ -378,6 +428,8 @@ function validateAnimationBindings(
           requiredSlots: requiredPopupSpineSlots(tier.layers, layer.id),
         });
       }
+      if (layer.kind === "popup-object" && resource?.kind !== "popup-object")
+        throw new Error("award popup object resource mismatch.");
     }
     validatePopupVniTextLayerAttachments(
       tier.layers,

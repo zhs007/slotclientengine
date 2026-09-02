@@ -535,6 +535,92 @@ describe("popup package resource", () => {
     ).rejects.toThrow(/legacy/);
   });
 
+  it("resolves mapped resources nested inside a popup object", async () => {
+    const { resolvePopupPackageFiles } =
+      await import("../../src/popup/package-resource.js");
+    const { flattened } = await mappedFixture();
+    const amount = Object.values(flattened.manifest.resources).find(
+      (resource) => resource.kind === "image-string",
+    );
+    if (amount?.kind !== "image-string")
+      throw new Error("Expected the mapped image-string fixture.");
+    const objectKey = "tap-to-continue-popup-object.manifest.json";
+    const objectManifest = {
+      version: 1,
+      kind: "popup-object",
+      name: "tap-to-continue",
+      resources: { amount },
+      layers: [
+        {
+          id: "prompt",
+          kind: "image-string",
+          order: 0,
+          resource: "amount",
+          defaultText: "CONTINUE",
+          transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+          alpha: 1,
+          attachment: { kind: "popup-root" },
+          anchor: { x: 0.5, y: 0.5 },
+        },
+      ],
+    } as const;
+    const manifest = {
+      version: 9,
+      kind: "popup",
+      id: "object-host",
+      name: "Object Host",
+      type: "single-state",
+      adaptation: {
+        mode: "maximized-focus",
+        focus: { left: 50, right: 50, top: 50, bottom: 50 },
+      },
+      backdrop: {
+        enabled: false,
+        color: "#000000",
+        alpha: 0.5,
+        visibleStates: ["active"],
+      },
+      audio: { version: 1, effects: [], cues: [] },
+      resources: {
+        "tap-to-continue": { kind: "popup-object", manifest: objectKey },
+      },
+      singleState: {
+        layers: [
+          {
+            id: "continue",
+            kind: "popup-object",
+            order: 0,
+            resource: "tap-to-continue",
+            transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+            alpha: 1,
+            attachment: { kind: "popup-root" },
+          },
+        ],
+      },
+    } as const;
+    const mapped = await createMappedPackageFiles({
+      controls: new Map([
+        [
+          "popup.manifest.json",
+          new TextEncoder().encode(JSON.stringify(manifest)),
+        ],
+      ]),
+      assets: new Map([
+        ...[...flattened.files].filter(
+          ([path]) => path !== "popup.manifest.json",
+        ),
+        [objectKey, new TextEncoder().encode(JSON.stringify(objectManifest))],
+      ]),
+    });
+
+    const resolved = await resolvePopupPackageFiles({
+      manifest,
+      files: mapped.files,
+    });
+    expect(resolved.has(objectKey)).toBe(true);
+    expect(resolved.has(amount.manifest)).toBe(true);
+  });
+
   it("loads the mapped popup closure from content-addressed CDN URLs", async () => {
     const { loadPopupPackageFromUrl } =
       await import("../../src/popup/package-resource.js");

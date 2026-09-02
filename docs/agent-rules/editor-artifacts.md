@@ -51,7 +51,8 @@
 
 ## Popup Editor
 
-- `apps/popupeditor` 输出 strict `award-celebration`、普通 `spine` 或 `single-state` popup package；三种类型使用互斥 schema，不保留无关字段。
+- `apps/popupeditor` 输出 strict `award-celebration`、普通 `spine`、`single-state` popup package，或独立 `popup-object` v1 工件。Popup Object 项目级只持久化 stable lowercase kebab `name`，不拥有 Popup id/type、adaptation、focus、backdrop、audio、tier、amount 或输入；它可组合五类 Popup 图层但不得嵌套对象。
+- Popup v9 可把 Popup Object ZIP 作为 typed resource，并在 award、Spine overlay 或 single-state 中以 opaque 原子 layer 实例化。对象内部 name/attachment/order 不与宿主扁平合并，宿主不能穿透挂接内部节点；对象 lifecycle、update 和 destroy 从属宿主 Popup，且不新增 canvas、ticker 或 completion 状态机。
 - Popup Editor 启动时没有隐式项目；项目只能通过“创建项目”dialog（名称与固定类型）或单独导入 Popup ZIP 建立。项目 ZIP 与资源导入是两个入口，资源入口中 VNI/ImgNumber 只接受各自 Editor 导出的 ZIP，Spine 必须以完整 JSON/atlas/texture 组导入。同名不同 bytes 必须由用户逐项选择覆盖或自动 suffix 保留两份，不能默认提交。
 - Popup v9 沿用 v8 的三种互斥类型，并要求每个 text style 显式保存 `widthRange`；`0/0` 唯一表示关闭，正数区间由 runtime 只调字号拟合 local typographic width。Popup Editor 新建项目固定为 v9；合法 v1–v8 ZIP 必须先按原版本 strict 校验与 prepare，再给全部文字层补 `0/0`、原子迁移为 v9，后续 preview/export 只写 v9。Editor guides 中的宽度参考框是 session-only，不进入持久合同。
 - Popup Editor 独立预览页拥有唯一的 Pixi Application/canvas，并把 rendercore Popup player 的 Container 挂入其中；rendercore Popup 与游戏/Scene Layout consumer 不得创建 canvas、Renderer、ticker 或 RAF。预览在合法配置变化后自动 rebuild，不提供 Build、advance、dismiss 或 immediate-dismiss UI；普通交互只来自完整 preview canvas 或 keyboard input。

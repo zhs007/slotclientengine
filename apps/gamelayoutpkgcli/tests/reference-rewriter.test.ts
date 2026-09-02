@@ -5,6 +5,7 @@ import {
   rewriteLayoutManifest,
   rewriteLayoutPackageReferences,
   rewritePopupManifest,
+  rewritePopupObjectManifest,
   rewriteOptimizedAudioAssets,
   rewriteSymbolManifest,
   rewriteSymbolPackageManifest,
@@ -808,6 +809,41 @@ describe("typed asset reference rewriting", () => {
       width: 8,
       height: 8,
     });
+  });
+
+  it("rewrites Popup Object resources and local layer bindings", () => {
+    const object = rewritePopupObjectManifest(
+      {
+        version: 1,
+        kind: "popup-object",
+        name: "tap-to-continue",
+        resources: {
+          "popup.png": {
+            kind: "image",
+            path: "popup.png",
+            size: { width: 1, height: 1 },
+          },
+        },
+        layers: [
+          {
+            id: "background",
+            kind: "image",
+            order: 0,
+            resource: "popup.png",
+            transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+            alpha: 1,
+            attachment: { kind: "popup-root" },
+            anchor: { x: 0.5, y: 0.5 },
+          },
+        ],
+      },
+      mapping,
+    );
+    expect(object.resources["popup.webp"]).toMatchObject({
+      kind: "image",
+      path: "popup.webp",
+    });
+    expect(object.layers[0]).toMatchObject({ resource: "popup.webp" });
   });
 });
 
