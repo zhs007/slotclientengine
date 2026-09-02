@@ -477,6 +477,61 @@ describe("RenderGridCellReelSet", () => {
     });
   });
 
+  it("keeps occupied selective cells visible until their staggered spin starts", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const target = [
+      [2, 0, 2],
+      [2, 1, 0],
+    ];
+    const plan = createGridCellReelSpinPlan({
+      reels: createBasicReels(),
+      finalYs: FINAL_YS,
+      targetScene: target,
+      columns: 2,
+      rows: 3,
+      order: createGridCellOrder({
+        columns: 2,
+        rows: 3,
+        mode: "top-down-left-right",
+      }),
+      positions: [
+        { x: 1, y: 2, startGroupIndex: 0 },
+        { x: 0, y: 0, startGroupIndex: 1 },
+      ],
+      timing: { ...TIMING, startStepMs: 100, settleAfterLastStartMs: 200 },
+      dimming: DIMMING,
+    });
+
+    reelSet.spinSelective(plan);
+    expect(reelSet.getVisibleScene()[0]?.[0]).toBe(1);
+
+    reelSet.update(0.05);
+    expect(reelSet.getSnapshot().cells).toContainEqual(
+      expect.objectContaining({
+        x: 0,
+        y: 0,
+        phase: "waiting",
+        visibleSymbol: 1,
+        occupied: true,
+      }),
+    );
+
+    reelSet.update(0.05);
+    expect(reelSet.getSnapshot().cells).toContainEqual(
+      expect.objectContaining({
+        x: 0,
+        y: 0,
+        phase: "spinning",
+        visibleSymbol: 1,
+        occupied: true,
+      }),
+    );
+
+    reelSet.update(1);
+    expect(reelSet.getVisibleScene()).toEqual(target);
+  });
+
   it("reports public grid coordinates for settled symbol state changes", () => {
     const transitions: unknown[] = [];
     const observer: RenderReelSymbolStateObserver = {
