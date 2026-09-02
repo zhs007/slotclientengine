@@ -23,6 +23,7 @@ import {
   addSingleStateTextLayer,
   applyImportedResourceBindings,
   assertPopupLayerCanDelete,
+  assertPopupSpineOverlayCanDelete,
   clonePopupEditorProject,
   createPopupAmountFormat,
   createPopupEditorProject,
@@ -590,8 +591,8 @@ export class PopupEditorApp {
       .forEach((button) =>
         button.addEventListener("click", () =>
           this.#store.transact((draft) => {
-            assertPopupLayerCanDelete(
-              draft.spine.overlays,
+            assertPopupSpineOverlayCanDelete(
+              draft,
               button.dataset.deleteOverlay!,
             );
             draft.spine.overlays = draft.spine.overlays.filter(
@@ -948,6 +949,55 @@ export class PopupEditorApp {
           endAnimation: "",
         };
       }),
+    );
+    const tapInfoParent =
+      this.#root.querySelector<HTMLSelectElement>("#tap-info-parent");
+    tapInfoParent?.addEventListener("change", () =>
+      this.safe(() =>
+        this.#store.transact((draft) => {
+          if (!tapInfoParent.value) {
+            draft.spine.tapInfoAttachment = null;
+            return;
+          }
+          if (tapInfoParent.value === "spine:main-spine") {
+            draft.spine.tapInfoAttachment = {
+              kind: "spine-slot",
+              target: { kind: "main-spine" },
+              slot: "",
+            };
+            return;
+          }
+          if (!tapInfoParent.value.startsWith("vni:"))
+            throw new Error("未知 Tap info 子对象父节点。");
+          const [vniLayerId, textLayerId] = tapInfoParent.value
+            .slice("vni:".length)
+            .split(":", 2)
+            .map(decodeURIComponent);
+          if (!vniLayerId || !textLayerId)
+            throw new Error("Tap info VNI 文字层选择无效。");
+          draft.spine.tapInfoAttachment = {
+            kind: "vni-text-layer",
+            vniLayerId,
+            textLayerId,
+          };
+          validatePopupEditorAttachments(draft);
+        }),
+      ),
+    );
+    const tapInfoSlot =
+      this.#root.querySelector<HTMLSelectElement>("#tap-info-slot");
+    tapInfoSlot?.addEventListener("change", () =>
+      this.safe(() =>
+        this.#store.transact((draft) => {
+          if (draft.spine.tapInfoAttachment?.kind !== "spine-slot")
+            throw new Error("Tap info 子对象当前未选择主 Spine。");
+          draft.spine.tapInfoAttachment = {
+            ...draft.spine.tapInfoAttachment,
+            slot: tapInfoSlot.value,
+          };
+          validatePopupEditorAttachments(draft);
+        }),
+      ),
     );
     this.#root
       .querySelectorAll<
@@ -1924,7 +1974,49 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
     project.type === "award-celebration"
       ? `<h3>金额合同</h3><label>preset<select id="amount-format-preset"><option value="integer" ${preset === "integer" ? "selected" : ""}>纯数字整数（raw 100 → 100）</option><option value="decimal" ${preset === "decimal" ? "selected" : ""}>纯数字两位小数（raw 100 → 1.00）</option><option value="custom" ${preset === "custom" ? "selected" : ""}>自定义</option></select></label><p class="preset-help">整数预设使用 rawScale=1，只要求 glyph 0–9；两位小数预设使用 rawScale=100，要求 glyph 0–9 和 .。两者均不输出货币符号或千分位。</p>${amountInput("rawScale", "number")}${amountInput("fractionDigits", "number")}${amountInput("useGrouping", "checkbox")}${amountInput("groupSeparator")}${amountInput("decimalSeparator")}${amountInput("prefix")}${amountInput("suffix")}<p>rounding: floor（strict contract）</p>`
       : "";
-  return `${commonWithColorEditor}${amount}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
+  const tapInfo =
+    project.type === "spine" ? tapInfoObjectParentMarkup(project) : "";
+  return `${commonWithColorEditor}${amount}${tapInfo}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
+}
+
+function tapInfoObjectParentMarkup(project: PopupEditorProject): string {
+  const attachment = project.spine.tapInfoAttachment;
+  const selected =
+    attachment?.kind === "spine-slot"
+      ? "spine:main-spine"
+      : attachment?.kind === "vni-text-layer"
+        ? `vni:${encodeURIComponent(attachment.vniLayerId)}:${encodeURIComponent(attachment.textLayerId)}`
+        : "";
+  let mainSlots: readonly string[] = [];
+  let hasMainSpineSlotTarget = false;
+  let vniTargets: ReturnType<typeof getPopupVniTextLayerTargets> = [];
+  try {
+    mainSlots =
+      getPopupSpineAttachmentTargets(project, { kind: "spine-popup" }).find(
+        ({ key }) => key === "main-spine",
+      )?.slotNames ?? [];
+    hasMainSpineSlotTarget = mainSlots.length > 0;
+  } catch {
+    // Project diagnostics reports the exact invalid Spine resource.
+  }
+  try {
+    vniTargets = getPopupVniTextLayerTargets(project, { kind: "spine-popup" });
+  } catch {
+    // Project diagnostics reports the exact invalid VNI resource.
+  }
+  const slotMarkup =
+    attachment?.kind === "spine-slot"
+      ? `<label>Spine slot<select id="tap-info-slot"><option value="">请选择 exact slot</option>${mainSlots.map((slot) => `<option value="${slot}" ${slot === attachment.slot ? "selected" : ""}>${slot}</option>`).join("")}</select></label>`
+      : "";
+  const mainSpineOption = hasMainSpineSlotTarget
+    ? `<option value="spine:main-spine" ${selected === "spine:main-spine" ? "selected" : ""}>主 Spine slot</option>`
+    : "";
+  return `<h3>Tap info 子对象</h3><p>只声明外部 Tap info 子对象的父节点；本 Popup 不选择或打包该对象。</p><fieldset class="attachment-editor"><legend>可选挂载点</legend><label>父节点<select id="tap-info-parent"><option value="" ${selected ? "" : "selected"}>未配置</option>${mainSpineOption}${vniTargets
+    .map(({ vniLayerId, textLayerId, textLayerName }) => {
+      const value = `vni:${encodeURIComponent(vniLayerId)}:${encodeURIComponent(textLayerId)}`;
+      return `<option value="${value}" ${value === selected ? "selected" : ""}>VNI 文字层：${vniLayerId} / ${textLayerName} (${textLayerId})</option>`;
+    })
+    .join("")}</select></label>${slotMarkup}</fieldset>`;
 }
 
 function popupIdValidationError(value: string): string {

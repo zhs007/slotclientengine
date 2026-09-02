@@ -26,6 +26,7 @@ import {
 import type { LatestPopupManifest } from "../data/normalize.js";
 import type {
   PopupLayer,
+  PopupLayerAttachment,
   PopupOverlayLayer,
   SingleStatePopupManifestV9,
   SingleStatePopupLayerV9,
@@ -282,10 +283,12 @@ function validateAnimationBindings(
         manifest.spine.playback.loopAnimation,
         manifest.spine.playback.endAnimation,
       ],
-      requiredSlots: requiredPopupSpineSlots(
-        manifest.spine.overlays ?? [],
-        "main-spine",
-      ),
+      requiredSlots: Object.freeze([
+        ...requiredPopupSpineSlots(manifest.spine.overlays ?? [], "main-spine"),
+        ...(manifest.spine.tapInfoObject?.attachment.kind === "spine-slot"
+          ? [manifest.spine.tapInfoObject.attachment.slot]
+          : []),
+      ]),
     });
     for (const overlay of manifest.spine.overlays ?? []) {
       const overlayResource = overlay.resource
@@ -338,6 +341,14 @@ function validateAnimationBindings(
       resources,
       "spine.overlays",
     );
+    const tapInfoAttachment = manifest.spine.tapInfoObject?.attachment;
+    if (tapInfoAttachment?.kind === "vni-text-layer")
+      validatePopupVniTextLayerTarget(
+        manifest.spine.overlays ?? [],
+        resources,
+        tapInfoAttachment,
+        "spine.tapInfoObject.attachment",
+      );
     return;
   }
   if (manifest.type === "single-state") {
@@ -448,21 +459,45 @@ function validatePopupVniTextLayerAttachments(
   for (const layer of layers) {
     const attachment = resolvePopupLayerAttachment(layer);
     if (attachment.kind !== "vni-text-layer") continue;
-    const target = byId.get(attachment.vniLayerId);
-    const targetResource =
-      target?.kind === "vni" ? resources[target.resource] : undefined;
-    if (target?.kind !== "vni" || targetResource?.kind !== "vni")
-      throw new Error(
-        `${label} layer ${layer.id} references unavailable VNI parent ${attachment.vniLayerId}.`,
-      );
-    const textLayer = targetResource.project.layers.find(
-      ({ id }) => id === attachment.textLayerId,
+    validatePopupVniTextLayerTarget(
+      layers,
+      resources,
+      attachment,
+      `${label} layer ${layer.id}`,
+      byId,
     );
-    if (!textLayer || textLayer.type !== "text")
-      throw new Error(
-        `${label} layer ${layer.id} references missing VNI text layer ${attachment.vniLayerId}/${attachment.textLayerId}.`,
-      );
   }
+}
+
+function validatePopupVniTextLayerTarget(
+  layers: readonly (PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV9)[],
+  resources: Readonly<Record<string, PopupPreparedResource>>,
+  attachment: Extract<
+    PopupLayerAttachment,
+    { readonly kind: "vni-text-layer" }
+  >,
+  label: string,
+  existingById?: ReadonlyMap<
+    string,
+    PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV9
+  >,
+): void {
+  const byId =
+    existingById ?? new Map(layers.map((layer) => [layer.id, layer]));
+  const target = byId.get(attachment.vniLayerId);
+  const targetResource =
+    target?.kind === "vni" ? resources[target.resource] : undefined;
+  if (target?.kind !== "vni" || targetResource?.kind !== "vni")
+    throw new Error(
+      `${label} references unavailable VNI parent ${attachment.vniLayerId}.`,
+    );
+  const textLayer = targetResource.project.layers.find(
+    ({ id }) => id === attachment.textLayerId,
+  );
+  if (!textLayer || textLayer.type !== "text")
+    throw new Error(
+      `${label} references missing VNI text layer ${attachment.vniLayerId}/${attachment.textLayerId}.`,
+    );
 }
 
 function requiredPopupSpineSlots(

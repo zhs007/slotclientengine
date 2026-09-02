@@ -213,6 +213,9 @@ export async function importPopupZip(
         loopAnimation: manifest.spine.playback.loopAnimation,
         endAnimation: manifest.spine.playback.endAnimation,
       },
+      tapInfoAttachment: structuredClone(
+        manifest.spine.tapInfoObject?.attachment ?? null,
+      ),
       prompt: {
         enabled: false,
         font: null,

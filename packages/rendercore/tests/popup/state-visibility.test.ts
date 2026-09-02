@@ -68,6 +68,44 @@ describe("popup state visibility", () => {
     expect(() => loadPopupManifest({ ...v6, version: 10 })).toThrow(/version/);
   });
 
+  it("does not invent a Tap info object parent while normalizing legacy Spine popups", () => {
+    const hash = "a".repeat(64);
+    const legacy = {
+      version: 1,
+      kind: "popup",
+      id: "legacy-spine",
+      type: "spine",
+      designViewport: { width: 100, height: 100 },
+      resources: {
+        spine: {
+          kind: "spine",
+          skeleton: `assets/${hash}.json`,
+          atlas: `assets/${hash}.atlas`,
+          textures: { "popup.png": `assets/${hash}.png` },
+        },
+      },
+      spine: {
+        resource: "spine",
+        transform: { x: 0, y: 0, scale: 1 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "Start",
+          loopAnimation: "Loop",
+          endAnimation: "End",
+        },
+      },
+    } as const;
+    const loaded = loadPopupManifest(legacy);
+    expect(loaded.manifest.version).toBe(9);
+    expect(loaded.manifest.type).toBe("spine");
+    if (loaded.manifest.type !== "spine")
+      throw new Error("Expected Spine popup.");
+    expect(loaded.manifest.spine).not.toHaveProperty("tapInfoObject");
+    expect(loadPopupManifest(loaded.manifest).manifest).toEqual(
+      loaded.manifest,
+    );
+  });
+
   it("expands legacy full selection and migrates partial selection by index", () => {
     const cases = [
       [["start"], ["base"]],

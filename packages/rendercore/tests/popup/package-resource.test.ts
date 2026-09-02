@@ -275,6 +275,30 @@ describe("popup package resource", () => {
     await expect(
       createPopupPackageResource({ manifest: missing, files, loadTexture }),
     ).rejects.toThrow(/Missing/);
+
+    const tapInfo = structuredClone(manifest) as any;
+    tapInfo.version = 9;
+    tapInfo.audio = { version: 1, effects: [], cues: [] };
+    tapInfo.backdrop.visibleStates = ["start", "loop", "end"];
+    tapInfo.spine.overlays[0].visibleStates = ["start", "loop", "end"];
+    delete tapInfo.spine.overlays[0].visibleSegments;
+    tapInfo.spine.tapInfoObject = {
+      attachment: {
+        kind: "spine-slot",
+        target: { kind: "main-spine" },
+        slot: "Value",
+      },
+    };
+    const tapInfoResource = await createPopupPackageResource({
+      manifest: tapInfo,
+      files,
+      loadTexture,
+    });
+    await tapInfoResource.destroy();
+    tapInfo.spine.tapInfoObject.attachment.slot = "MissingTapInfo";
+    await expect(
+      createPopupPackageResource({ manifest: tapInfo, files, loadTexture }),
+    ).rejects.toThrow(/MissingTapInfo/);
   });
 
   it("namespaces physical Spine keys without changing logical atlas pages", async () => {
@@ -490,6 +514,90 @@ describe("popup package resource", () => {
           ({ width: 1, height: 1, destroy() {} }) as never,
       }),
     ).rejects.toThrow(/image.*vni\/missing/);
+  });
+
+  it("validates the prepared VNI text parent for a v9 Tap info object", async () => {
+    const { createPopupPackageResource } =
+      await import("../../src/popup/package-resource.js");
+    const { loadPopupManifest } =
+      await import("../../src/popup/data/normalize.js");
+    const source = fixture();
+    const projectPath = (source.manifest.resources.vni as { project: string })
+      .project;
+    const project = JSON.parse(
+      new TextDecoder().decode(source.files.get(projectPath)),
+    );
+    project.layers.push({
+      ...project.layers[0],
+      id: "tap-label",
+      name: "Tap label",
+      type: "text",
+      assetId: null,
+      text: "Tap",
+    });
+    source.files.set(
+      projectPath,
+      new TextEncoder().encode(JSON.stringify(project)),
+    );
+    const award = loadPopupManifest(source.manifest).manifest as any;
+    const vniLayer = award.awardCelebration.base.layers.find(
+      ({ id }: { id: string }) => id === "vni",
+    );
+    const manifest = {
+      version: 9,
+      kind: "popup",
+      id: "tap-info-popup",
+      name: "Tap Info Popup",
+      type: "spine",
+      adaptation: award.adaptation,
+      backdrop: {
+        enabled: false,
+        color: "#000000",
+        alpha: 0.5,
+        visibleStates: ["start", "loop", "end"],
+      },
+      audio: { version: 1, effects: [], cues: [] },
+      resources: {
+        spine: award.resources.spine,
+        vni: award.resources.vni,
+      },
+      spine: {
+        resource: "spine",
+        transform: { x: 0, y: 0, scale: 1 },
+        playback: {
+          mode: "segmented-animations",
+          startAnimation: "Feature",
+          loopAnimation: "Idle",
+          endAnimation: "Win",
+        },
+        overlays: [
+          {
+            ...vniLayer,
+            attachment: { kind: "popup-root" },
+            transform: { ...vniLayer.transform, rotation: 0 },
+            visibleStates: ["start", "loop", "end"],
+          },
+        ],
+        tapInfoObject: {
+          attachment: {
+            kind: "vni-text-layer",
+            vniLayerId: "vni",
+            textLayerId: "tap-label",
+          },
+        },
+      },
+    } as const;
+    const resource = await createPopupPackageResource({
+      manifest,
+      files: source.files,
+    });
+    await resource.destroy();
+
+    const missing = structuredClone(manifest) as any;
+    missing.spine.tapInfoObject.attachment.textLayerId = "missing";
+    await expect(
+      createPopupPackageResource({ manifest: missing, files: source.files }),
+    ).rejects.toThrow(/tapInfoObject.*vni\/missing/);
   });
 
   it("flattens legacy structured resources and resolves one mapped file closure", async () => {

@@ -47,6 +47,7 @@ import type {
   SpinePopupManifestV8,
   SpinePopupManifestV9,
   SpinePopupOverlayLayerV9,
+  SpinePopupTapInfoAttachment,
 } from "./types.js";
 import { validatePopupLayerAttachmentGraph } from "./attachment.js";
 import { assertPopupFilenameKey, assertPopupPackagePath } from "./path.js";
@@ -269,6 +270,9 @@ function parseSpinePopup(
       "playback",
       ...(Object.hasOwn(record, "prompt") ? ["prompt"] : []),
       ...(Object.hasOwn(record, "overlays") ? ["overlays"] : []),
+      ...(version === 9 && Object.hasOwn(record, "tapInfoObject")
+        ? ["tapInfoObject"]
+        : []),
     ],
     "spine",
   );
@@ -298,6 +302,9 @@ function parseSpinePopup(
     : undefined;
   const overlays = Object.hasOwn(record, "overlays")
     ? parseOverlays(record.overlays, resources, version)
+    : undefined;
+  const tapInfoObject = Object.hasOwn(record, "tapInfoObject")
+    ? parseSpineTapInfoObject(record.tapInfoObject, overlays ?? [])
     : undefined;
   if (version < 4)
     unique(
@@ -337,7 +344,56 @@ function parseSpinePopup(
     },
     ...(prompt ? { prompt } : {}),
     ...(overlays ? { overlays } : {}),
+    ...(tapInfoObject ? { tapInfoObject } : {}),
   });
+}
+
+function parseSpineTapInfoObject(
+  value: unknown,
+  overlays: readonly PopupOverlayLayer[],
+): { readonly attachment: SpinePopupTapInfoAttachment } {
+  const record = object(value, "spine.tapInfoObject");
+  keys(record, ["attachment"], "spine.tapInfoObject");
+  const attachment = parseSpineTapInfoAttachment(
+    record.attachment,
+    "spine.tapInfoObject.attachment",
+  );
+  if (attachment.kind === "vni-text-layer") {
+    const target = overlays.find(({ id }) => id === attachment.vniLayerId);
+    if (target?.kind !== "vni")
+      fail(
+        `spine.tapInfoObject.attachment references missing VNI overlay ${attachment.vniLayerId}.`,
+      );
+  }
+  return freeze({ attachment });
+}
+
+function parseSpineTapInfoAttachment(
+  value: unknown,
+  label: string,
+): SpinePopupTapInfoAttachment {
+  const record = object(value, label);
+  if (record.kind === "vni-text-layer") {
+    keys(record, ["kind", "vniLayerId", "textLayerId"], label);
+    return freeze({
+      kind: "vni-text-layer" as const,
+      vniLayerId: identifier(record.vniLayerId, `${label}.vniLayerId`),
+      textLayerId: nonEmpty(record.textLayerId, `${label}.textLayerId`),
+    });
+  }
+  if (record.kind === "spine-slot") {
+    keys(record, ["kind", "target", "slot"], label);
+    const target = object(record.target, `${label}.target`);
+    keys(target, ["kind"], `${label}.target`);
+    if (target.kind !== "main-spine")
+      fail(`${label}.target.kind must be main-spine.`);
+    return freeze({
+      kind: "spine-slot" as const,
+      target: freeze({ kind: "main-spine" as const }),
+      slot: nonEmpty(record.slot, `${label}.slot`),
+    });
+  }
+  fail(`${label}.kind must be vni-text-layer or spine-slot.`);
 }
 
 function parsePrompt(

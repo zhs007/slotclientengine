@@ -242,6 +242,8 @@ Popup v9 还可引用独立 `popup-object.manifest.json` v1。对象不是新的
 
 Popup v4–v9 的通用 `attachment` 允许 image、字体 text、image-string、VNI 与 Spine child 选择 `popup-root`、作用域内 official Spine exact slot或 VNI exact text layer。data 层按同一有向图拒绝 VNI/Spine self与混合循环、同 resolved parent重复 order和错误 target kind；core 在任何 display-tree mutation 前用 prepared resource复验 exact slot及 VNI `type="text"` layer。VNI文字层使用一个 stable group承载有序 caller-owned Container，detach/destroy只解除挂载，不接管 child runtime ownership。
 
+Popup v9 普通 Spine manifest 可选保存外部 Tap info 子对象的父节点 metadata。其窄 union 只接受 main Spine exact slot或当前 Spine overlay的VNI exact文字层；data层验证形状和overlay identity，core prepare再用official resource metadata验证目标。该字段不引用或实例化对象、不增加package资源闭包，也不进入Popup runtime display tree、ticker、input或destroy职责。
+
 三类 Popup 都只有一份 Core 状态。游戏和 Scene Layout 从 `@slotclientengine/rendercore/popup/core` 使用 `createAwardCelebrationRuntime()` / `createSpinePopupRuntime()` / `createSingleStatePopupRuntime()`：`update(deltaSeconds): void` 只推进状态，阶段判断使用 `getPhase()` / `isPlaying()`，不会构造完整 snapshot。Popup Editor 从 `@slotclientengine/rendercore/popup/editor` 使用 player wrapper；wrapper 委托同一个 Runtime，并额外提供 `update() -> snapshot` 与 `getSnapshot()`。游戏 facade 不导出 editor package adapter、factory/player 或 snapshot。
 
 Award Popup 不滚动 base 金额：`winAmountRaw <= betAmountRaw` 时直接提交 final 并进入正式 end；更高获奖直接以 standard 和 exact bet 起跳。每档 `countDurationSeconds` 用来标定该档完整 canonical threshold span 的 nominal rate，partial final 只走该完整曲线的前段，不把短区间重新拉满整档时间。Core 在 `start()` 时生成常量规模的跨档连续加速轨迹，megawin 开放区间沿用最近封闭 celebration span 标定；只有实际 final 前的 terminal tail 减速，随后立即进入 `dismissing`、播放最后档 end 并在 drain 完成后自动关闭。

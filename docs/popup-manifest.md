@@ -141,6 +141,20 @@ runtime 以文字的 local typographic width 为准：未达到 `minWidth` 时�
 
 v9 还允许三个 Popup 类型把 `{ "kind": "popup-object" }` 作为普通资源与原子图层引用。对象本身使用独立的 `popup-object.manifest.json` v1 合同，只保存 lowercase kebab-case `name`、resources 与无状态 layers；不包含 Popup 的 id/type、适配、重点区域、压暗、audio 或状态机，也禁止继续嵌套 popup-object。宿主图层只负责 placement、alpha、attachment 以及 Spine Popup 的 `visibleStates`，对象内部资源和图层由 Popup Editor 统一编辑。独立对象 ZIP 的完整合同见 [Popup Object manifest](./popup-object-manifest.md)。该能力是 Popup v9 的新增字段，不提升 Popup manifest 版本；v1–v8 出现对象资源或图层必须显式失败。
 
+v9 普通 Spine Popup 还可声明可选的 `spine.tapInfoObject.attachment`，只描述外部 Tap info 子对象将来的父节点，不选择、引用或打包该对象本身。合法值只有主 Spine exact slot：
+
+```json
+{ "kind": "spine-slot", "target": { "kind": "main-spine" }, "slot": "TapInfo" }
+```
+
+或当前 `spine.overlays` 中 VNI 图层的 exact 文字层：
+
+```json
+{ "kind": "vni-text-layer", "vniLayerId": "tap-host", "textLayerId": "label" }
+```
+
+省略 `tapInfoObject` 表示未配置，不会生成 root 或首项默认值。Popup root、overlay Spine slot、resource、transform、order、visibility、对象 id 与未知字段均不属于该合同；v1–v8 夹带该字段 strict 失败。data parser 核对 VNI overlay identity，package prepare 再以 official Spine/VNI metadata 验证 exact slot 或 `type="text"` layer。该 metadata 不进入 overlay graph、资源闭包或 runtime 对象生命周期；真正的对象来源、挂载、显示和销毁由后续 consumer 的显式合同负责。
+
 ## 坐标、档位与输入
 
 - popup 中心为 `(0, 0)`，向右/向下为正；v1/v2 使用 `designViewport`，v3–v9 只由 focus 建立无界 maximized-focus production transform。
