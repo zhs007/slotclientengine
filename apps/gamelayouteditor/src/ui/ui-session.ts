@@ -16,13 +16,20 @@ export type LayoutSelection =
 
 export type LayoutResourceBindingContext =
   | { readonly kind: "add-layer" }
-  | { readonly kind: "rebind-layer"; readonly nodeId: string };
+  | { readonly kind: "add-radio" }
+  | { readonly kind: "rebind-layer"; readonly nodeId: string }
+  | {
+      readonly kind: "rebind-radio";
+      readonly nodeId: string;
+      readonly state: "off" | "on";
+    };
 
 export interface ResourcePickerState {
   context: LayoutResourceBindingContext;
   query: string;
   type: "all" | "image" | "spine" | "vni" | "image-string";
   selectedResourceId: string;
+  secondaryResourceId: string;
   nodeId: string;
   variants: SceneLayoutVariantId[];
   defaultAnimation: string;

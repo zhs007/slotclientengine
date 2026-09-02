@@ -141,7 +141,7 @@ export type SceneLayoutRuntimeResourceSpec =
   | SceneLayoutRuntimeJsonResourceSpec
   | SceneLayoutRuntimeAudioResourceSpec;
 
-export interface SceneLayoutNode {
+export interface SceneLayoutNodeBase {
   readonly id: string;
   readonly order: number;
   /** Missing means the ordinary node is visible in every game mode. */
@@ -150,11 +150,30 @@ export interface SceneLayoutNode {
   readonly scope?: Readonly<
     Record<string, readonly SceneLayoutOrientationVariantId[]>
   >;
-  readonly resource: SceneLayoutNodeResourceSpec;
   readonly placements: Readonly<
     Partial<Record<SceneLayoutVariantId, SceneLayoutNodePlacement>>
   >;
 }
+
+export interface SceneLayoutGraphicNode extends SceneLayoutNodeBase {
+  readonly resource: SceneLayoutNodeResourceSpec;
+}
+
+export interface SceneLayoutRadioControlSpec {
+  readonly kind: "radio";
+  readonly off: SceneLayoutImageResourceSpec;
+  readonly on: SceneLayoutImageResourceSpec;
+}
+
+/** Extensible authored UI-control union. */
+export type SceneLayoutUiControlSpec = SceneLayoutRadioControlSpec;
+
+export interface SceneLayoutUiControlNode extends SceneLayoutNodeBase {
+  readonly uiControl: SceneLayoutUiControlSpec;
+}
+
+/** Scene Layout v7 layer union. Legacy manifests contain graphic nodes only. */
+export type SceneLayoutNode = SceneLayoutGraphicNode | SceneLayoutUiControlNode;
 
 export interface SceneLayoutReelGrid {
   readonly order?: number;
@@ -338,7 +357,7 @@ export interface SceneLayoutManifestV1 {
   readonly id: string;
   readonly coordinateOrigin?: SceneLayoutCoordinateOrigin;
   readonly adaptation: SceneLayoutAdaptation;
-  readonly nodes: readonly SceneLayoutNode[];
+  readonly nodes: readonly SceneLayoutGraphicNode[];
   readonly reels: Readonly<Record<string, SceneLayoutReelGrid>>;
   readonly symbolPackage?: SceneLayoutSymbolPackageBinding;
   readonly symbolPackages?: Readonly<
@@ -356,7 +375,7 @@ export interface SceneLayoutManifestV2 {
   readonly kind: "scene-layout";
   readonly id: string;
   readonly coordinateOrigin?: SceneLayoutCoordinateOrigin;
-  readonly nodes: readonly SceneLayoutNode[];
+  readonly nodes: readonly SceneLayoutGraphicNode[];
   readonly reels: Readonly<Record<string, SceneLayoutReelDefinition>>;
   readonly symbolPackage?: SceneLayoutSymbolPackageBinding;
   readonly symbolPackages?: Readonly<
@@ -786,6 +805,18 @@ export type SceneLayoutRenderObject =
   | SceneLayoutVniRenderObject
   | SceneLayoutImageStringRenderObject;
 
+export type SceneLayoutRadioState = "off" | "on";
+export type SceneLayoutUiControlStateSource = "pointer" | "programmatic";
+
+export interface SceneLayoutRadioControl {
+  readonly kind: "radio";
+  getState(): SceneLayoutRadioState;
+  setState(state: SceneLayoutRadioState): void;
+}
+
+/** Stable borrowed capability for an authored UI-control layer. */
+export type SceneLayoutUiControl = SceneLayoutRadioControl;
+
 export interface ResolvedSceneLayoutReelGrid {
   readonly id: string;
   readonly variantId: SceneLayoutVariantId;
@@ -905,6 +936,8 @@ export interface SceneLayoutRuntime {
   ): import("../presentation/index.js").RenderObjectLayer;
   /** Returns a stable borrowed capability façade for an authored node. */
   getRenderObject(nodeId: string): SceneLayoutRenderObject | null;
+  /** Returns a stable borrowed capability for an authored UI-control layer. */
+  getUiControl(nodeId: string): SceneLayoutUiControl | null;
   attachChild(options: AttachChildOptions): () => void;
   attachRelative(options: AttachRelativeOptions): () => void;
   getReelGrid(id: "main"): ResolvedSceneLayoutMainGrid;

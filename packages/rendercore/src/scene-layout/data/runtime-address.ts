@@ -5,6 +5,7 @@ export type GameLayoutRuntimeAddress = `gamelayout:/${string}`;
 export type GameLayoutRuntimeAddressKind =
   | "layer"
   | "render-object"
+  | "ui-control"
   | "render-object-instance"
   | "reel"
   | "symbol-package"

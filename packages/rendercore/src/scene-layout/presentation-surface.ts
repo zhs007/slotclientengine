@@ -25,6 +25,7 @@ import type {
   SceneLayoutPointSelector,
   SceneLayoutRenderLayerRef,
   SceneLayoutRenderObject,
+  SceneLayoutUiControl,
 } from "./types.js";
 import type { RenderAnchor, RenderObjectLayer } from "../presentation/index.js";
 
@@ -67,6 +68,7 @@ export interface SceneLayoutPresentationSurface {
   ): RenderObjectLayer;
   getNodeAnchor(id: string): RenderAnchor;
   getRenderObject(nodeId: string): SceneLayoutRenderObject | null;
+  getUiControl(nodeId: string): SceneLayoutUiControl | null;
   getLayoutPoint(selector: SceneLayoutPointSelector): SceneLayoutPoint;
   getLayoutAnchor(point: SceneLayoutPoint): RenderAnchor;
   resolveLayoutAnchor(anchor: RenderAnchor): SceneLayoutPoint;
@@ -280,6 +282,11 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   getRenderObject(nodeId: string): SceneLayoutRenderObject | null {
     this.assertReady();
     return this.#runtime.getRenderObject(nodeId);
+  }
+
+  getUiControl(nodeId: string): SceneLayoutUiControl | null {
+    this.assertReady();
+    return this.#runtime.getUiControl(nodeId);
   }
 
   getLayoutPoint(selector: SceneLayoutPointSelector): SceneLayoutPoint {

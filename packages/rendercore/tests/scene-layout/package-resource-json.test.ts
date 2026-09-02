@@ -35,13 +35,17 @@ describe("scene layout package JSON data", () => {
     const source = jsonManifest();
     const manifest = {
       ...source,
-      nodes: source.nodes.map((node) => ({
-        ...node,
-        resource:
-          node.resource.kind === "image"
-            ? { ...node.resource, path: "bg.png" }
-            : node.resource,
-      })),
+      nodes: source.nodes.map((node) =>
+        "resource" in node
+          ? {
+              ...node,
+              resource:
+                node.resource.kind === "image"
+                  ? { ...node.resource, path: "bg.png" }
+                  : node.resource,
+            }
+          : node,
+      ),
       runtimeResources: {
         "spin-config": { kind: "json" as const, path: "spin-config.json" },
       },

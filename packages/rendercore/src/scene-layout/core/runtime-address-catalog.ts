@@ -10,6 +10,7 @@ import {
 export type GameLayoutRuntimeEventFamily =
   | "variant"
   | "node-animation"
+  | "ui-control-state"
   | "spin-lifecycle"
   | "symbol-state"
   | "symbols-state-batch"
@@ -117,6 +118,23 @@ export function compileGameLayoutRuntimeEventCatalog(
   });
 
   for (const node of source.manifest.nodes) {
+    if ("uiControl" in node) {
+      const owner = ["ui-control", node.id];
+      for (const state of ["off", "on"] as const)
+        add({
+          segments: [...owner, "radio", "state", state, "entered"],
+          owner,
+          family: "ui-control-state",
+          facets: [
+            ["control", node.id],
+            ["control-kind", "radio"],
+            ["state", state],
+            ["edge", "entered"],
+          ],
+          detail: { controlId: node.id, controlKind: "radio", state },
+        });
+      continue;
+    }
     const resource = node.resource;
     if (!resource || resource.kind !== "spine" || "stateMachine" in resource)
       continue;

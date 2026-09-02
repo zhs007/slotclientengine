@@ -95,12 +95,15 @@ export async function exportLayoutZip(options: {
       ) ||
       manifest.nodes.some(
         (node) =>
+          "resource" in node &&
           node.resource.kind === "image-string" &&
           node.resource.manifest === path,
       ) ||
       manifest.nodes.some(
         (node) =>
-          node.resource.kind === "vni" && node.resource.project === path,
+          "resource" in node &&
+          node.resource.kind === "vni" &&
+          node.resource.project === path,
       ) ||
       Object.values(manifest.runtimeResources ?? {}).some(
         (resource) =>
@@ -112,6 +115,7 @@ export async function exportLayoutZip(options: {
     add(path);
   }
   for (const node of manifest.nodes) {
+    if (!("resource" in node)) continue;
     if (
       node.resource.kind !== "image-string" ||
       closure.has(node.resource.manifest)
@@ -162,6 +166,7 @@ export async function exportLayoutZip(options: {
       add(mapped ? asset.path : `${directory}/${asset.path}`);
   }
   for (const node of manifest.nodes) {
+    if (!("resource" in node)) continue;
     if (node.resource.kind !== "vni" || closure.has(node.resource.project))
       continue;
     add(node.resource.project);
@@ -371,6 +376,7 @@ async function flattenLayoutClosure(
     virtual.set(key, bytes.slice());
   }
   for (const node of manifest.nodes) {
+    if (!("resource" in node)) continue;
     if (node.resource.kind !== "vni") continue;
     const sourcePath = node.resource.project;
     const project = assertVNIProject(
@@ -700,6 +706,15 @@ function rewriteLayoutManifestFilenameKeys(
 ): SceneLayoutManifestLatest {
   const key = (path: string) => mapping.get(path) ?? path;
   const nodes = value.nodes.map((node) => {
+    if ("uiControl" in node)
+      return {
+        ...node,
+        uiControl: {
+          ...node.uiControl,
+          off: { ...node.uiControl.off, path: key(node.uiControl.off.path) },
+          on: { ...node.uiControl.on, path: key(node.uiControl.on.path) },
+        },
+      };
     const resource = node.resource;
     if (resource.kind === "image")
       return { ...node, resource: { ...resource, path: key(resource.path) } };
@@ -909,9 +924,11 @@ export async function materializeLayoutOwnedAssets(options: {
     if (!externalRoots.has(path) && !assets.has(path))
       throw new Error(`导出资源闭包缺少 bytes：${path}`);
   for (const resource of [
-    ...source.nodes
-      .filter((node) => node.resource.kind === "spine")
-      .map((node) => node.resource),
+    ...source.nodes.flatMap((node) =>
+      "resource" in node && node.resource.kind === "spine"
+        ? [node.resource]
+        : [],
+    ),
     ...(source.gameModes?.transitions ?? []).flatMap((transition) =>
       !("kind" in transition.overlay) &&
       transition.overlay.resource.kind === "spine"

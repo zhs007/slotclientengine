@@ -11,6 +11,7 @@ export function collectLayoutPreviewAssetPaths(
 ): ReadonlySet<string> {
   const paths = new Set(collectSceneLayoutAssetPaths(manifest));
   for (const node of manifest.nodes) {
+    if (!("resource" in node)) continue;
     if (node.resource.kind !== "image-string" && node.resource.kind !== "vni")
       continue;
     const manifestPath =

@@ -36,10 +36,16 @@ export function createResourcePickerState(
   const state: ResourcePickerState = {
     context,
     query: "",
-    type: "all",
+    type:
+      context.kind === "add-radio" || context.kind === "rebind-radio"
+        ? "image"
+        : "all",
     selectedResourceId,
+    secondaryResourceId: "",
     nodeId:
-      context.kind === "rebind-layer" ? context.nodeId : selectedResourceId,
+      context.kind === "rebind-layer" || context.kind === "rebind-radio"
+        ? context.nodeId
+        : selectedResourceId,
     variants: [...ordinaryLayerVariantIds],
     defaultAnimation: "",
   };
@@ -86,6 +92,12 @@ export function getResourcePickerCandidates(
         resource.kind !== "video" &&
         resource.kind !== "audio" &&
         resource.kind !== "json",
+    )
+    .filter((resource) =>
+      state.context.kind === "add-radio" ||
+      state.context.kind === "rebind-radio"
+        ? resource.kind === "image"
+        : true,
     )
     .filter((resource) => state.type === "all" || resource.kind === state.type)
     .filter((resource) => {

@@ -92,6 +92,7 @@ import { transitionResourceKey } from "./resource.js";
 import {
   createPreparedSceneLayoutRuntime,
   type SceneLayoutSpinePlaybackEvent,
+  type SceneLayoutUiControlStateEvent,
 } from "./runtime.js";
 import {
   createSceneLayoutTransitionVideoPlayer,
@@ -133,6 +134,7 @@ import type {
   SceneLayoutPointSelector,
   SceneLayoutRenderLayerRef,
   SceneLayoutRenderObject,
+  SceneLayoutUiControl,
   SceneLayoutSnapshot,
   SceneLayoutManifest,
   SceneLayoutEventAudioV1,
@@ -617,6 +619,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           }
         : {}),
       observeSpinePlayback: (event) => this.observeAuthoredSpinePlayback(event),
+      observeUiControlState: (event) => this.observeUiControlState(event),
     });
     this.#audio = createAudioRuntime({
       backend: audioBackend ?? createPixiSoundBackend(),
@@ -645,6 +648,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     });
     this.#addressController = createGameLayoutRuntimeAddresses(resource, {
       getRenderObject: (id) => this.getRenderObject(id),
+      getUiControl: (id) => this.getUiControl(id),
       getRenderLayer: (ref) => this.getRenderLayer(ref),
       getArea: (id) => this.getSymbolArea(id),
       getGameModeSnapshot: () => this.getGameModeSnapshot(),
@@ -2920,6 +2924,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.#layout.getRenderObject(nodeId);
   }
 
+  getUiControl(nodeId: string): SceneLayoutUiControl | null {
+    this.assertReady();
+    return this.#layout.getUiControl(nodeId);
+  }
+
   attachChild(options: AttachChildOptions): () => void {
     this.assertReady();
     return this.#layout.attachChild(options);
@@ -3179,6 +3188,24 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       animation: event.animation,
       loop: event.loop,
       ...(event.outcome ? { outcome: event.outcome } : {}),
+    }));
+  }
+
+  private observeUiControlState(event: SceneLayoutUiControlStateEvent): void {
+    const address = formatGameLayoutRuntimeAddress(
+      "ui-control",
+      event.controlId,
+      event.controlKind,
+      "state",
+      event.state,
+      "entered",
+    );
+    this.#addressController.emit(address, () => ({
+      controlId: event.controlId,
+      controlKind: event.controlKind,
+      previousState: event.previousState,
+      state: event.state,
+      source: event.source,
     }));
   }
 

@@ -1020,6 +1020,36 @@ dialog:not(.resource-picker) .button-row {
   background: #14372f;
 }
 
+.picker-radio-candidate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  padding: 8px;
+  border: 1px solid #243044;
+  border-radius: 7px;
+}
+
+.picker-radio-candidate > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.picker-candidates .picker-radio-candidate button {
+  display: inline-flex;
+  grid-template-columns: none;
+  width: auto;
+  margin: 0;
+  text-align: center;
+}
+
+.picker-radio-candidate button[aria-pressed="true"] {
+  border-color: #27e1a7;
+  background: #14372f;
+}
+
 .picker-candidates button > span:last-child {
   display: grid;
   min-width: 0;

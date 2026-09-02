@@ -44,6 +44,8 @@ gamelayout:/node/basegame-background
 gamelayout:/node/basegame-background/layer/child
 gamelayout:/node/conveyor/slot/amount
 gamelayout:/node/banner/text-layer/title
+gamelayout:/ui-control/splash-flag
+gamelayout:/ui-control/splash-flag/radio/state/on/entered
 gamelayout:/reel/main
 gamelayout:/reel/main/layer/win
 gamelayout:/mode/BaseGame
@@ -121,6 +123,27 @@ layer.add(objectCreatedByProgram);
 
 标准 layer 地址包括 `layout/reel/transition/popup`，每个 authored node 的 `before/child/after`，以及 reel
 的 `bottom/top/win`。调用者负责释放自己创建的对象和 attachment disposer，不销毁 borrowed owner。
+
+## UI 控件
+
+Scene Layout v7 的 authored UI control 不进入 `gamelayout:/node/...` RenderObject namespace。按 exact 图层 id
+解析 `gamelayout:/ui-control/<id>`，并要求 `ui-control` endpoint kind：
+
+```ts
+const endpoint = runtime.addresses.resolve(
+  "gamelayout:/ui-control/splash-flag",
+  "ui-control",
+);
+if (endpoint.kind !== "ui-control") throw new Error("kind mismatch");
+const flag = endpoint.get(); // borrowed
+if (flag.kind !== "radio") throw new Error("unsupported control");
+flag.setState("on");
+console.log(flag.getState());
+```
+
+radio 初始化为 `off`。只有真实状态改变才发布
+`gamelayout:/ui-control/<id>/radio/state/<off|on>/entered`；detail 包含 previous/current state 和
+`pointer | programmatic` source。初始化和 same-state set 不发事件，控件和 capability 均由 runtime 拥有。
 
 ## 创建程序 RenderObject
 

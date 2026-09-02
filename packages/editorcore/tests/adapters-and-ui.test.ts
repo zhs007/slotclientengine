@@ -674,6 +674,64 @@ describe("default adapters", () => {
     controller.destroy();
   });
 
+  it("configures exact radio state events through shared catalog facets", async () => {
+    const rootKey = "current-layout.manifest.json";
+    const address =
+      "gamelayout:/ui-control/splash-flag/radio/state/on/entered" as const;
+    const catalog: EditorGameLayoutEventCatalog = {
+      rootKey,
+      entries: [
+        {
+          descriptor: {
+            address,
+            kind: "event",
+            ownerAddress: "gamelayout:/ui-control/splash-flag",
+            authored: true,
+            capability: "event",
+          },
+          family: "ui-control-state",
+          facets: [
+            { key: "control", value: "splash-flag" },
+            { key: "control-kind", value: "radio" },
+            { key: "state", value: "on" },
+            { key: "edge", value: "entered" },
+          ],
+          dispatchAddresses: [address],
+        },
+      ],
+    };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const confirmation: { value: EditorGameLayoutEventGroup | null } = {
+      value: null,
+    };
+    const dialog = mountEditorGameLayoutEventDialog({
+      root: host,
+      sources: [{ key: rootKey, label: "当前项目" }],
+      value: { rootKey, events: [] },
+      inspectCatalog: () => catalog,
+      onConfirm(value) {
+        confirmation.value = value;
+      },
+    });
+
+    dialog.open();
+    await flush();
+    click(required(host, '[data-event-action="add"]'));
+    expect(host.textContent).toContain("UI 控件状态");
+    pickEventChoice(host, "ui-control-state", "family");
+    for (const value of ["splash-flag", "radio", "on", "entered"])
+      pickEventChoice(host, value, "pick");
+    expect(host.textContent).toContain(address);
+    click(required(host, '[data-event-action="save-row"]'));
+    click(required(host, "[data-event-confirm]"));
+    await flush();
+    expect(confirmation.value?.events.map((event) => event.address)).toEqual([
+      address,
+    ]);
+    dialog.destroy();
+  });
+
   it("selects exact and wildcard Spin lifecycle scopes from catalog facets", async () => {
     const standardCatalog = await inspectSpinEventCatalog("standard");
     const gridCellCatalog = await inspectSpinEventCatalog("grid-cell");

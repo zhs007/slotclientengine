@@ -9,6 +9,61 @@ import { compileGameLayoutRuntimeEventCatalog } from "../../src/scene-layout/cor
 import { singleStatePopupFixture } from "../popup/fixtures.js";
 
 describe("Game Layout runtime address", () => {
+  it("resolves an authored radio through its UI-control owner address", () => {
+    const control = {
+      kind: "radio" as const,
+      getState: () => "off" as const,
+      setState() {},
+    };
+    const controller = createGameLayoutRuntimeAddresses(
+      {
+        manifest: {
+          nodes: [
+            {
+              id: "splash-flag",
+              order: 1,
+              uiControl: {
+                kind: "radio",
+                off: {
+                  kind: "image",
+                  path: "flag-off.png",
+                  size: { width: 145, height: 50 },
+                },
+                on: {
+                  kind: "image",
+                  path: "flag-on.png",
+                  size: { width: 145, height: 50 },
+                },
+              },
+              placements: {},
+            },
+          ],
+          reels: {},
+          gameModes: { modes: [], transitions: [] },
+        },
+        popupPackages: {},
+      } as any,
+      {
+        assertReady() {},
+        getUiControl: () => control,
+      } as any,
+    );
+    const address = formatGameLayoutRuntimeAddress("ui-control", "splash-flag");
+    expect(controller.addresses.describe(address)).toMatchObject({
+      kind: "ui-control",
+      capability: "borrowed",
+      detail: { controlKind: "radio" },
+    });
+    const endpoint = controller.addresses.resolve(address, "ui-control");
+    expect(endpoint.kind).toBe("ui-control");
+    if (endpoint.kind !== "ui-control") throw new Error("wrong endpoint kind");
+    expect(endpoint.get()).toBe(control);
+    expect(() =>
+      controller.addresses.resolve(address, "render-object"),
+    ).toThrow(/kind mismatch/);
+    controller.destroy();
+  });
+
   it("does not publish JSON program data as a render factory address", () => {
     const controller = createGameLayoutRuntimeAddresses(
       {

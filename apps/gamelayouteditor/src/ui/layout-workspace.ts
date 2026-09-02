@@ -31,10 +31,10 @@ export function layoutWorkspaceMarkup(
   const layers = project.nodes.sort((left, right) => left.order - right.order);
   return `<section class="workspace-panel layout-workspace" aria-labelledby="layout-heading">
     <aside class="layout-outline">
-      <div class="outline-toolbar"><h2 id="layout-heading">布局大纲</h2><button type="button" class="primary" data-open-add-layer>＋ 添加图层</button></div>
+      <div class="outline-toolbar"><h2 id="layout-heading">布局大纲</h2><button type="button" class="primary" data-open-add-layer>＋ 图形图层</button><button type="button" class="primary" data-open-add-radio>＋ UI 控件 / 单选框</button></div>
       <div class="outline-list" role="listbox" aria-label="布局对象" tabindex="0" data-outline-list aria-activedescendant="outline-${escapeHtml(selectionKey(selection))}">
         <div class="outline-group"><strong>主转轮</strong>${activeMode?.mainEnabled ? outlineRow({ key: "reel:main", label: "main", meta: `${project.reel.columns}×${project.reel.rows} · ready`, selected: selection.kind === "reel" }) : '<span class="outline-empty">当前 mode 未启用 main</span>'}</div>
-        <div class="outline-group"><strong>普通图层 · ${layers.length}</strong>${
+        <div class="outline-group"><strong>图层 · ${layers.length}</strong>${
           layers.length
             ? layers
                 .map((node) => {
@@ -54,7 +54,7 @@ export function layoutWorkspaceMarkup(
                   });
                 })
                 .join("")
-            : '<span class="outline-empty">暂无普通图层</span>'
+            : '<span class="outline-empty">暂无图层</span>'
         }</div>
       </div>
     </aside>
@@ -77,8 +77,13 @@ function layerMeta(
   node: EditorNodeDraft,
   visible: boolean,
 ): string {
-  const resource = project.resources.get(node.resourceId);
   const scope = describeLayerScope(project, node);
+  if (node.layerType === "ui-control") {
+    const off = project.resources.get(node.uiControl.offResourceId);
+    const on = project.resources.get(node.uiControl.onResourceId);
+    return `UI 控件 / 单选框 · order ${node.order} · ${scope} · ${visible ? (off && on ? "ready" : "error") : "当前状态不显示"}`;
+  }
+  const resource = project.resources.get(node.resourceId);
   return `${resource?.kind ?? "unknown"} · order ${node.order} · ${scope} · ${visible ? (resource ? "ready" : "error") : "当前状态不显示"}`;
 }
 
@@ -133,7 +138,10 @@ function layerInspector(
   layers: readonly EditorNodeDraft[],
   modeId: string,
 ): string {
-  const resource = project.resources.get(node.resourceId);
+  const resource =
+    node.layerType === "ui-control"
+      ? undefined
+      : project.resources.get(node.resourceId);
   const index = project.nodes.findIndex((item) => item.id === node.id);
   const layerIndex = layers.findIndex((item) => item.id === node.id);
   const scopeLabel = describeLayerScope(project, node);
@@ -153,11 +161,24 @@ function layerInspector(
         )
         .join("")}</div>`
     : "";
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>图层 Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}${numberField("order", `nodes.${index}.order`, node.order)}<p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div><p class="hint">可直接填写高于 main reel 的 order；order 必须唯一，且所有 Popup order 必须更高。</p>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "vni" ? vniPlaybackEditor(node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}</section><section class="inspector-section"><h3>状态、方向与 Placement</h3><fieldset class="layer-state-scope"><legend>${escapeHtml(scopeLabel)}</legend><label class="visibility"><input type="checkbox" data-layer-global="${escapeHtml(node.id)}" ${node.scope === undefined ? "checked" : ""}/> 所有状态有效</label>${scopeMatrix}<p class="hint">取消全局时先绑定当前编辑状态 ${escapeHtml(modeId)} 的现有 placements；之后可按 mode × orientation 精确调整。</p><div class="layer-state-variants">${ordinaryLayerVariantIds
+  const resourceMarkup =
+    node.layerType === "ui-control"
+      ? radioControlResourceMarkup(project, node)
+      : `<p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button></div>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "vni" ? vniPlaybackEditor(node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}`;
+  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>${node.layerType === "ui-control" ? "UI 控件 / 单选框" : "图形图层"} Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}${numberField("order", `nodes.${index}.order`, node.order)}${resourceMarkup}<div class="button-row"><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div><p class="hint">可直接填写高于 main reel 的 order；order 必须唯一，且所有 Popup order 必须更高。</p></section><section class="inspector-section"><h3>状态、方向与 Placement</h3><fieldset class="layer-state-scope"><legend>${escapeHtml(scopeLabel)}</legend><label class="visibility"><input type="checkbox" data-layer-global="${escapeHtml(node.id)}" ${node.scope === undefined ? "checked" : ""}/> 所有状态有效</label>${scopeMatrix}<p class="hint">取消全局时先绑定当前编辑状态 ${escapeHtml(modeId)} 的现有 placements；之后可按 mode × orientation 精确调整。</p><div class="layer-state-variants">${ordinaryLayerVariantIds
     .map((variant) => placementMarkup(node, index, variant))
     .join(
       "",
     )}</div></fieldset></section><section class="inspector-section danger-zone"><button type="button" class="danger" data-remove-layer="${escapeHtml(node.id)}">删除图层 ${escapeHtml(node.id)}</button><p>仅删除 node；资源与 bytes 保留在资源库。</p></section></div>`;
+}
+
+function radioControlResourceMarkup(
+  project: EditorProject,
+  node: Extract<EditorNodeDraft, { layerType: "ui-control" }>,
+): string {
+  const off = project.resources.get(node.uiControl.offResourceId);
+  const on = project.resources.get(node.uiControl.onResourceId);
+  return `<fieldset><legend>radio · 初始状态 off</legend><p class="path"><strong>off</strong> ${off ? escapeHtml(describeResource(off)) : "未知资源"}</p><button type="button" data-rebind-radio="off" data-layer-node-id="${escapeHtml(node.id)}">更换 off 图片</button><p class="path"><strong>on</strong> ${on ? escapeHtml(describeResource(on)) : "未知资源"}</p><button type="button" data-rebind-radio="on" data-layer-node-id="${escapeHtml(node.id)}">更换 on 图片</button><p class="hint">预览和 runtime 点击会在 off/on 间切换；状态不写回工程。</p></fieldset>`;
 }
 
 function nodeIdField(node: EditorNodeDraft): string {

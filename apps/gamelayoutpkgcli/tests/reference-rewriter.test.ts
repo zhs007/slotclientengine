@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { upgradeSceneLayoutManifestToLatest } from "@slotclientengine/rendercore/scene-layout/data";
+import {
+  createSceneLayoutRuntimeAllocation,
+  upgradeSceneLayoutManifestToLatest,
+  type SceneLayoutNode,
+} from "@slotclientengine/rendercore/scene-layout/data";
 import {
   rewriteImageStringManifest,
   rewriteLayoutManifest,
@@ -14,6 +18,8 @@ import { layoutFixture } from "./fixtures.js";
 
 const mapping = new Map([
   ["alpha.png", "alpha.webp"],
+  ["flag-off.png", "flag-off.webp"],
+  ["flag-on.png", "flag-on.webp"],
   ["digit.png", "digit.webp"],
   ["symbol.png", "symbol.webp"],
   ["symbol-disabled.png", "symbol-disabled.webp"],
@@ -28,6 +34,11 @@ const mapping = new Map([
   ["base.wav", "base.m4a"],
   ["coin.ogg", "coin.m4a"],
 ]);
+
+function graphicResource(node: SceneLayoutNode | undefined) {
+  if (!node || !("resource" in node)) throw new Error("expected graphic node");
+  return node.resource;
+}
 
 describe("typed asset reference rewriting", () => {
   it("rewrites optimized audio paths and media types together", () => {
@@ -82,7 +93,7 @@ describe("typed asset reference rewriting", () => {
 
   it("rewrites layout and image-string image fields", () => {
     const layout = rewriteLayoutManifest(layoutFixture(), mapping);
-    expect(layout.nodes[0]?.resource).toMatchObject({
+    expect(graphicResource(layout.nodes[0])).toMatchObject({
       kind: "image",
       path: "alpha.webp",
     });
@@ -132,7 +143,7 @@ describe("typed asset reference rewriting", () => {
       },
       mapping,
     );
-    expect(withVni.nodes.at(-1)?.resource).toEqual({
+    expect(graphicResource(withVni.nodes.at(-1))).toEqual({
       kind: "vni",
       project: "runtime.hash.json",
       loop: false,
@@ -214,9 +225,51 @@ describe("typed asset reference rewriting", () => {
     expect(rewritten.version).toBe(7);
     if (rewritten.version !== 7) throw new Error("Expected layout v7.");
     expect(rewritten.runtimeAllocation).toEqual(latest.runtimeAllocation);
-    expect(rewritten.nodes[0]?.resource).toMatchObject({
+    expect(graphicResource(rewritten.nodes[0])).toMatchObject({
       kind: "image",
       path: "alpha.webp",
+    });
+  });
+
+  it("rewrites both radio state image references", () => {
+    const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
+    const draft = {
+      ...latest,
+      nodes: [
+        ...latest.nodes,
+        {
+          id: "splash-flag",
+          order: 3,
+          uiControl: {
+            kind: "radio" as const,
+            off: {
+              kind: "image" as const,
+              path: "flag-off.png",
+              size: { width: 145, height: 50 },
+            },
+            on: {
+              kind: "image" as const,
+              path: "flag-on.png",
+              size: { width: 145, height: 50 },
+            },
+          },
+          placements: {
+            landscape: { x: 0, y: 0, scale: 1 },
+            portrait: { x: 0, y: 0, scale: 1 },
+          },
+        },
+      ],
+    };
+    const manifest = {
+      ...draft,
+      runtimeAllocation: createSceneLayoutRuntimeAllocation(draft),
+    };
+    const rewritten = rewriteLayoutManifest(manifest, mapping);
+    expect(rewritten.nodes.at(-1)).toMatchObject({
+      uiControl: {
+        off: { path: "flag-off.webp" },
+        on: { path: "flag-on.webp" },
+      },
     });
   });
 

@@ -93,6 +93,49 @@ size/stage/authored layout 映射 node-local pivot。
 仍只接受 `x/y`。transform 由 rendercore node container 统一应用，geometry-only 更新不重建
 texture、Spine/VNI player、reel 或当前 mode。
 
+## v7 UI 控件图层
+
+Scene Layout latest 仍为 v7。`nodes[*]` 是严格互斥的图层 union：图形图层声明 `resource`，UI 控件图层声明
+`uiControl`，不得同时声明或同时省略。历史 v1–v6 只接受图形图层。当前首个 UI 控件为二态图片单选框：
+
+```json
+{
+  "id": "splash-flag",
+  "order": 20,
+  "uiControl": {
+    "kind": "radio",
+    "off": {
+      "kind": "image",
+      "path": "splash_flag_off.png",
+      "size": { "width": 145, "height": 50 }
+    },
+    "on": {
+      "kind": "image",
+      "path": "splash_flag_on.png",
+      "size": { "width": 145, "height": 50 }
+    }
+  },
+  "placements": {
+    "landscape": { "x": 0, "y": 0, "scale": 1 }
+  }
+}
+```
+
+off/on 必须是两条不同的本地 image filename key，声明尺寸必须相同、为正，并在资源 prepare 时与实际图片尺寸复核。
+两图都属于该图层的 exact asset closure。控件复用普通图层的 id、全局 order、scope 与 placement；完整 runtime
+重建后的状态固定为 `off`，状态不写入 manifest。
+
+runtime 通过 `getUiControl("splash-flag")` 或 `gamelayout:/ui-control/splash-flag` 的 `ui-control` endpoint
+取得 borrowed radio capability，并调用 `getState()` / `setState("off" | "on")`。它不作为
+`gamelayout:/node/...` RenderObject 暴露。真正改变状态后，唯一 event manager 发布：
+
+- `gamelayout:/ui-control/splash-flag/radio/state/off/entered`
+- `gamelayout:/ui-control/splash-flag/radio/state/on/entered`
+
+event detail 包含 controlId、controlKind、previousState、state 与 `pointer | programmatic` source。初始化、same-state
+set、失败和 destroy 不发布 occurrence；shared catalog family 为 `ui-control-state`，facets 为
+control/control-kind/state/edge，因此 Event dialog 无需解析地址即可配置 exact event。
+
 ```json
 {
   "coordinateOrigin": "center",
