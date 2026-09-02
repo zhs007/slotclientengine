@@ -6,6 +6,7 @@ import {
 } from "../spine/runtime-player.js";
 import type {
   PopupPackageResource,
+  PopupPreparedObject,
   PopupStringNodeHandle,
   PopupStringNodeSelector,
   PopupRuntimeStateObserver,
@@ -13,7 +14,12 @@ import type {
   SpinePopupSnapshot,
 } from "./types.js";
 import type { SpinePopupPlayer } from "./editor-types.js";
-import type { PopupObjectInstanceHandle } from "./object-runtime.js";
+import type { SpinePopupTapInfoAttachment } from "./data/types.js";
+import {
+  createPopupObjectInstanceRuntime,
+  type PopupObjectInstanceHandle,
+  type PopupObjectInstanceRuntime,
+} from "./object-runtime.js";
 import { createPopupPromptText } from "./prompt-text.js";
 import { createPopupStringNodeRegistry } from "./string-node-registry.js";
 import { setPopupTextWidthGuidesInTree } from "./styled-text.js";
@@ -48,6 +54,7 @@ export function createSpinePopupPlayer(options: {
 
 export function createSpinePopupRuntime(options: {
   readonly resource: PopupPackageResource;
+  readonly tapInfoObject?: PopupPreparedObject;
   readonly playerFactory?: () => RendercoreSpinePlayer;
   readonly measurePromptText?: (text: Text) => {
     readonly width: number;
@@ -71,6 +78,7 @@ export function createSpinePopupRuntime(options: {
     },
     player,
     options.measurePromptText,
+    options.tapInfoObject,
     options.backdropController,
     options.observeState,
   );
@@ -87,6 +95,8 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
   readonly #prompt: ReturnType<typeof createPopupPromptText> | null;
   readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
   readonly #objectsById: ReadonlyMap<string, PopupObjectInstanceHandle>;
+  readonly #tapInfoObject: PopupObjectInstanceRuntime | null;
+  readonly #tapInfoAttachment: SpinePopupTapInfoAttachment | null;
   readonly #presentation: ReturnType<typeof createPopupPresentation>;
   readonly #observeState: PopupRuntimeStateObserver | undefined;
   readonly #popupRoot = new Container();
@@ -94,6 +104,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
   #phase: SpinePopupSnapshot["phase"] = "idle";
   #dismissRequested = false;
   #initialized = false;
+  #tapInfoActive = false;
   #destroyed = false;
 
   constructor(
@@ -108,10 +119,15 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
       readonly width: number;
       readonly height: number;
     },
+    tapInfoObject?: PopupPreparedObject,
     backdropController?: PopupBackdropController,
     observeState?: PopupRuntimeStateObserver,
   ) {
     const manifest = resource.manifest;
+    const tapInfoAttachment =
+      manifest.version === 9
+        ? (manifest.spine.tapInfoObject?.attachment ?? null)
+        : null;
     this.#manifest = manifest;
     this.#player = player;
     this.#presentation = createPopupPresentation(manifest, {
@@ -167,6 +183,11 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
         return handle ? [[layer.id, handle] as const] : [];
       }),
     );
+    this.#tapInfoAttachment = tapInfoAttachment;
+    this.#tapInfoObject =
+      tapInfoAttachment && tapInfoObject
+        ? createPopupObjectInstanceRuntime({ resource: tapInfoObject })
+        : null;
     spineSnapshotReaders.set(this, () => this.#createSnapshot());
     for (const overlay of this.#overlays)
       if (overlay.stringNode)
@@ -224,6 +245,10 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
         await overlay.init();
         this.assertUsable();
       }
+      if (this.#tapInfoObject) {
+        await this.#tapInfoObject.init();
+        this.assertUsable();
+      }
       if (this.#manifest.version >= 4) {
         const layers = this.#manifest.spine.overlays ?? [];
         this.#attachmentHandle = attachPopupLayerRuntimes({
@@ -236,6 +261,16 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
           root: this.#popupRoot,
           ...(isSpineSlotPlayer(this.#player)
             ? { mainSpine: this.#player }
+            : {}),
+          ...(this.#tapInfoObject && this.#tapInfoAttachment
+            ? {
+                supplemental: [
+                  {
+                    attachment: this.#tapInfoAttachment,
+                    container: this.#tapInfoObject.container,
+                  },
+                ],
+              }
             : {}),
         });
       }
@@ -266,6 +301,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
       this.#prompt.text.visible = true;
     }
     for (const overlay of this.#overlays) overlay.start();
+    this.setTapInfoActive(true);
     this.#player.play({
       animationName: this.#manifest.spine.playback.startAnimation,
       loop: false,
@@ -279,6 +315,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
     if (!this.isPlaying()) return;
     const result = this.#player.update(deltaSeconds);
     for (const overlay of this.#overlays) overlay.update(deltaSeconds);
+    if (this.#tapInfoActive) this.#tapInfoObject?.update(deltaSeconds);
     if (this.#phase === "start" && result.completed) {
       this.setPhase("loop");
       this.#presentation.setState("loop");
@@ -295,6 +332,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
   requestDismiss(): void {
     this.assertReady();
     if (this.#phase !== "loop") return;
+    this.setTapInfoActive(false);
     this.#dismissRequested = true;
     this.setPhase("end");
     this.#presentation.setState("end");
@@ -341,6 +379,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
     this.#attachmentHandle = null;
     this.#player.destroy();
     for (const overlay of this.#overlays) overlay.destroy();
+    this.#tapInfoObject?.destroy();
     this.#prompt?.text.destroy();
     this.#nodes.destroy();
     this.#popupRoot.destroy({ children: false });
@@ -348,12 +387,19 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
   }
 
   private complete(): void {
+    this.setTapInfoActive(false);
     this.#player.reset();
     if (this.#prompt) this.#prompt.text.visible = false;
     this.setPhase("complete");
     this.#presentation.setState(null);
     this.container.visible = false;
     this.#presentation.setActive(false);
+  }
+
+  private setTapInfoActive(active: boolean): void {
+    if (!this.#tapInfoObject || this.#tapInfoActive === active) return;
+    this.#tapInfoActive = active;
+    this.#tapInfoObject.setActive(active);
   }
 
   private assertReady(): void {

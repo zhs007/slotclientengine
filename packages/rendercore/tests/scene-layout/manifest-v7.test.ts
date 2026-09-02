@@ -62,6 +62,37 @@ function emptyLayout() {
 }
 
 describe("scene layout manifest v7", () => {
+  it("accepts only the narrow optional tap info Popup Object binding", () => {
+    const source = emptyLayout();
+    const mapped = parseSceneLayoutManifestV7({
+      ...source,
+      tapInfoObject: {
+        manifest: "tap-to-continue-popup-object.manifest.json",
+      },
+    });
+    expect(mapped.tapInfoObject).toEqual({
+      manifest: "tap-to-continue-popup-object.manifest.json",
+    });
+    expect(parseSceneLayoutManifestV7({ ...source })).not.toHaveProperty(
+      "tapInfoObject",
+    );
+    expect(() =>
+      parseSceneLayoutManifestV7({
+        ...source,
+        tapInfoObject: { manifest: "../popup-object.manifest.json" },
+      }),
+    ).toThrow(/tapInfoObject\.manifest/);
+    expect(() =>
+      parseSceneLayoutManifestV7({
+        ...source,
+        tapInfoObject: {
+          manifest: "tap-to-continue-popup-object.manifest.json",
+          fallback: true,
+        },
+      }),
+    ).toThrow(/unknown/);
+  });
+
   it("accepts an empty ordinary-node list and resolves main from center coordinates", () => {
     const manifest = emptyLayout();
     const snapshot = resolveSceneLayoutViewportV7({

@@ -1,5 +1,6 @@
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout/data";
 import type { ImportedPopupPackage } from "../io/imported-popup-package.js";
+import type { ImportedPopupObjectPackage } from "../io/imported-popup-object-package.js";
 import type { ImportedSymbolPackage } from "../io/imported-symbol-package.js";
 import {
   activeVariantIds,
@@ -591,6 +592,67 @@ export function setPopupProgrammatic(
   else project.programmaticPopupIds.delete(id);
 }
 
+export function importPopupObjectDependency(
+  project: EditorProject,
+  imported: ImportedPopupObjectPackage,
+): void {
+  const name = imported.manifest.name;
+  if (project.popupObjectDependencies.has(name))
+    throw new Error(`Popup Object dependency ${name} 已存在，可使用替换。`);
+  mergeDependencyAssets(project, imported.files);
+  project.popupObjectDependencies.set(name, {
+    name,
+    rootKey: imported.rootKey,
+    keys: Object.freeze([...imported.files.keys()].sort()),
+  });
+}
+
+export function replacePopupObjectDependency(
+  project: EditorProject,
+  name: string,
+  imported: ImportedPopupObjectPackage,
+): void {
+  const current = project.popupObjectDependencies.get(name);
+  if (!current) throw new Error(`未知 Popup Object dependency：${name}`);
+  if (imported.manifest.name !== name)
+    throw new Error(
+      `替换 Popup Object name 必须保持 ${name}，实际为 ${imported.manifest.name}。`,
+    );
+  const previousKeys = current.keys;
+  mergeDependencyAssets(
+    project,
+    imported.files,
+    exclusiveDependencyKeys(project, "popup-object", name, previousKeys),
+  );
+  project.popupObjectDependencies.set(name, {
+    name,
+    rootKey: imported.rootKey,
+    keys: Object.freeze([...imported.files.keys()].sort()),
+  });
+  garbageCollectDependencyAssets(project, previousKeys);
+}
+
+export function setTapInfoObjectDependency(
+  project: EditorProject,
+  name: string | null,
+): void {
+  if (name !== null && !project.popupObjectDependencies.has(name))
+    throw new Error(`未知 Popup Object dependency：${name}`);
+  project.tapInfoObjectName = name;
+}
+
+export function deletePopupObjectDependency(
+  project: EditorProject,
+  name: string,
+): void {
+  const dependency = project.popupObjectDependencies.get(name);
+  if (!dependency) throw new Error(`未知 Popup Object dependency：${name}`);
+  if (project.tapInfoObjectName === name)
+    throw new Error(`Popup Object ${name} 仍被 Tap info 项目配置引用。`);
+  project.popupObjectDependencies.delete(name);
+  garbageCollectDependencyAssets(project, dependency.keys);
+}
+
 export function setPopupPlacement(
   project: EditorProject,
   popupId: string,
@@ -660,7 +722,7 @@ function mergeDependencyAssets(
 
 function exclusiveDependencyKeys(
   project: EditorProject,
-  kind: "symbols" | "popup",
+  kind: "symbols" | "popup" | "popup-object",
   id: string,
   candidates: readonly string[],
 ): ReadonlySet<string> {
@@ -671,6 +733,9 @@ function exclusiveDependencyKeys(
       .flatMap(([, dependency]) => dependency.keys),
     ...[...project.popupDependencies]
       .filter(([candidateId]) => kind !== "popup" || candidateId !== id)
+      .flatMap(([, dependency]) => dependency.keys),
+    ...[...project.popupObjectDependencies]
+      .filter(([candidateId]) => kind !== "popup-object" || candidateId !== id)
       .flatMap(([, dependency]) => dependency.keys),
   ]);
   return new Set(candidates.filter((key) => !ownedElsewhere.has(key)));
@@ -695,6 +760,9 @@ function garbageCollectDependencyAssets(
       (dependency) => dependency.keys,
     ),
     ...[...project.popupDependencies.values()].flatMap(
+      (dependency) => dependency.keys,
+    ),
+    ...[...project.popupObjectDependencies.values()].flatMap(
       (dependency) => dependency.keys,
     ),
   ]);

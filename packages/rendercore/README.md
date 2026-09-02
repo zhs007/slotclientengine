@@ -281,6 +281,8 @@ Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字�
 
 `runtimeResources` 可声明 `{ kind: "json", path }` 的 program-only 数据，也可声明 `{ kind: "audio", path, mediaType }` 的 program audio。`SceneLayoutPackageResource.loadJsonData(exactKey)` 按需读取、严格解析并返回深度冻结的 JSON object/array；`loadRuntimeResource(exactKey, "audio")` 返回 package-owned URL 与 exact mediaType。JSON/audio 都不产生 RenderObject 或 `gamelayout:/resource/...` 地址，audio 的播放行为仍由 AudioCore owner 管理。
 
+Scene Layout v7 的可选根 binding `tapInfoObject: { manifest }` 由 package resource 按 standalone Popup Object exact closure 准备并拥有。普通 Spine Popup 只有在自身 v9 manifest 同时声明 `spine.tapInfoObject.attachment` 时才创建独立 mutable instance；instance 与已有 overlay 合并进同一 main Spine slot/VNI text-layer attachment transaction，并固定为同父尾部 child。对象随 Popup start/loop update、进入 end 前停用，不进入 `objects/getObject()`、string registry、runtime address，也不建立自己的 input/ticker/completion。
+
 第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 
 `startCameraEffect(target,{signal})` 返回 package-owned camera session，统一用宿主 `update(deltaSeconds)` 推进 main scene 的

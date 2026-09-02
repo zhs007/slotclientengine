@@ -15,7 +15,9 @@ import {
   parseSymbolPackageManifest,
 } from "@slotclientengine/rendercore/symbol/data";
 import {
+  collectPopupObjectPackagePaths,
   collectPopupPackagePaths,
+  parsePopupObjectManifest,
   parsePopupManifest,
   rewritePopupManifestFilenameKeys,
 } from "@slotclientengine/rendercore/popup/editor";
@@ -55,6 +57,7 @@ export async function exportLayoutZip(options: {
     string,
     ReadonlyMap<string, Uint8Array>
   >;
+  readonly tapInfoObjectFiles?: ReadonlyMap<string, Uint8Array>;
   readonly decodeImage?: (
     url: string,
   ) => Promise<{ readonly width: number; readonly height: number }>;
@@ -93,6 +96,7 @@ export async function exportLayoutZip(options: {
       Object.values(manifest.popups ?? {}).some(
         (popup) => popup.manifest === path,
       ) ||
+      manifest.tapInfoObject?.manifest === path ||
       manifest.nodes.some(
         (node) =>
           "resource" in node &&
@@ -257,6 +261,26 @@ export async function exportLayoutZip(options: {
         files.get(path)!,
       );
   }
+  if (manifest.tapInfoObject) {
+    const files = options.tapInfoObjectFiles;
+    if (!files)
+      throw new Error("manifest 绑定 Tap info Popup Object，但未提供 bytes。");
+    const nested = parsePopupObjectManifest(
+      parseJson(
+        files.get("popup-object.manifest.json"),
+        "popup-object.manifest.json",
+      ),
+    );
+    const paths = collectPopupObjectPackagePaths({ manifest: nested, files });
+    for (const path of ["popup-object.manifest.json", ...paths])
+      putClosure(
+        closure,
+        path === "popup-object.manifest.json"
+          ? manifest.tapInfoObject.manifest
+          : path,
+        files.get(path)!,
+      );
+  }
   collectSceneLayoutPackagePaths({ manifest, files: closure });
   const validated = await validateLayoutAssets(manifest, closure, {
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
@@ -386,8 +410,9 @@ async function flattenLayoutClosure(
     const directory = mapped
       ? ""
       : sourcePath.slice(0, sourcePath.lastIndexOf("/"));
-    const rewrittenProject = rewriteVNIProjectAssetPaths(project, (path) =>
-      mapping.get(mapped ? path : `${directory}/${path}`)!,
+    const rewrittenProject = rewriteVNIProjectAssetPaths(
+      project,
+      (path) => mapping.get(mapped ? path : `${directory}/${path}`)!,
     );
     virtual.set(
       mapping.get(sourcePath)!,
@@ -406,8 +431,9 @@ async function flattenLayoutClosure(
     const directory = mapped
       ? ""
       : sourcePath.slice(0, sourcePath.lastIndexOf("/"));
-    const rewrittenProject = rewriteVNIProjectAssetPaths(project, (path) =>
-      mapping.get(mapped ? path : `${directory}/${path}`)!,
+    const rewrittenProject = rewriteVNIProjectAssetPaths(
+      project,
+      (path) => mapping.get(mapped ? path : `${directory}/${path}`)!,
     );
     virtual.set(
       mapping.get(sourcePath)!,
@@ -626,6 +652,7 @@ function isPathBearingJson(value: unknown): boolean {
     record.kind === "image-string" ||
     record.kind === "symbol-package" ||
     record.kind === "popup" ||
+    record.kind === "popup-object" ||
     ((record.version === 1 || record.version === 2) &&
       record.symbols !== undefined)
   );
@@ -851,6 +878,13 @@ function rewriteLayoutManifestFilenameKeys(
           ),
         }
       : {}),
+    ...(value.version === 7 && value.tapInfoObject
+      ? {
+          tapInfoObject: {
+            manifest: key(value.tapInfoObject.manifest),
+          },
+        }
+      : {}),
     ...(runtimeResources ? { runtimeResources } : {}),
     ...(value.gameModes
       ? {
@@ -936,6 +970,7 @@ export async function materializeLayoutOwnedAssets(options: {
       (binding) => binding.manifest,
     ),
     ...Object.values(source.popups ?? {}).map((binding) => binding.manifest),
+    ...(source.tapInfoObject ? [source.tapInfoObject.manifest] : []),
   ]);
   for (const path of collectSceneLayoutAssetPaths(source))
     if (!externalRoots.has(path) && !assets.has(path))

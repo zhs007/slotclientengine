@@ -287,6 +287,45 @@ describe("popup layer attachment graph", () => {
     expect(front.parent).toBeNull();
   });
 
+  it("appends a supplemental tap info object to the existing official slot owner", () => {
+    const root = new Container();
+    const slotRoot = new Container();
+    const attachSlotObject = vi.fn(
+      ({ object }: { readonly object: Container }) => slotRoot.addChild(object),
+    );
+    const removeSlotObject = vi.fn((object: Container) => {
+      if (object.parent === slotRoot) slotRoot.removeChild(object);
+    });
+    const player = {
+      attachSlotObject,
+      removeSlotObject,
+    } as unknown as RendercoreSpineSlotPlayer;
+    const attachment = {
+      kind: "spine-slot" as const,
+      target: { kind: "main-spine" as const },
+      slot: "Value",
+    };
+    const overlay = new Container();
+    const tapInfo = new Container();
+    const handle = attachPopupLayerRuntimes({
+      layers: [imageLayer("overlay", 20, attachment)],
+      root,
+      runtimes: new Map([["overlay", { container: overlay }]]),
+      mainSpine: player,
+      supplemental: [{ attachment, container: tapInfo }],
+    });
+
+    expect(attachSlotObject).toHaveBeenCalledTimes(1);
+    const group = attachSlotObject.mock.calls[0]![0].object as Container;
+    expect(group.children).toEqual([overlay, tapInfo]);
+    expect(tapInfo.zIndex).toBe(20);
+
+    handle.destroy();
+    expect(removeSlotObject).toHaveBeenCalledTimes(1);
+    expect(overlay.parent).toBeNull();
+    expect(tapInfo.parent).toBeNull();
+  });
+
   it("mounts one VNI text owner group with ordered caller-owned children", () => {
     const root = new Container();
     const textRoot = new Container();

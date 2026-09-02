@@ -162,6 +162,50 @@ describe("asset-groups versioned parser", () => {
     expect(parseSceneLayoutAssetGroups(groups)).toEqual(groups);
   });
 
+  it("keeps the project-wide Tap info Popup Object closure in shared initial assets", () => {
+    const objectKey = "tap-to-continue-popup-object.manifest.json";
+    const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
+    const manifest = {
+      ...latest,
+      tapInfoObject: { manifest: objectKey },
+    } as never;
+    const keys = [
+      "alpha.png",
+      "beta.jpg",
+      "shared.webp",
+      "alpha-to-beta.mp4",
+      "beta-to-alpha.mp4",
+      objectKey,
+    ];
+    const groups = createSceneLayoutAssetGroups({
+      manifest,
+      files: new Map([
+        [
+          objectKey,
+          text({
+            version: 1,
+            kind: "popup-object",
+            name: "tap-to-continue",
+            resources: {},
+            layers: [],
+          }),
+        ],
+      ]),
+      sourceZipBytes: 4,
+      output: outputFixture(keys),
+      quality: 80,
+      cwebpVersion: "test",
+      convertedImageCount: 0,
+      ...audioOptimizationFixture(),
+    });
+
+    expect(groups.groups.find((group) => group.id === "shared")).toMatchObject({
+      requiredAssets: expect.arrayContaining([objectKey]),
+      incrementalAssets: [],
+    });
+    expect(groups.initialAssets).toContain(objectKey);
+  });
+
   it("keeps global layer assets shared and assigns scoped layers to one mode", () => {
     const keys = ["base.png", "free.png", "shared.png", "free-only.png"];
     const manifest = {

@@ -22,7 +22,6 @@ import {
   collectPopupObjectDirectPaths,
   parsePopupObjectManifest,
   POPUP_OBJECT_MANIFEST_PATH,
-  popupObjectToSingleStateManifest,
 } from "./data/object-manifest.js";
 import { loadPopupManifest } from "./data/normalize.js";
 import type { LatestPopupManifest } from "./data/normalize.js";
@@ -42,7 +41,10 @@ import type {
   PopupResourceSpec,
 } from "./types.js";
 import type { PopupPreparedObject } from "./core/types.js";
-import { createPopupPackageResourceFromResolvedFiles } from "./core/package-resource.js";
+import {
+  createPopupObjectPackageResourceFromResolvedFiles,
+  createPopupPackageResourceFromResolvedFiles,
+} from "./core/package-resource.js";
 
 const ROOT = "popup.manifest.json";
 
@@ -64,14 +66,13 @@ export async function createPopupObjectPackageResource(options: {
     manifest,
     files: options.files,
   });
-  const resource = (await createPopupPackageResourceFromResolvedFiles({
-    manifest: popupObjectToSingleStateManifest(manifest),
+  return createPopupObjectPackageResourceFromResolvedFiles({
+    manifest,
     files,
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
     ...(options.loadTexture ? { loadTexture: options.loadTexture } : {}),
     ...(options.loadFont ? { loadFont: options.loadFont } : {}),
-  })) as PopupPackageResource<import("./types.js").SingleStatePopupManifestV9>;
-  return Object.freeze({ kind: "popup-object", manifest, resource });
+  });
 }
 
 export async function resolvePopupObjectPackageFiles(options: {
@@ -224,7 +225,10 @@ export async function createPopupPackageResource(options: {
   });
 }
 
-export { createPopupPackageResourceFromResolvedFiles } from "./core/package-resource.js";
+export {
+  createPopupObjectPackageResourceFromResolvedFiles,
+  createPopupPackageResourceFromResolvedFiles,
+} from "./core/package-resource.js";
 export async function resolvePopupPackageFiles(options: {
   readonly manifest: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;

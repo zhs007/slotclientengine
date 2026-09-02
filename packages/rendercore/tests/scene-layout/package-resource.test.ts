@@ -642,6 +642,31 @@ describe("scene layout package resources", () => {
   });
 
   it("resolves one filename-key asset map through files and the CDN loader", async () => {
+    const tapInfoObjectKey = "tap-to-continue-popup-object.manifest.json";
+    const tapInfoObjectManifest = {
+      version: 1,
+      kind: "popup-object",
+      name: "tap-to-continue",
+      resources: {
+        prompt: {
+          kind: "image",
+          path: "TapInfo.png",
+          size: { width: 1, height: 1 },
+        },
+      },
+      layers: [
+        {
+          id: "prompt",
+          kind: "image",
+          order: 0,
+          resource: "prompt",
+          transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+          alpha: 1,
+          attachment: { kind: "popup-root" },
+          anchor: { x: 0.5, y: 0.5 },
+        },
+      ],
+    };
     const mappedImageString = {
       ...imageStringManifest,
       glyphs: {
@@ -649,21 +674,26 @@ describe("scene layout package resources", () => {
         "1": { ...imageStringManifest.glyphs["1"], path: "1.png" },
       },
     };
+    const latestPackageManifest =
+      upgradeSceneLayoutManifestToLatest(packageManifest);
     const manifest = {
-      ...packageManifest,
-      nodes: packageManifest.nodes.map((node) =>
-        node.id === "bg"
-          ? {
-              ...node,
-              resource: { ...node.resource, path: "BG.png" },
-            }
-          : {
-              ...node,
-              resource: {
-                ...node.resource,
-                manifest: "Digits.manifest.json",
+      ...latestPackageManifest,
+      tapInfoObject: { manifest: tapInfoObjectKey },
+      nodes: latestPackageManifest.nodes.map((node) =>
+        !("resource" in node)
+          ? node
+          : node.id === "bg"
+            ? {
+                ...node,
+                resource: { ...node.resource, path: "BG.png" },
+              }
+            : {
+                ...node,
+                resource: {
+                  ...node.resource,
+                  manifest: "Digits.manifest.json",
+                },
               },
-            },
       ),
     };
     const root = encode(manifest);
@@ -674,6 +704,8 @@ describe("scene layout package resources", () => {
         ["Digits.manifest.json", encode(mappedImageString)],
         ["0.png", new Uint8Array([2])],
         ["1.png", new Uint8Array([3])],
+        [tapInfoObjectKey, encode(tapInfoObjectManifest)],
+        ["TapInfo.png", new Uint8Array([4])],
       ]),
     });
     expect(
@@ -681,7 +713,14 @@ describe("scene layout package resources", () => {
         manifest,
         files: await resolveMapped(),
       }),
-    ).toEqual(["0.png", "1.png", "BG.png", "Digits.manifest.json"]);
+    ).toEqual([
+      "0.png",
+      "1.png",
+      "BG.png",
+      "Digits.manifest.json",
+      "TapInfo.png",
+      tapInfoObjectKey,
+    ]);
     const load = vi
       .spyOn(Assets, "load")
       .mockResolvedValue(Texture.WHITE as never);
@@ -695,6 +734,7 @@ describe("scene layout package resources", () => {
       expect(Object.keys(resource.imageStrings)).toEqual([
         "Digits.manifest.json",
       ]);
+      expect(resource.tapInfoObject?.manifest.name).toBe("tap-to-continue");
       await resource.destroy();
 
       const remote = await loadSceneLayoutPackageFromUrl({
@@ -729,7 +769,7 @@ describe("scene layout package resources", () => {
     const mixed = {
       ...manifest,
       nodes: manifest.nodes.map((node) =>
-        node.id === "bg"
+        "resource" in node && node.id === "bg"
           ? { ...node, resource: { ...node.resource, path: "assets/bg.png" } }
           : node,
       ),

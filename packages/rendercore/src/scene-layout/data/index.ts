@@ -42,6 +42,7 @@ export type {
   SceneLayoutReelGrid,
   SceneLayoutSymbolPackageBinding,
   SceneLayoutPopupBinding,
+  SceneLayoutTapInfoObjectBinding,
   SceneLayoutGameMode,
   SceneLayoutPrimaryAction,
   SceneLayoutNoneGameModeTransition,

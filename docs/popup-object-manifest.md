@@ -23,3 +23,5 @@ Popup Object 是由 Popup Editor 制作、供其他 Popup 组合使用的原子�
 Popup v9 通过 `{ "kind": "popup-object", "manifest": "..." }` resource 和同 kind layer 创建实例。实例的 id、transform、alpha、order、attachment，以及 Spine Popup 中的 segment visibility 属于宿主；对象内部图层保持封装，不与宿主图层排序或命名空间交错。
 
 运行时可由宿主 player 的 `getObject(instanceId)` 取得 borrowed handle，再以对象局部 exact name 调用 `getLayer()`、`getTextNode()` 或 `getImageStringNode()`。对象生命周期完全从属宿主 Popup，不拥有 dismiss、advance、completion、ticker、canvas 或独立 backdrop。
+
+Scene Layout v7 也可通过根级 `tapInfoObject: { manifest }` 选择一个 project-wide 对象。Game Layout Editor 的导入只把对象加入候选库，不自动选择；未选择对象不会进入 production ZIP。普通 Spine Popup 还必须具有 `spine.tapInfoObject.attachment` 才会实例化该对象。Scene Layout package 只准备一份 immutable definition，每个 eligible Popup player 创建独立 mutable instance；该外部实例刻意不进入宿主 `getObject()` registry。

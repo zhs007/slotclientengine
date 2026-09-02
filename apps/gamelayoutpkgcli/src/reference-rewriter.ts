@@ -304,6 +304,13 @@ export function rewriteLayoutManifest(
           ),
         }
       : {}),
+    ...(manifest.version === 7 && manifest.tapInfoObject
+      ? {
+          tapInfoObject: {
+            manifest: rewriteRef(manifest.tapInfoObject.manifest, mapping),
+          },
+        }
+      : {}),
     ...(runtimeResources ? { runtimeResources } : {}),
     ...(manifest.gameModes
       ? {

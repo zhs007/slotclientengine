@@ -1,6 +1,9 @@
 import { Container } from "pixi.js";
 import type { RendercoreSpineSlotPlayer } from "../spine/runtime-player.js";
-import type { PopupLayerAttachment } from "./data/types.js";
+import type {
+  PopupLayerAttachment,
+  SpinePopupTapInfoAttachment,
+} from "./data/types.js";
 import {
   popupLayerAttachmentParentKey,
   resolvePopupLayerAttachment,
@@ -31,6 +34,10 @@ export function attachPopupLayerRuntimes(options: {
   readonly runtimes: ReadonlyMap<string, PopupLayerAttachmentRuntime>;
   readonly root: Container;
   readonly mainSpine?: RendercoreSpineSlotPlayer;
+  readonly supplemental?: readonly {
+    readonly attachment: SpinePopupTapInfoAttachment;
+    readonly container: Container;
+  }[];
 }): PopupLayerAttachmentHandle {
   const groups = new Map<
     string,
@@ -73,6 +80,26 @@ export function attachPopupLayerRuntimes(options: {
       }
       group.container.addChild(runtime.container);
       group.children.push(runtime.container);
+    }
+
+    const supplementalZIndex = Math.max(
+      0,
+      ...options.layers.map((layer) => layer.order),
+    );
+    for (const supplemental of options.supplemental ?? []) {
+      const attachment = supplemental.attachment;
+      const key = popupLayerAttachmentParentKey(attachment);
+      let group = groups.get(key);
+      if (!group) {
+        const container = new Container();
+        container.label = `popup-attachment:${key}`;
+        container.sortableChildren = true;
+        group = { attachment, container, children: [] };
+        groups.set(key, group);
+      }
+      supplemental.container.zIndex = supplementalZIndex;
+      group.container.addChild(supplemental.container);
+      group.children.push(supplemental.container);
     }
 
     for (const group of groups.values()) {

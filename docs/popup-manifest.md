@@ -153,7 +153,7 @@ v9 普通 Spine Popup 还可声明可选的 `spine.tapInfoObject.attachment`，�
 { "kind": "vni-text-layer", "vniLayerId": "tap-host", "textLayerId": "label" }
 ```
 
-省略 `tapInfoObject` 表示未配置，不会生成 root 或首项默认值。Popup root、overlay Spine slot、resource、transform、order、visibility、对象 id 与未知字段均不属于该合同；v1–v8 夹带该字段 strict 失败。data parser 核对 VNI overlay identity，package prepare 再以 official Spine/VNI metadata 验证 exact slot 或 `type="text"` layer。该 metadata 不进入 overlay graph、资源闭包或 runtime 对象生命周期；真正的对象来源、挂载、显示和销毁由后续 consumer 的显式合同负责。
+省略 `tapInfoObject` 表示未配置，不会生成 root 或首项默认值。Popup root、overlay Spine slot、resource、transform、order、visibility、对象 id 与未知字段均不属于该合同；v1–v8 夹带该字段 strict 失败。data parser 核对 VNI overlay identity，package prepare 再以 official Spine/VNI metadata 验证 exact slot 或 `type="text"` layer。该 metadata 不进入 Popup 自身资源闭包，也不选择对象；Scene Layout v7 可另行提供一个 project-wide object binding。两边同时存在时，RenderCore 把对象作为同一 official attachment owner group 的尾部 child，start/loop 激活并在 end 前停用；单边存在均为 no-op。
 
 ## 坐标、档位与输入
 

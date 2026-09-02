@@ -16,7 +16,10 @@ import { createImageStringResourceFromFiles } from "../../image-string/package-r
 import { validateOfficialSpineResource } from "../../spine/runtime-player.js";
 import { requiredPopupAmountCharacters } from "../data/amount-format.js";
 import { resolvePopupLayerAttachment } from "../data/attachment.js";
-import { collectPopupPackagePaths } from "../data/package-closure.js";
+import {
+  collectPopupObjectPackagePaths,
+  collectPopupPackagePaths,
+} from "../data/package-closure.js";
 import { collectPopupDirectPaths } from "../data/manifest.js";
 import { loadPopupManifest } from "../data/normalize.js";
 import {
@@ -36,9 +39,37 @@ import {
   type PopupFontHandle,
   type PopupFontLoader,
 } from "../font-resource.js";
-import type { PopupPackageResource, PopupPreparedResource } from "./types.js";
+import type {
+  PopupPackageResource,
+  PopupPreparedObject,
+  PopupPreparedResource,
+} from "./types.js";
 
 const ROOT = "popup.manifest.json";
+
+/** Prepares a standalone Popup Object from an already resolved, exact closure. */
+export async function createPopupObjectPackageResourceFromResolvedFiles(options: {
+  readonly manifest: unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly decodeImage?: DecodeImageStringImage;
+  readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
+  readonly loadFont?: PopupFontLoader;
+  readonly resolveAssetUrl?: (path: string) => string | undefined;
+}): Promise<PopupPreparedObject> {
+  const manifest = parsePopupObjectManifest(options.manifest);
+  collectPopupObjectPackagePaths({ manifest, files: options.files });
+  const resource = (await createPopupPackageResourceFromResolvedFiles({
+    manifest: popupObjectToSingleStateManifest(manifest),
+    files: options.files,
+    ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+    ...(options.loadTexture ? { loadTexture: options.loadTexture } : {}),
+    ...(options.loadFont ? { loadFont: options.loadFont } : {}),
+    ...(options.resolveAssetUrl
+      ? { resolveAssetUrl: options.resolveAssetUrl }
+      : {}),
+  })) as PopupPackageResource<SingleStatePopupManifestV9>;
+  return Object.freeze({ kind: "popup-object", manifest, resource });
+}
 
 /** Prepares a runtime resource from an already resolved, exact popup closure. */
 export async function createPopupPackageResourceFromResolvedFiles(options: {

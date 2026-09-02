@@ -38,4 +38,7 @@ export {
   createPopupBackdropController,
   type PopupBackdropController,
 } from "../presentation.js";
-export { createPopupPackageResourceFromResolvedFiles } from "./package-resource.js";
+export {
+  createPopupObjectPackageResourceFromResolvedFiles,
+  createPopupPackageResourceFromResolvedFiles,
+} from "./package-resource.js";

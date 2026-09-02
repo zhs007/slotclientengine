@@ -22,9 +22,13 @@ import {
   parseSymbolPackageManifest,
 } from "@slotclientengine/rendercore/symbol/data";
 import {
+  collectMappedPopupObjectAssetKeys,
   collectMappedPopupAssetKeys,
+  collectPopupObjectPackagePaths,
   collectPopupPackagePaths,
+  parsePopupObjectManifest,
   parsePopupManifest,
+  type PopupObjectManifestV1,
   type PopupManifest,
 } from "@slotclientengine/rendercore/popup/editor";
 import { assertVNIProject } from "@slotclientengine/vnicore/data";
@@ -168,6 +172,12 @@ export interface EditorPopupDependency {
   >;
 }
 
+export interface EditorPopupObjectDependency {
+  readonly name: string;
+  readonly rootKey: string;
+  readonly keys: readonly string[];
+}
+
 export interface EditorGameModeDraft {
   id: string;
   mainEnabled: boolean;
@@ -226,6 +236,8 @@ export interface EditorProject {
   assets: Map<string, Uint8Array>;
   symbolDependencies: Map<string, EditorSymbolPackageDependency>;
   popupDependencies: Map<string, EditorPopupDependency>;
+  popupObjectDependencies: Map<string, EditorPopupObjectDependency>;
+  tapInfoObjectName: string | null;
   programmaticPopupIds: Set<string>;
   runtimeResourceBindings: Map<string, string>;
   eventAudio: SceneLayoutEventAudioV1;
@@ -265,6 +277,8 @@ export function createNewEditorProject(_legacyMode?: unknown): EditorProject {
     assets: new Map(),
     symbolDependencies: new Map(),
     popupDependencies: new Map(),
+    popupObjectDependencies: new Map(),
+    tapInfoObjectName: null,
     programmaticPopupIds: new Set(),
     runtimeResourceBindings: new Map(),
     eventAudio: { version: 1, ignoreLegacyAudio: true, bindings: [] },
@@ -592,6 +606,20 @@ export function editorProjectToManifest(
         ),
       };
     })(),
+    ...(project.tapInfoObjectName
+      ? {
+          tapInfoObject: {
+            manifest:
+              project.popupObjectDependencies.get(project.tapInfoObjectName)
+                ?.rootKey ??
+              (() => {
+                throw new Error(
+                  `Tap info Popup Object 引用了未知 dependency：${project.tapInfoObjectName}`,
+                );
+              })(),
+          },
+        }
+      : {}),
     ...(() => {
       const referenced = new Set(
         project.gameModes.modes.flatMap((mode) =>
@@ -1146,6 +1174,40 @@ export function manifestToEditorProject(
     );
     if (!usedAsPrelude && !usedAsAward) project.programmaticPopupIds.add(id);
   }
+  if (latest.tapInfoObject) {
+    const binding = latest.tapInfoObject;
+    const mapped = !binding.manifest.includes("/");
+    const prefix = mapped
+      ? ""
+      : binding.manifest.slice(0, binding.manifest.lastIndexOf("/") + 1);
+    const rootBytes = requiredAsset(
+      assets.get(binding.manifest),
+      binding.manifest,
+    );
+    const nested = parsePopupObjectManifest(
+      parseJsonBytes(rootBytes, "popup-object.manifest.json"),
+    );
+    if (!mapped && nested.name !== binding.manifest.split("/").at(-2))
+      throw new Error(`导入 Tap info Popup Object name 不一致：${nested.name}`);
+    const keys = collectMappedPopupObjectKeys(nested, assets, mapped, prefix);
+    const files = new Map<string, Uint8Array>([
+      ["popup-object.manifest.json", rootBytes],
+      ...keys.map(
+        (key) =>
+          [
+            key,
+            requiredAsset(assets.get(mapped ? key : `${prefix}${key}`), key),
+          ] as const,
+      ),
+    ]);
+    collectPopupObjectPackagePaths({ manifest: nested, files });
+    project.popupObjectDependencies.set(nested.name, {
+      name: nested.name,
+      rootKey: binding.manifest,
+      keys: Object.freeze([binding.manifest, ...keys]),
+    });
+    project.tapInfoObjectName = nested.name;
+  }
   project.gameModes = {
     activeModeId: latest.gameModes.initialMode,
     initialMode: latest.gameModes.initialMode,
@@ -1226,6 +1288,7 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
       assets: undefined,
       symbolDependencies: undefined,
       popupDependencies: undefined,
+      popupObjectDependencies: undefined,
       programmaticPopupIds: undefined,
       runtimeResourceBindings: undefined,
     }),
@@ -1247,6 +1310,12 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
     popupDependencies: new Map(
       [...project.popupDependencies].map(([id, dependency]) => [
         id,
+        structuredClone(dependency),
+      ]),
+    ),
+    popupObjectDependencies: new Map(
+      [...project.popupObjectDependencies].map(([name, dependency]) => [
+        name,
         structuredClone(dependency),
       ]),
     ),
@@ -1611,6 +1680,21 @@ function collectMappedPopupKeys(
       virtual.set(path.slice(prefix.length), bytes);
   }
   return collectMappedPopupAssetKeys({ manifest, files: virtual });
+}
+
+function collectMappedPopupObjectKeys(
+  manifest: PopupObjectManifestV1,
+  assets: ReadonlyMap<string, Uint8Array>,
+  mapped: boolean,
+  prefix: string,
+): readonly string[] {
+  const virtual = new Map<string, Uint8Array>();
+  for (const [path, bytes] of assets) {
+    if (mapped) virtual.set(path, bytes);
+    else if (path.startsWith(prefix))
+      virtual.set(path.slice(prefix.length), bytes);
+  }
+  return collectMappedPopupObjectAssetKeys({ manifest, files: virtual });
 }
 
 function requiredAsset(

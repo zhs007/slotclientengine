@@ -59,5 +59,15 @@ export function collectLayoutPreviewAssetPaths(
     if (!dependency) throw new Error(`预览缺少 Popup dependency：${id}`);
     for (const key of dependency.keys) paths.add(key);
   }
+  if (manifest.version === 7 && manifest.tapInfoObject) {
+    const dependency = [...project.popupObjectDependencies.values()].find(
+      (candidate) => candidate.rootKey === manifest.tapInfoObject!.manifest,
+    );
+    if (!dependency)
+      throw new Error(
+        `预览缺少 Tap info Popup Object dependency：${manifest.tapInfoObject.manifest}`,
+      );
+    for (const key of dependency.keys) paths.add(key);
+  }
   return paths;
 }

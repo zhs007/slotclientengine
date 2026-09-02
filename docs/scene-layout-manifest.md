@@ -230,6 +230,20 @@ binding `type` 必须与 nested popup manifest 精确一致。`order` 是 Popup 
 
 single-state Popup 的 layer id 进入任务 228 的 typed runtime address catalog：`gamelayout:/popup/<popup-id>/layer/<layer-id>` 的 endpoint `get()` 返回 borrowed `RenderObject`；text/image-string 还分别通过 `gamelayout:/popup/<popup-id>/string/<kind>/<name>` 的 `get()` 和 `input(value)` 取得 exact string handle、设置文字。catalog 只从 nested Popup typed schema 枚举，不递归扫描任意 JSON `id/name`。未知地址、kind mismatch 或 runtime destroy 后访问都显式失败，caller 不销毁 borrowed 对象。
 
+v7 根可额外声明一个项目级、可选的 Tap info Popup Object：
+
+```json
+{
+  "tapInfoObject": {
+    "manifest": "tap-to-continue-popup-object.manifest.json"
+  }
+}
+```
+
+binding 只保存 standalone `popup-object.manifest.json` 的 filename key；不保存 Popup id、父节点、transform、order 或可见状态。mapped Editor package 使用安全 filename key，direct production package 使用 `dependencies/popup-objects/<name>/popup-object.manifest.json`，且目录名必须与 nested object `name` 一致。省略字段表示未配置，v1–v6 夹带该字段 strict 失败。
+
+只有普通 Spine Popup 自身同时声明 `spine.tapInfoObject.attachment` 时，package runtime 才为该 player 创建独立对象实例并挂到 exact main Spine slot 或 exact VNI text layer。单边配置均为合法 no-op；对象不进入 Popup `objects/getObject()`、string registry 或 runtime address。package resource 共享 immutable prepared definition，每个 Spine Popup player 拥有自己的 mutable instance；对象在 Popup start/loop 活跃、进入 end 前停用，不接管输入或 completion。
+
 production consumer 可在 `requestGameMode()` 的 `preludePopupStrings` 中为本次 edge-bound Spine Popup 提交 `text | image-string` 的 exact name 和最终 string。该 scope 在 Popup start 前应用，并在 complete、失败、取消或 runtime destroy 后恢复调用前 handle 状态；它不修改 manifest，也不参与 transition prepare/cache identity。需要 persistent 或 active-playback 更新时继续使用 player exact handle。
 
 根 `assets.map.json` 将 layout、VNI、image-string、Symbols、Popup 的全部 root/leaf keys 统一映射到 `assets/<完整 SHA-256>.<ext>`。ZIP 只有两个 root control files 和 hash payload 区；禁止 `dependencies/image-strings/**`、`dependencies/symbols/**`、`dependencies/popups/**`。
@@ -268,7 +282,7 @@ Game Layout Editor 导入旧 mapped ZIP 时，在验证 map/hash/size/orphan 后
 
 ## 精确闭包与 loader
 
-`collectSceneLayoutPackagePaths()` 验证 layout、程序资源与全部 nested package 的传递 exact closure，包括 VNI project 声明的每个 asset。map 声明的 hash、size、media、payload 和 orphan 均严格验证；map/direct 不得混用。ZIP resource creator、Blob preview 与 `loadSceneLayoutPackageFromUrl()` 使用同一 resolver。父 package 已解析 map 后，VNI/image-string/Symbols/Popup 使用 resolved-files bridge，不要求嵌套 map。
+`collectSceneLayoutPackagePaths()` 验证 layout、程序资源与全部 nested package 的传递 exact closure，包括 VNI project 声明的每个 asset，以及已绑定 Tap info Popup Object 的 image、font、image-string、VNI 或 Spine payload。map 声明的 hash、size、media、payload 和 orphan 均严格验证；map/direct 不得混用。ZIP resource creator、Blob preview 与 `loadSceneLayoutPackageFromUrl()` 使用同一 resolver。父 package 已解析 map 后，VNI/image-string/Symbols/Popup/Popup Object 使用 resolved-files bridge，不要求嵌套 map。
 
 无 map 的合法 legacy direct-path/nested dependency package继续加载。Editor import 会在内存中迁移为 flat keys，再导出新格式；不做 basename runtime fallback、404 探测或宽泛 glob。
 

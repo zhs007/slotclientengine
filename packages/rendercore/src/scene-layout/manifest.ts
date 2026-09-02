@@ -263,6 +263,8 @@ export function collectSceneLayoutAssetPaths(
     paths.add(binding.manifest);
   for (const popup of Object.values(parsed.popups ?? {}))
     paths.add(popup.manifest);
+  if (parsed.version === 7 && parsed.tapInfoObject)
+    paths.add(parsed.tapInfoObject.manifest);
   for (const resource of Object.values(parsed.runtimeResources ?? {})) {
     if (
       resource.kind === "image" ||
@@ -891,6 +893,7 @@ function sceneLayoutStructureV7(manifest: SceneLayoutManifestV7): unknown {
           ),
         )
       : undefined,
+    tapInfoObject: manifest.tapInfoObject,
     runtimeResources: manifest.runtimeResources,
     gameModes: {
       ...manifest.gameModes,
@@ -1131,7 +1134,8 @@ function parseGameModes(
   nodes: readonly SceneLayoutGraphicNode[],
   legacySymbolPackage: SceneLayoutSymbolPackageBinding | undefined,
   symbolPackages:
-    Readonly<Record<string, SceneLayoutSymbolPackageBinding>> | undefined,
+    | Readonly<Record<string, SceneLayoutSymbolPackageBinding>>
+    | undefined,
   popups: Readonly<Record<string, SceneLayoutPopupBinding>> | undefined,
 ): SceneLayoutGameModes {
   const record = readRecord(value, "scene layout gameModes");
@@ -1184,7 +1188,8 @@ function parseGameModes(
   const parsedHeads = rawModes.map(({ mode, label }) => {
     const id = stateIdentifier(mode.id, `${label}.id`);
     let backgroundNodes:
-      Readonly<Partial<Record<SceneLayoutVariantId, string>>> | undefined;
+      | Readonly<Partial<Record<SceneLayoutVariantId, string>>>
+      | undefined;
     if (canonical) {
       if (mode.backgroundNodes === undefined)
         fail(`${label}.backgroundNodes is required for canonical gameModes.`);

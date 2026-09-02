@@ -4,7 +4,9 @@ import {
 } from "@slotclientengine/rendercore/image-string/data";
 import { assertVNIProject } from "@slotclientengine/vnicore/data";
 import {
+  collectMappedPopupObjectAssetKeys,
   collectMappedPopupAssetKeys,
+  parsePopupObjectManifest,
   parsePopupManifest,
 } from "@slotclientengine/rendercore/popup/data";
 import {
@@ -62,7 +64,17 @@ export function createSceneLayoutAssetGroups(options: {
       ? node.scope === undefined
       : !allBackgroundIds.has(node.id) && node.gameMode === undefined,
   );
-  const sharedRequired = nodeClosure(sharedNodes, options.files);
+  const tapInfoObjectRequired =
+    options.manifest.version === 7 && options.manifest.tapInfoObject
+      ? popupObjectClosure(
+          options.manifest.tapInfoObject.manifest,
+          options.files,
+        )
+      : [];
+  const sharedRequired = sortUnique([
+    ...nodeClosure(sharedNodes, options.files),
+    ...tapInfoObjectRequired,
+  ]);
   const audioAssets = collectPackageAudioAssets(
     options.manifest,
     options.files,
@@ -297,6 +309,19 @@ export function createSceneLayoutAssetGroups(options: {
   if (parsed.version !== 2)
     throw new Error("内部错误：新生成的 asset groups 不是 v2。");
   return parsed;
+}
+
+function popupObjectClosure(
+  manifestKey: string,
+  files: ReadonlyMap<string, Uint8Array>,
+): readonly string[] {
+  const manifest = parsePopupObjectManifest(
+    parseRequiredJson(files, manifestKey),
+  );
+  return sortUnique([
+    manifestKey,
+    ...collectMappedPopupObjectAssetKeys({ manifest, files }),
+  ]);
 }
 
 function finalizeGroup(
