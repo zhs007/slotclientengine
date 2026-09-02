@@ -16,7 +16,7 @@
   - `attack` 1.30 秒、`idle` 2.03 秒、`victory` 1.53 秒、`walk` 2.03 秒；每段 60 个 transform channels。
   - 3 张内嵌 `image/ktx2` UASTC 纹理，均为 2048×2048、12 级 mipmap；GLB required extension 为
     `KHR_texture_basisu`，无 PNG/WebP fallback 或外部 URI。
-  - SHA-256：`aae3275d8df13310501047c34b8d88036aa86631e31747974d70818021368ee3`。
+  - SHA-256：`12d8d2e5a34798ab777db7311d6c41dde318ecbaab6f0ce681ef5eacfa86475c`。
 - `apps/castleknight3ddemo/viewer.html`
   - 独立查看器页面及可访问名称明确的控制面板。
 - `apps/castleknight3ddemo/src/model-viewer.ts`
@@ -152,6 +152,11 @@ Blender 五相位与真实 Three.js viewer 的最高抬剑姿态均已复验。
 膝盖相对髋部各向外 2cm，左/右脚踝分别向外 4cm/5cm，同时继续数值求解鞋尖朝前。最终 GLB 密集采样的鞋中心
 间距稳定在 18.56–18.90cm；validator 改为自然腿距、轨道稳定性和最小 14cm 鞋中心间距门禁。与用户截图一致的
 正面九相位渲染及真实 Three.js viewer 换步姿态均无内扣、拥挤或交叉。
+
+用户继续指出第八版的大腿仍向外斜。诊断确认膝盖相对髋部外移 2cm 会直接造成髋—膝段外张；第九版将左右膝盖
+重新对齐到对应髋部正下方，只保留左/右脚踝分别向外 4cm/5cm，使大腿竖直而小腿自然接到分开的鞋轨道。最终
+GLB 密集采样的膝盖最大横向偏差约 0.0075mm，左右鞋几何中心间距稳定在 19.75–20.71cm；validator 增加膝盖
+最大 5mm 偏差门禁。正面九相位 Blender 渲染与真实 Three.js viewer 的静止、迈步相位均已复验。
 
 ## 剩余风险
 
