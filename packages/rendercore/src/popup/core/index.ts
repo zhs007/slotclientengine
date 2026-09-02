@@ -8,6 +8,7 @@ export type {
   PopupPreparedFont,
   PopupPreparedImage,
   PopupPreparedImageString,
+  PopupPreparedObject,
   PopupPreparedResource,
   PopupPreparedSpine,
   PopupPreparedVni,
@@ -32,6 +33,7 @@ export {
 export { createAwardCelebrationRuntime } from "../award-player.js";
 export { createSpinePopupRuntime } from "../spine-player.js";
 export { createSingleStatePopupRuntime } from "../single-state-player.js";
+export type { PopupObjectInstanceHandle } from "../object-runtime.js";
 export {
   createPopupBackdropController,
   type PopupBackdropController,

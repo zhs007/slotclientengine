@@ -92,6 +92,7 @@ class FakeSpinePopupRuntime implements SpinePopupRuntime {
   );
   readonly textNodes: readonly PopupStringNodeHandle[] = [this.heading];
   readonly imageStringNodes: readonly PopupStringNodeHandle[] = [this.amount];
+  readonly objects = [];
   readonly startSnapshots: Array<{ heading: string; amount: string }> = [];
   phase: SpinePopupPhase = "idle";
   dismissRequested = false;
@@ -122,6 +123,9 @@ class FakeSpinePopupRuntime implements SpinePopupRuntime {
   getTextNode(selector: string | number): PopupStringNodeHandle {
     if (selector === "heading" || selector === 0) return this.heading;
     throw new Error(`text node not found: ${selector}`);
+  }
+  getObject(id: string): never {
+    throw new Error(`popup object not found: ${id}`);
   }
   getImageStringNode(selector: string | number): PopupStringNodeHandle {
     if (selector === "amount" || selector === 0) return this.amount;

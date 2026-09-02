@@ -20,10 +20,15 @@ import {
 } from "@slotclientengine/rendercore/image-string/data";
 import {
   collectPopupPackagePaths,
+  collectPopupObjectPackagePaths,
+  createPopupObjectPackageResource,
   createPopupPackageResource,
+  parsePopupObjectManifest,
   parsePopupManifest,
+  POPUP_OBJECT_MANIFEST_PATH,
   resolvePopupLayerAttachment,
   resolvePopupPackageFiles,
+  resolvePopupObjectPackageFiles,
   loadPopupManifest,
 } from "@slotclientengine/rendercore/popup/editor";
 import type {
@@ -37,11 +42,13 @@ import {
   createPopupEditorProject,
   migratePopupEditorVisibility,
   projectToManifest,
+  projectToPopupObjectManifest,
 } from "../model/project.js";
 import type { PopupEditorProject } from "../model/project.js";
 import { POPUP_ZIP_LIMITS } from "./resource-import.js";
 
 const ROOT = "popup.manifest.json";
+const OBJECT_ROOT = POPUP_OBJECT_MANIFEST_PATH;
 
 export interface PopupLegacyAudioMigration {
   readonly effects: number;
@@ -67,6 +74,8 @@ export async function exportPopupZip(
   project: PopupEditorProject,
   options: { readonly prepare?: boolean } = {},
 ) {
+  if (project.type === "popup-object")
+    return exportPopupObjectZip(project, options);
   const manifest = projectToManifest(project);
   const liveKeys = popupManifestAssetClosure(manifest, project.assets);
   const workspace = await projectWorkspace(project);
@@ -93,14 +102,45 @@ export async function exportPopupZip(
   });
 }
 
+async function exportPopupObjectZip(
+  project: PopupEditorProject,
+  options: { readonly prepare?: boolean },
+) {
+  const manifest = projectToPopupObjectManifest(project);
+  const liveKeys = popupObjectManifestAssetClosure(manifest, project.assets);
+  const workspace = await projectWorkspace(project);
+  const map = createEditorAssetsMapFromWorkspace(workspace, liveKeys);
+  const entries = new Map(materializeEditorAssetPayloads(workspace, liveKeys));
+  entries.set(EDITOR_ASSETS_MAP_PATH, serializeEditorAssetsMap(map));
+  entries.set(OBJECT_ROOT, encodeStable(manifest));
+  collectPopupObjectPackagePaths({
+    manifest,
+    files: await resolvePopupObjectPackageFiles({ manifest, files: entries }),
+  });
+  if (options.prepare !== false) {
+    const resource = await createPopupObjectPackageResource({
+      manifest,
+      files: entries,
+    });
+    await resource.resource.destroy();
+  }
+  const bytes = createDeterministicZip(entries, { level: 6 });
+  return Object.freeze({
+    fileName: `${manifest.name}-popup-object.zip`,
+    bytes,
+    blob: new Blob([bytes.slice().buffer], { type: "application/zip" }),
+  });
+}
+
 export async function importPopupZip(
   bytes: Uint8Array,
   options: { readonly prepare?: boolean } = {},
 ): Promise<PopupEditorProject> {
   const files = normalizeEditorPackageZipEntries(
     extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS }),
-    [ROOT],
+    [ROOT, OBJECT_ROOT],
   );
+  if (files.has(OBJECT_ROOT)) return importPopupObjectZip(files, options);
   const root = files.get(ROOT);
   if (!root) throw new Error(`popup package 缺少 root ${ROOT} sentinel。`);
   const sourceManifest = parsePopupManifest(parseJson(root, ROOT));
@@ -212,6 +252,65 @@ export async function importPopupZip(
   return finishImportedPopupProject(project, manifest);
 }
 
+async function importPopupObjectZip(
+  files: ReadonlyMap<string, Uint8Array>,
+  options: { readonly prepare?: boolean },
+): Promise<PopupEditorProject> {
+  if (files.has(ROOT))
+    throw new Error("ZIP 不得同时包含 Popup 与 Popup Object root sentinel。");
+  const root = files.get(OBJECT_ROOT);
+  if (!root) throw new Error(`popup object package 缺少 ${OBJECT_ROOT}。`);
+  const manifest = parsePopupObjectManifest(parseJson(root, OBJECT_ROOT));
+  if (!files.has(EDITOR_ASSETS_MAP_PATH))
+    throw new Error("Popup Object 项目缺少 assets.map.json。");
+  const virtual = await resolvePopupObjectPackageFiles({ manifest, files });
+  collectPopupObjectPackagePaths({ manifest, files: virtual });
+  if (options.prepare !== false) {
+    const prepared = await createPopupObjectPackageResource({
+      manifest,
+      files,
+    });
+    await prepared.resource.destroy();
+  }
+  const map = decodeEditorAssetsMap(files.get(EDITOR_ASSETS_MAP_PATH)!);
+  const project = createPopupEditorProject({
+    name: manifest.name,
+    id: manifest.name,
+    type: "popup-object",
+  });
+  project.resources.clear();
+  project.assets.clear();
+  for (const key of virtual.keys()) {
+    if (key === OBJECT_ROOT) continue;
+    const entry = map.files[key];
+    if (!entry)
+      throw new Error(`assets.map.json 缺少 Popup Object key：${key}`);
+    project.assets.set(key, {
+      key,
+      sha256: entry.sha256,
+      payloadPath: entry.path,
+      mediaType: entry.mediaType,
+      byteLength: entry.byteLength,
+      bytes: virtual.get(key)!.slice(),
+    });
+  }
+  for (const [rootKey, spec] of Object.entries(manifest.resources))
+    project.resources.set(rootKey, {
+      rootKey,
+      kind: spec.kind,
+      spec: structuredClone(spec),
+      keys: resourceClosure(spec, project.assets),
+    });
+  project.singleState.layers = structuredClone([...manifest.layers]);
+  normalizeImportedProject(project);
+  const closure = popupObjectManifestAssetClosure(manifest, project.assets);
+  if (closure.length !== project.assets.size)
+    throw new Error("popup object assets map 包含未引用 entry。");
+  const imported = clonePopupEditorProject(project);
+  projectToPopupObjectManifest(imported);
+  return imported;
+}
+
 function finishImportedPopupProject(
   project: PopupEditorProject,
   manifest: LatestPopupManifest,
@@ -278,6 +377,16 @@ function popupManifestAssetClosure(
   return Object.freeze([...keys].sort((a, b) => a.localeCompare(b, "en")));
 }
 
+function popupObjectManifestAssetClosure(
+  manifest: import("@slotclientengine/rendercore/popup/editor").PopupObjectManifestV1,
+  assets: ReadonlyMap<string, { readonly bytes: Uint8Array }>,
+) {
+  const keys = new Set<string>();
+  for (const spec of Object.values(manifest.resources))
+    for (const key of resourceClosure(spec, assets)) keys.add(key);
+  return Object.freeze([...keys].sort((a, b) => a.localeCompare(b, "en")));
+}
+
 function resourceClosure(
   spec: PopupResourceSpec,
   assets: ReadonlyMap<string, { readonly bytes: Uint8Array }>,
@@ -296,6 +405,13 @@ function resourceClosure(
   if (spec.kind === "vni") {
     const project = assertVNIProject(parseJson(rootBytes, root));
     return Object.freeze([root, ...project.assets.map(({ path }) => path)]);
+  }
+  if (spec.kind === "popup-object") {
+    const object = parsePopupObjectManifest(parseJson(rootBytes, root));
+    const keys = new Set<string>([root]);
+    for (const nested of Object.values(object.resources))
+      for (const key of resourceClosure(nested, assets)) keys.add(key);
+    return Object.freeze([...keys].sort((a, b) => a.localeCompare(b, "en")));
   }
   const manifest = parseImageStringManifest(parseJson(rootBytes, root));
   return Object.freeze([root, ...collectImageStringAssetPaths(manifest)]);

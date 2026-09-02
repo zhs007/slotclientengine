@@ -11,17 +11,25 @@ import {
 } from "./vni-playback.js";
 import { createRenderImageString } from "../image-string/core/index.js";
 import { createPopupStyledText } from "./styled-text.js";
+import {
+  createPopupObjectInstanceRuntime,
+  type PopupObjectInstanceHandle,
+} from "./object-runtime.js";
 import type {
+  AwardPopupLayerV9,
   PopupOverlayLayer,
   PopupPreparedResource,
   PopupSegment,
   SingleStatePopupLayerV8,
+  SingleStatePopupLayerV9,
   SpinePopupOverlayLayerV5,
+  SpinePopupOverlayLayerV9,
 } from "./types.js";
 
 export interface SpinePopupOverlayRuntime {
   readonly container: Container;
   readonly spinePlayer?: RendercoreSpineSlotPlayer;
+  readonly objectHandle?: PopupObjectInstanceHandle;
   readonly stringNode?: {
     readonly kind: "text" | "image-string";
     readonly name: string;
@@ -43,8 +51,11 @@ export function createSpinePopupOverlayRuntime(options: {
   readonly popupId: string;
   readonly layer:
     | PopupOverlayLayer
+    | AwardPopupLayerV9
     | SpinePopupOverlayLayerV5
-    | SingleStatePopupLayerV8;
+    | SpinePopupOverlayLayerV9
+    | SingleStatePopupLayerV8
+    | SingleStatePopupLayerV9;
   readonly resource?: PopupPreparedResource;
   readonly spinePlayerFactory?: () => RendercoreSpinePlayer;
   readonly vniPlayerFactory?: (parent: Container) => VNIRuntime;
@@ -59,10 +70,41 @@ export function createSpinePopupOverlayRuntime(options: {
   const container = new Container();
   container.position.set(layer.transform.x, layer.transform.y);
   container.scale.set(layer.transform.scale);
-  container.rotation = (layer.transform.rotation * Math.PI) / 180;
+  container.rotation = ((layer.transform.rotation ?? 0) * Math.PI) / 180;
   container.alpha = layer.alpha ?? 1;
   container.zIndex = layer.order;
   container.visible = false;
+  if (layer.kind === "popup-object" && resource?.kind === "popup-object") {
+    const object = createPopupObjectInstanceRuntime({ resource });
+    container.addChild(object.container);
+    let active = false;
+    const setActive = (next: boolean) => {
+      if (next === active) return;
+      active = next;
+      object.setActive(next);
+      container.visible = next;
+    };
+    return {
+      container,
+      objectHandle: object.handle,
+      async init() {
+        await object.init();
+      },
+      start() {
+        setActive(visibleInSegment(layer, "start"));
+      },
+      update(deltaSeconds) {
+        if (active) object.update(deltaSeconds);
+      },
+      applySegment(segment) {
+        setActive(visibleInSegment(layer, segment));
+      },
+      destroy() {
+        object.destroy();
+        container.destroy({ children: false });
+      },
+    };
+  }
   if (layer.kind === "image" && resource?.kind === "image") {
     const sprite = new Sprite(resource.texture);
     sprite.anchor.set(layer.anchor.x, layer.anchor.y);
@@ -85,7 +127,7 @@ export function createSpinePopupOverlayRuntime(options: {
   if (layer.kind === "image-string" && resource?.kind === "image-string") {
     const renderer = createRenderImageString({
       resource: resource.resource,
-      text: layer.defaultText,
+      text: layer.defaultText ?? "",
       anchor: layer.anchor,
     });
     container.addChild(renderer.container);
@@ -93,8 +135,8 @@ export function createSpinePopupOverlayRuntime(options: {
       container,
       stringNode: {
         kind: "image-string",
-        name: "name" in layer ? layer.name : layer.id,
-        defaultText: layer.defaultText,
+        name: "name" in layer ? (layer.name ?? layer.id) : layer.id,
+        defaultText: layer.defaultText ?? "",
         setText(text) {
           renderer.setText(text);
         },
@@ -250,7 +292,13 @@ export function createSpinePopupOverlayRuntime(options: {
 }
 
 function visibleInSegment(
-  layer: PopupOverlayLayer | SpinePopupOverlayLayerV5 | SingleStatePopupLayerV8,
+  layer:
+    | PopupOverlayLayer
+    | AwardPopupLayerV9
+    | SpinePopupOverlayLayerV5
+    | SpinePopupOverlayLayerV9
+    | SingleStatePopupLayerV8
+    | SingleStatePopupLayerV9,
   segment: PopupSegment,
 ): boolean {
   if ("visibleStates" in layer && layer.visibleStates)

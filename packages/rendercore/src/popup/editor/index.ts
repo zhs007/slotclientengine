@@ -17,9 +17,12 @@ export { validatePopupFontBytes } from "../font-resource.js";
 export {
   collectPopupPackagePaths,
   createPopupPackageResource,
+  createPopupObjectPackageResource,
   flattenPopupPackageFiles,
   loadPopupPackageFromUrl,
+  namespaceMappedPopupObjectPackageFiles,
   namespaceMappedPopupPackageFiles,
   resolvePopupPackageFiles,
+  resolvePopupObjectPackageFiles,
   rewritePopupManifestFilenameKeys,
 } from "../package-resource.js";

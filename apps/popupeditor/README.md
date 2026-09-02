@@ -1,8 +1,10 @@
 # Popup Editor
 
-纯前端 strict `award-celebration`、普通 `spine` 与 `single-state` popup package 编辑器。
+纯前端 strict `award-celebration`、普通 `spine`、`single-state` popup package 与可复用 Popup Object 编辑器。
 
-资源 tab 只有一个支持多文件/多 ZIP 的“导入资源”入口，识别 image、WOFF2/WOFF/TTF/OTF 字体、official Spine 4.3、VNI、standalone ImgNumber ZIP 和 Popup ZIP。字体会校验扩展名与文件签名。所有 closure 在提交前结构化抹平为 filename keys，普通导入只入库；layer/tier 仍由用户显式绑定。
+资源 tab 只有一个支持多文件/多 ZIP 的“导入资源”入口，识别 image、WOFF2/WOFF/TTF/OTF 字体、official Spine 4.3、VNI、standalone ImgNumber ZIP 和 Popup Object ZIP。字体会校验扩展名与文件签名。所有 closure 在提交前结构化抹平为 filename keys，普通导入只入库；layer/tier 仍由用户显式绑定。
+
+创建项目时可选择 `Popup Object`。对象项目的项目级配置只有 lowercase kebab-case `name`，不配置 Popup id/type、重点区域、全屏压暗、金额或状态；图层编辑复用 single-state 的五类资源和文字样式。导出为 `<name>-popup-object.zip`，既可单独重开，也可从普通 Popup 的资源入口导入并作为一个原子图层复用。对象不能嵌套对象，宿主也不能穿透对象挂接内部节点。
 
 VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自动选中；只有声明多个 runtime 时才显示下拉选择，不允许手输 profile id。`purpose=editing` 的完整编辑备份不会作为候选，也不会进入资源库；最终只提交所选 runtime project 与精确 assets。`.DS_Store`、未知、orphan、缺失和歧义输入不会被忽略。
 

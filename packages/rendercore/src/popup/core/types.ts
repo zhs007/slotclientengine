@@ -6,12 +6,15 @@ import type {
 import type { ImageStringResource } from "../../image-string/core/index.js";
 import type { OfficialSpinePlayerResource } from "../../spine/runtime-player.js";
 import type { RenderObject } from "../../presentation/render-object.js";
+import type { PopupObjectInstanceHandle } from "../object-runtime.js";
 import type {
   AwardTierId,
   PopupAmountFormatter,
   PopupManifest,
   PopupSegment,
   PopupSize,
+  PopupObjectManifestV1,
+  SingleStatePopupManifestV9,
 } from "../data/types.js";
 
 export interface PopupStringNodeHandle {
@@ -112,12 +115,18 @@ export interface PopupPreparedSpine {
   readonly kind: "spine";
   readonly resource: OfficialSpinePlayerResource;
 }
+export interface PopupPreparedObject {
+  readonly kind: "popup-object";
+  readonly manifest: PopupObjectManifestV1;
+  readonly resource: PopupPackageResource<SingleStatePopupManifestV9>;
+}
 export type PopupPreparedResource =
   | PopupPreparedImage
   | PopupPreparedFont
   | PopupPreparedImageString
   | PopupPreparedVni
-  | PopupPreparedSpine;
+  | PopupPreparedSpine
+  | PopupPreparedObject;
 
 export interface PopupPackageResource<
   TManifest extends PopupManifest = PopupManifest,
@@ -131,6 +140,7 @@ export interface AwardCelebrationRuntime {
   readonly container: Container;
   readonly textNodes: readonly PopupStringNodeHandle[];
   readonly imageStringNodes: readonly PopupStringNodeHandle[];
+  readonly objects: readonly PopupObjectInstanceHandle[];
   applyViewport?(
     viewportSize: PopupSize,
     placement?: PopupHostPlacement,
@@ -151,6 +161,7 @@ export interface AwardCelebrationRuntime {
   isPlaying(): boolean;
   getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
   getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
+  getObject(id: string): PopupObjectInstanceHandle;
   destroy(): void;
 }
 
@@ -163,6 +174,7 @@ export interface SpinePopupRuntime {
   readonly container: Container;
   readonly textNodes: readonly PopupStringNodeHandle[];
   readonly imageStringNodes: readonly PopupStringNodeHandle[];
+  readonly objects: readonly PopupObjectInstanceHandle[];
   applyViewport?(
     viewportSize: PopupSize,
     placement?: PopupHostPlacement,
@@ -176,6 +188,7 @@ export interface SpinePopupRuntime {
   isPlaying(): boolean;
   getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
   getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
+  getObject(id: string): PopupObjectInstanceHandle;
   destroy(): void;
 }
 
@@ -188,6 +201,7 @@ export interface SingleStatePopupRuntime {
   readonly container: Container;
   readonly textNodes: readonly PopupStringNodeHandle[];
   readonly imageStringNodes: readonly PopupStringNodeHandle[];
+  readonly objects: readonly PopupObjectInstanceHandle[];
   applyViewport?(
     viewportSize: PopupSize,
     placement?: PopupHostPlacement,
@@ -202,5 +216,6 @@ export interface SingleStatePopupRuntime {
   getLayer(name: string): RenderObject;
   getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
   getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle;
+  getObject(id: string): PopupObjectInstanceHandle;
   destroy(): void;
 }

@@ -38,6 +38,7 @@ export type PopupResourceSpec =
   | { readonly kind: "font"; readonly path: string }
   | { readonly kind: "image-string"; readonly manifest: string }
   | { readonly kind: "vni"; readonly project: string }
+  | { readonly kind: "popup-object"; readonly manifest: string }
   | {
       readonly kind: "spine";
       readonly skeleton: string;
@@ -142,6 +143,31 @@ export interface PopupSingleStateSpineAutoplay {
   readonly loop: boolean;
 }
 
+export interface PopupObjectInstanceLayerBase {
+  readonly id: string;
+  readonly kind: "popup-object";
+  readonly order: number;
+  readonly resource: string;
+  readonly transform: PopupTransform;
+  readonly alpha: number;
+  readonly attachment: PopupLayerAttachment;
+}
+
+export type AwardPopupObjectLayerV9 = PopupObjectInstanceLayerBase;
+export type SpinePopupObjectLayerV9 = Omit<
+  PopupObjectInstanceLayerBase,
+  "transform"
+> & {
+  readonly transform: PopupOverlayTransform;
+  readonly visibleStates: readonly PopupSegment[];
+};
+export type SingleStatePopupObjectLayerV9 = Omit<
+  PopupObjectInstanceLayerBase,
+  "transform"
+> & {
+  readonly transform: PopupOverlayTransform;
+};
+
 export type SingleStatePopupLayerV8 =
   | {
       readonly id: string;
@@ -195,6 +221,15 @@ export type SingleStatePopupLayerV8 =
       readonly alpha: number;
       readonly attachment: PopupLayerAttachment;
       readonly autoplay?: PopupSingleStateSpineAutoplay;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "popup-object";
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly alpha: number;
+      readonly attachment: PopupLayerAttachment;
     };
 export type PopupLayer =
   | (PopupLayerBase & {
@@ -236,6 +271,10 @@ export type PopupLayer =
         readonly loopAnimation: string;
         readonly endAnimation: string;
       };
+    })
+  | (PopupLayerBase & {
+      readonly kind: "popup-object";
+      readonly resource: string;
     });
 
 export type PopupOverlayLayer =
@@ -307,6 +346,17 @@ export type PopupOverlayLayer =
         readonly loopAnimation: string;
         readonly endAnimation: string;
       };
+    }
+  | {
+      readonly id: string;
+      readonly kind: "popup-object";
+      readonly order: number;
+      readonly resource: string;
+      readonly transform: PopupOverlayTransform;
+      readonly alpha?: number;
+      readonly attachment?: PopupLayerAttachment;
+      readonly visibleStates?: readonly PopupVisibilityState[];
+      readonly visibleSegments?: readonly PopupSegment[];
     };
 
 export interface PopupPromptSpec {
@@ -653,11 +703,31 @@ type WithPopupTextStyleV9<Layer> = Layer extends {
   ? Omit<Layer, "style"> & { readonly style: PopupTextStyleV9 }
   : Layer;
 
-export type AwardPopupLayerV9 = WithPopupTextStyleV9<AwardPopupLayerV6>;
+export type AwardPopupLayerV9 =
+  | WithPopupTextStyleV9<AwardPopupLayerV6>
+  | AwardPopupObjectLayerV9;
 export type SpinePopupOverlayLayerV9 =
-  WithPopupTextStyleV9<SpinePopupOverlayLayerV6>;
+  | WithPopupTextStyleV9<SpinePopupOverlayLayerV6>
+  | SpinePopupObjectLayerV9;
 export type SingleStatePopupLayerV9 =
-  WithPopupTextStyleV9<SingleStatePopupLayerV8>;
+  | WithPopupTextStyleV9<SingleStatePopupLayerV8>
+  | SingleStatePopupObjectLayerV9;
+
+export type PopupObjectLayerV1 = Exclude<
+  SingleStatePopupLayerV9,
+  { readonly kind: "popup-object" }
+>;
+export type PopupObjectResourceSpecV1 = Exclude<
+  PopupResourceSpec,
+  { readonly kind: "popup-object" }
+>;
+export interface PopupObjectManifestV1 {
+  readonly version: 1;
+  readonly kind: "popup-object";
+  readonly name: string;
+  readonly resources: Readonly<Record<string, PopupObjectResourceSpecV1>>;
+  readonly layers: readonly PopupObjectLayerV1[];
+}
 export interface AwardTierPresentationV9 {
   readonly countDurationSeconds: number;
   readonly layers: readonly AwardPopupLayerV9[];

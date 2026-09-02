@@ -139,6 +139,8 @@ v9 要求每个 `text` layer 的 `style` 显式保存 `widthRange: { minWidth, m
 
 runtime 以文字的 local typographic width 为准：未达到 `minWidth` 时增大字号，超过 `maxWidth` 时减小字号，区间内保持 authored `fontSize`。拟合只改变本次渲染的 effective font size，不回写 manifest，不使用换行、截断或横向缩放；描边、投影和 layer transform 不参与宽度判定。直排与 grapheme 弧排走同一确定性求解边界，空字符串保持 authored 字号且宽度为 `0`。Popup Editor 的 guides 开关会在文字局部坐标中显示最小/最大宽度参考框；该辅助框只属于编辑会话，不进入 project、manifest 或 ZIP。
 
+v9 还允许三个 Popup 类型把 `{ "kind": "popup-object" }` 作为普通资源与原子图层引用。对象本身使用独立的 `popup-object.manifest.json` v1 合同，只保存 lowercase kebab-case `name`、resources 与无状态 layers；不包含 Popup 的 id/type、适配、重点区域、压暗、audio 或状态机，也禁止继续嵌套 popup-object。宿主图层只负责 placement、alpha、attachment 以及 Spine Popup 的 `visibleStates`，对象内部资源和图层由 Popup Editor 统一编辑。独立对象 ZIP 的完整合同见 [Popup Object manifest](./popup-object-manifest.md)。该能力是 Popup v9 的新增字段，不提升 Popup manifest 版本；v1–v8 出现对象资源或图层必须显式失败。
+
 ## 坐标、档位与输入
 
 - popup 中心为 `(0, 0)`，向右/向下为正；v1/v2 使用 `designViewport`，v3–v9 只由 focus 建立无界 maximized-focus production transform。

@@ -12,6 +12,7 @@ import type {
   SingleStatePopupSnapshot,
 } from "./types.js";
 import type { SingleStatePopupPlayer } from "./editor-types.js";
+import type { PopupObjectInstanceHandle } from "./object-runtime.js";
 import { createPopupStringNodeRegistry } from "./string-node-registry.js";
 import { setPopupTextWidthGuidesInTree } from "./styled-text.js";
 import {
@@ -70,6 +71,7 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
   readonly #layers: readonly SpinePopupOverlayRuntime[];
   readonly #layersByName: ReadonlyMap<string, SpinePopupOverlayRuntime>;
   readonly #renderObjects: ReadonlyMap<string, RenderObject>;
+  readonly #objectsById: ReadonlyMap<string, PopupObjectInstanceHandle>;
   readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
   readonly #presentation: ReturnType<typeof createPopupPresentation>;
   readonly #observeState: PopupRuntimeStateObserver | undefined;
@@ -128,6 +130,11 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
         }),
       ]),
     );
+    this.#objectsById = new Map(
+      [...this.#layersByName].flatMap(([id, runtime]) =>
+        runtime.objectHandle ? [[id, runtime.objectHandle] as const] : [],
+      ),
+    );
     this.#nodes = createPopupStringNodeRegistry(
       this.#manifest.singleState.layers.flatMap((layer) =>
         layer.kind === "text" || layer.kind === "image-string"
@@ -153,6 +160,11 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
 
   get imageStringNodes(): readonly PopupStringNodeHandle[] {
     return this.#nodes.imageStringNodes;
+  }
+
+  get objects(): readonly PopupObjectInstanceHandle[] {
+    this.assertUsable();
+    return Object.freeze([...this.#objectsById.values()]);
   }
 
   applyViewport(
@@ -236,6 +248,13 @@ class DefaultSingleStatePopupRuntime implements SingleStatePopupRuntime {
     return layer;
   }
 
+  getObject(id: string): PopupObjectInstanceHandle {
+    this.assertReady();
+    const object = this.#objectsById.get(id);
+    if (!object) throw new Error(`single-state popup object not found: ${id}.`);
+    return object;
+  }
+
   getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
     this.assertUsable();
     return this.#nodes.getTextNode(selector);
@@ -301,6 +320,9 @@ class SingleStatePopupEditorPlayer implements SingleStatePopupPlayer {
   get imageStringNodes() {
     return this.#runtime.imageStringNodes;
   }
+  get objects() {
+    return this.#runtime.objects;
+  }
   applyViewport(
     ...args: Parameters<NonNullable<SingleStatePopupRuntime["applyViewport"]>>
   ) {
@@ -346,6 +368,9 @@ class SingleStatePopupEditorPlayer implements SingleStatePopupPlayer {
   }
   getImageStringNode(selector: PopupStringNodeSelector) {
     return this.#runtime.getImageStringNode(selector);
+  }
+  getObject(id: string) {
+    return this.#runtime.getObject(id);
   }
   destroy() {
     this.#runtime.destroy();

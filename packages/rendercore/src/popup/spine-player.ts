@@ -13,6 +13,7 @@ import type {
   SpinePopupSnapshot,
 } from "./types.js";
 import type { SpinePopupPlayer } from "./editor-types.js";
+import type { PopupObjectInstanceHandle } from "./object-runtime.js";
 import { createPopupPromptText } from "./prompt-text.js";
 import { createPopupStringNodeRegistry } from "./string-node-registry.js";
 import { setPopupTextWidthGuidesInTree } from "./styled-text.js";
@@ -85,6 +86,7 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
   readonly #overlays: readonly SpinePopupOverlayRuntime[];
   readonly #prompt: ReturnType<typeof createPopupPromptText> | null;
   readonly #nodes: ReturnType<typeof createPopupStringNodeRegistry>;
+  readonly #objectsById: ReadonlyMap<string, PopupObjectInstanceHandle>;
   readonly #presentation: ReturnType<typeof createPopupPresentation>;
   readonly #observeState: PopupRuntimeStateObserver | undefined;
   readonly #popupRoot = new Container();
@@ -159,6 +161,12 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
     this.#nodes = createPopupStringNodeRegistry(
       collectSpineStringNodeDefinitions(manifest),
     );
+    this.#objectsById = new Map(
+      (manifest.spine.overlays ?? []).flatMap((layer, index) => {
+        const handle = this.#overlays[index]?.objectHandle;
+        return handle ? [[layer.id, handle] as const] : [];
+      }),
+    );
     spineSnapshotReaders.set(this, () => this.#createSnapshot());
     for (const overlay of this.#overlays)
       if (overlay.stringNode)
@@ -177,6 +185,11 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
     return this.#nodes.imageStringNodes;
   }
 
+  get objects(): readonly PopupObjectInstanceHandle[] {
+    this.assertUsable();
+    return Object.freeze([...this.#objectsById.values()]);
+  }
+
   getTextNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
     this.assertUsable();
     return this.#nodes.getTextNode(selector);
@@ -185,6 +198,12 @@ class DefaultSpinePopupRuntime implements SpinePopupRuntime {
   getImageStringNode(selector: PopupStringNodeSelector): PopupStringNodeHandle {
     this.assertUsable();
     return this.#nodes.getImageStringNode(selector);
+  }
+  getObject(id: string): PopupObjectInstanceHandle {
+    this.assertReady();
+    const object = this.#objectsById.get(id);
+    if (!object) throw new Error(`Spine popup object not found: ${id}.`);
+    return object;
   }
   applyViewport(
     viewportSize: Parameters<
@@ -362,6 +381,9 @@ class SpinePopupEditorPlayer implements SpinePopupPlayer {
   get imageStringNodes() {
     return this.#runtime.imageStringNodes;
   }
+  get objects() {
+    return this.#runtime.objects;
+  }
   applyViewport(
     ...args: Parameters<NonNullable<SpinePopupRuntime["applyViewport"]>>
   ) {
@@ -404,6 +426,9 @@ class SpinePopupEditorPlayer implements SpinePopupPlayer {
   }
   getImageStringNode(selector: PopupStringNodeSelector) {
     return this.#runtime.getImageStringNode(selector);
+  }
+  getObject(id: string) {
+    return this.#runtime.getObject(id);
   }
   destroy() {
     this.#runtime.destroy();

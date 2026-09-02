@@ -2,6 +2,7 @@ import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
   bindPopupInteractionInput,
   createPopupPackageResource,
+  createPopupObjectPackageResource,
   formatPopupAmount,
   handledPopupInteraction,
   unhandledPopupInteraction,
@@ -73,7 +74,7 @@ export class PopupPreview {
     | SpinePopupPlayer
     | SingleStatePopupPlayer
     | null = null;
-  #type: "award-celebration" | "spine" | "single-state" = "award-celebration";
+  #type: PopupEditorProject["type"] = "award-celebration";
   #ready = false;
   #size = { width: 1080, height: 1920 };
   #zoom: number | "fit" = "fit";
@@ -135,7 +136,12 @@ export class PopupPreview {
       limits: POPUP_ZIP_LIMITS,
     });
     await importPopupZip(exported.bytes);
-    const resource = await createPopupPackageResource({ files });
+    const objectPrepared =
+      project.type === "popup-object"
+        ? await createPopupObjectPackageResource({ files })
+        : null;
+    const resource =
+      objectPrepared?.resource ?? (await createPopupPackageResource({ files }));
     let player:
       | AwardCelebrationPlayer
       | SpinePopupPlayer
@@ -166,7 +172,8 @@ export class PopupPreview {
     this.clear();
     this.#resource = resource;
     this.#player = player;
-    this.#type = resource.manifest.type;
+    this.#type =
+      project.type === "popup-object" ? "popup-object" : resource.manifest.type;
     this.#previewRoot.addChild(player.container);
     this.layout();
     this.#status.textContent = "production runtime ready";
@@ -226,10 +233,11 @@ export class PopupPreview {
     this.#previewRoot.position.set(x, y);
     this.#previewRoot.scale.set(scale);
     if (this.#player) {
-      this.#presentationSnapshot = this.#player.applyViewport
-        ? this.#player.applyViewport(this.#size)
-        : null;
-      if (!this.#player.applyViewport)
+      this.#presentationSnapshot =
+        this.#type !== "popup-object" && this.#player.applyViewport
+          ? this.#player.applyViewport(this.#size)
+          : null;
+      if (this.#type === "popup-object" || !this.#player.applyViewport)
         this.#player.container.position.set(
           this.#size.width / 2,
           this.#size.height / 2,

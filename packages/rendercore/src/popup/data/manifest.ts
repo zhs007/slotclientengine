@@ -15,6 +15,7 @@ import type {
   PopupAmountFormat,
   PopupManifest,
   PopupLayer,
+  AwardPopupLayerV9,
   PopupManifestV1,
   PopupManifestV2,
   PopupManifestV3,
@@ -45,6 +46,7 @@ import type {
   SpinePopupManifestV7,
   SpinePopupManifestV8,
   SpinePopupManifestV9,
+  SpinePopupOverlayLayerV9,
 } from "./types.js";
 import { validatePopupLayerAttachmentGraph } from "./attachment.js";
 import { assertPopupFilenameKey, assertPopupPackagePath } from "./path.js";
@@ -147,7 +149,7 @@ export const parsePopupManifest = ((value: unknown): PopupManifest => {
   const resourcesRecord = object(record.resources, "resources");
   const resources: Record<string, PopupResourceSpec> = {};
   for (const [resourceId, spec] of Object.entries(resourcesRecord)) {
-    const parsed = parseResource(spec, `resources.${resourceId}`);
+    const parsed = parseResource(spec, `resources.${resourceId}`, version);
     resourceKey(resourceId, `resources.${resourceId}`);
     if (resourceId.includes(".") && resourceId !== resourceRoot(parsed))
       fail(
@@ -379,7 +381,7 @@ function parseOverlays(
   value: unknown,
   resources: Readonly<Record<string, PopupResourceSpec>>,
   version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
-): readonly PopupOverlayLayer[] {
+): readonly (PopupOverlayLayer | SpinePopupOverlayLayerV9)[] {
   if (!Array.isArray(value)) fail("spine.overlays must be an array.");
   const overlays = value.map((raw, index) => {
     const label = `spine.overlays[${index}]`;
@@ -409,7 +411,7 @@ function parseOverlays(
         ...parsed.transform,
         rotation: finite(transform.rotation, `${label}.transform.rotation`),
       },
-    }) as PopupOverlayLayer;
+    }) as PopupOverlayLayer | SpinePopupOverlayLayerV9;
   });
   unique(
     overlays.map(({ id }) => id),
@@ -502,6 +504,15 @@ function parseSingleStateLayer(
     alpha: unit(record.alpha, `${label}.alpha`),
     attachment: parseLayerAttachment(record.attachment, `${label}.attachment`),
   };
+  if (kind === "popup-object") {
+    if (version !== 9) fail(`${label}.kind popup-object requires popup v9.`);
+    keys(record, common, label);
+    return freeze({
+      ...base,
+      kind: "popup-object" as const,
+      resource: resourceId!,
+    });
+  }
   if (kind === "image" || kind === "image-string" || kind === "text") {
     keys(
       record,
@@ -622,6 +633,7 @@ export function collectPopupDirectPaths(
       result.add(resource.path);
     else if (resource.kind === "image-string") result.add(resource.manifest);
     else if (resource.kind === "vni") result.add(resource.project);
+    else if (resource.kind === "popup-object") result.add(resource.manifest);
     else {
       result.add(resource.skeleton);
       result.add(resource.atlas);
@@ -801,7 +813,11 @@ function parseAmountFormat(value: unknown): PopupAmountFormat {
   });
 }
 
-function parseResource(value: unknown, label: string): PopupResourceSpec {
+function parseResource(
+  value: unknown,
+  label: string,
+  version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
+): PopupResourceSpec {
   const record = object(value, label);
   if (record.kind === "image") {
     keys(record, ["kind", "path", "size"], label);
@@ -844,6 +860,21 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
       project: owned(record.project, `${label}.project`, ".json"),
     });
   }
+  if (record.kind === "popup-object") {
+    if (version !== 9) fail(`${label}.kind popup-object requires popup v9.`);
+    keys(record, ["kind", "manifest"], label);
+    const manifest = path(record.manifest, `${label}.manifest`);
+    if (
+      manifest.includes("/") &&
+      !/^dependencies\/popup-objects\/([a-z0-9]+(?:-[a-z0-9]+)*)\/popup-object\.manifest\.json$/u.test(
+        manifest,
+      )
+    )
+      fail(
+        `${label}.manifest 必须是 standalone popup-object dependency path。`,
+      );
+    return freeze({ kind: "popup-object" as const, manifest });
+  }
   if (record.kind === "spine") {
     keys(record, ["kind", "skeleton", "atlas", "textures"], label);
     const texturesRecord = object(record.textures, `${label}.textures`);
@@ -862,7 +893,9 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
       textures,
     });
   }
-  fail(`${label}.kind must be image, font, image-string, vni, or spine.`);
+  fail(
+    `${label}.kind must be image, font, image-string, vni, spine, or popup-object.`,
+  );
 }
 
 function parseAwardCelebration(
@@ -1070,6 +1103,15 @@ function parseLayer(
         }
       : {}),
   };
+  if (kind === "popup-object") {
+    if (version !== 9) fail(`${label}.kind popup-object requires popup v9.`);
+    keys(record, common, label);
+    return freeze({
+      ...base,
+      kind: "popup-object" as const,
+      resource: resourceId!,
+    });
+  }
   if (kind === "image" || kind === "image-string") {
     if (kind === "image")
       keys(
@@ -1492,9 +1534,10 @@ function validateAwardLayerIdentities(spec: AwardCelebrationSpec) {
   const identities = new Map<
     string,
     {
-      readonly kind: PopupLayer["kind"];
+      readonly kind: PopupLayer["kind"] | "popup-object";
       readonly name?: string;
       readonly binding?: "win-amount" | "manual";
+      readonly resource?: string;
     }
   >();
   for (const tier of allTiers(spec))
@@ -1506,13 +1549,15 @@ function validateAwardLayerIdentities(spec: AwardCelebrationSpec) {
           ? { name: layer.name }
           : {}),
         ...(layer.kind === "image-string" ? { binding: layer.binding } : {}),
+        ...(layer.kind === "popup-object" ? { resource: layer.resource } : {}),
       };
       const existing = identities.get(layer.id);
       if (
         existing &&
         (existing.kind !== identity.kind ||
           existing.name !== identity.name ||
-          existing.binding !== identity.binding)
+          existing.binding !== identity.binding ||
+          existing.resource !== identity.resource)
       )
         fail(
           `awardCelebration layer id ${layer.id} must keep the same kind/name/binding across states.`,
@@ -1589,6 +1634,7 @@ function resourceRoot(resource: PopupResourceSpec): string {
     return resource.path;
   if (resource.kind === "image-string") return resource.manifest;
   if (resource.kind === "vni") return resource.project;
+  if (resource.kind === "popup-object") return resource.manifest;
   return resource.skeleton;
 }
 function nonEmptySingleLine(value: unknown, label: string): string {

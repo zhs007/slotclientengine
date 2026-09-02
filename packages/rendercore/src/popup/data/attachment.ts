@@ -2,11 +2,19 @@ import type {
   PopupLayer,
   PopupLayerAttachment,
   PopupOverlayLayer,
+  AwardPopupLayerV9,
+  SpinePopupOverlayLayerV9,
   SingleStatePopupLayerV8,
+  SingleStatePopupLayerV9,
 } from "./types.js";
 
 export type PopupAttachableLayer =
-  PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV8;
+  | PopupLayer
+  | PopupOverlayLayer
+  | AwardPopupLayerV9
+  | SpinePopupOverlayLayerV9
+  | SingleStatePopupLayerV8
+  | SingleStatePopupLayerV9;
 
 export function resolvePopupLayerAttachment(
   layer: PopupAttachableLayer,

@@ -34,6 +34,7 @@ import {
   reuseAwardLayerInTier,
   PopupEditorStore,
   projectToManifest,
+  projectToPopupObjectManifest,
   popupEditorVisibilityStates,
   resourceReferenceCount,
   validatePopupEditorAttachments,
@@ -135,7 +136,7 @@ export class PopupEditorApp {
         : this.#tab === "tiers"
           ? project.type === "spine"
             ? spineMarkup(project)
-            : project.type === "single-state"
+            : project.type === "single-state" || project.type === "popup-object"
               ? singleStateMarkup(project)
               : tiersMarkup(project, this.#tier, this.#previewBetRaw)
           : projectMarkup(project, this.#errors);
@@ -175,16 +176,27 @@ export class PopupEditorApp {
         "create-project-name",
       ).value.trim();
       const type = this.required<HTMLSelectElement>("create-project-type")
-        .value as "award-celebration" | "spine" | "single-state";
+        .value as PopupEditorProject["type"];
       if (!name) {
         this.#notice = "项目名不能为空。";
         return;
+      }
+      if (type === "popup-object") {
+        const error = popupIdValidationError(name);
+        if (error) {
+          this.#notice = `Popup Object name 无效：${error}`;
+          return;
+        }
       }
       const token = crypto.randomUUID().replaceAll("-", "");
       this.#hasProject = true;
       createDialog.close();
       this.#store.replace(
-        createPopupEditorProject({ name, type, id: `popup-${token}` }),
+        createPopupEditorProject({
+          name,
+          type,
+          id: type === "popup-object" ? name : `popup-${token}`,
+        }),
       );
     });
     this.required("create-project-cancel").addEventListener("click", () =>
@@ -480,10 +492,16 @@ export class PopupEditorApp {
             const resource = draft.resources.get(select.value);
             if (
               !resource ||
-              !["image", "image-string", "spine", "vni"].includes(resource.kind)
+              ![
+                "image",
+                "image-string",
+                "spine",
+                "vni",
+                "popup-object",
+              ].includes(resource.kind)
             )
               throw new Error(
-                "请选择 image、ImgNumber、Spine 或 VNI overlay resource。",
+                "请选择 image、ImgNumber、Spine、VNI 或 Popup Object resource。",
               );
             const order = draft.spine.overlays.length
               ? Math.max(...draft.spine.overlays.map((item) => item.order)) + 1
@@ -523,16 +541,18 @@ export class PopupEditorApp {
                           keepParticlesAlive: true,
                         },
                       }
-                    : {
-                        ...base,
-                        kind: "spine",
-                        playback: {
-                          mode: "segmented-animations",
-                          startAnimation: "Start",
-                          loopAnimation: "Loop",
-                          endAnimation: "End",
-                        },
-                      };
+                    : resource.kind === "popup-object"
+                      ? { ...base, kind: "popup-object" }
+                      : {
+                          ...base,
+                          kind: "spine",
+                          playback: {
+                            mode: "segmented-animations",
+                            startAnimation: "Start",
+                            loopAnimation: "Loop",
+                            endAnimation: "End",
+                          },
+                        };
             draft.spine.overlays.push(overlay);
           }),
         ),
@@ -930,9 +950,9 @@ export class PopupEditorApp {
       }),
     );
     this.#root
-      .querySelectorAll<HTMLInputElement | HTMLSelectElement>(
-        "[data-spine-popup-field]",
-      )
+      .querySelectorAll<
+        HTMLInputElement | HTMLSelectElement
+      >("[data-spine-popup-field]")
       .forEach((input) =>
         input.addEventListener("change", () =>
           this.transactField((draft) => {
@@ -1149,7 +1169,11 @@ export class PopupEditorApp {
           candidates,
           resolutions,
         );
-        if (draft.type === "award-celebration" || draft.type === "single-state")
+        if (
+          draft.type === "award-celebration" ||
+          draft.type === "single-state" ||
+          draft.type === "popup-object"
+        )
           for (const candidate of candidates) {
             const rootKey =
               committed.assets.items.find((item) =>
@@ -1206,15 +1230,18 @@ export class PopupEditorApp {
 }
 
 function shell() {
-  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-play">Play / Replay</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="create-project-dialog"><h2>创建 Popup 项目</h2><label>项目名<input id="create-project-name"/></label><label>类型<select id="create-project-type"><option value="award-celebration">获奖庆祝</option><option value="spine">Spine 弹窗</option><option value="single-state">单状态自由弹窗</option></select></label><button id="create-project-confirm">创建</button><button id="create-project-cancel">取消</button></dialog><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
+  return `<header><h1>Popup Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">动画 / 档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><label>小数位数（仅预览）<input id="preview-fraction-digits" type="number" min="0" max="6" step="1" value="0"/></label><label><input id="preview-use-grouping" type="checkbox"/>千位分隔（仅预览）</label><button id="preview-play">Play / Replay</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="create-project-dialog"><h2>创建 Popup 项目</h2><label>项目名<input id="create-project-name"/></label><label>类型<select id="create-project-type"><option value="award-celebration">获奖庆祝</option><option value="spine">Spine 弹窗</option><option value="single-state">单状态自由弹窗</option><option value="popup-object">Popup Object（可复用子对象）</option></select></label><button id="create-project-confirm">创建</button><button id="create-project-cancel">取消</button></dialog><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认导入</button><button id="review-cancel">取消</button></dialog>`;
 }
 function resourcesMarkup(project: PopupEditorProject) {
   return `<section class="resource-import-panel"><h2>资源库</h2><p>这里只导入资源：VNI 与 ImgNumber 使用 ZIP；图片、字体使用文件；Spine 每次选择完整 JSON、atlas、PNG 组。Popup 项目 ZIP 请使用项目入口。同名不同 bytes 必须在 review 中选择覆盖或保留两份。</p><div class="resource-actions"><label class="file-action">上传资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip,.woff2,.woff,.ttf,.otf" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
 }
 
 function singleStateMarkup(project: PopupEditorProject) {
-  const resources = [...project.resources.values()];
-  return `<section class="tier-editor"><h2>单状态自由弹窗</h2><p>没有强制图层或动画配置；所有图层在 active 状态显示。图层 name 是 runtime 与 Game Layout 通用地址中的精确标识。</p><div class="layer-add"><select id="single-layer-resource">${resources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-single-layer" ${resources.length ? "" : "disabled"}>添加资源图层</button><button id="add-single-text">添加系统字体文字</button></div>${project.singleState.layers.map((layer) => singleStateLayerMarkup(layer, project)).join("") || '<p class="empty-state">可保持零图层，或添加任意受支持图层。</p>'}</section>`;
+  const resources = [...project.resources.values()].filter(
+    ({ kind }) => project.type !== "popup-object" || kind !== "popup-object",
+  );
+  const object = project.type === "popup-object";
+  return `<section class="tier-editor"><h2>${object ? "Popup Object 图层" : "单状态自由弹窗"}</h2><p>${object ? "这是无弹窗状态、无压暗、无适配重点区域的原子子对象；可由其他 Popup 按 name 复用。" : "没有强制图层或动画配置；所有图层在 active 状态显示。图层 name 是 runtime 与 Game Layout 通用地址中的精确标识。"}</p><div class="layer-add"><select id="single-layer-resource">${resources.map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`).join("")}</select><button id="add-single-layer" ${resources.length ? "" : "disabled"}>添加资源图层</button><button id="add-single-text">添加系统字体文字</button></div>${project.singleState.layers.map((layer) => singleStateLayerMarkup(layer, project)).join("") || '<p class="empty-state">可保持零图层，或添加任意受支持图层。</p>'}</section>`;
 }
 
 function singleStateLayerMarkup(
@@ -1249,9 +1276,11 @@ function singleStateLayerMarkup(
         ? `${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`
         : layer.kind === "text"
           ? `${font}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyle}`
-          : layer.kind === "spine"
-            ? `<label><input data-single-id="${layer.id}" data-single-field="autoplay" type="checkbox" ${layer.autoplay ? "checked" : ""}/>autoplay</label>${layer.autoplay ? `${input("animation", layer.autoplay.animation, "text")}<label>loop<input data-single-id="${layer.id}" data-single-field="loop" type="checkbox" ${layer.autoplay.loop ? "checked" : ""}/></label>` : ""}`
-            : `<label><input data-single-id="${layer.id}" data-single-field="autoplay" type="checkbox" ${layer.autoplay ? "checked" : ""}/>autoplay</label>${layer.autoplay ? `<label>mode<select data-single-vni-mode="${layer.id}"><option value="once" ${layer.autoplay.mode === "once" ? "selected" : ""}>once</option><option value="segmented" ${layer.autoplay.mode === "segmented" ? "selected" : ""}>segmented</option></select></label>${layer.autoplay.mode === "segmented" ? `${input("loopStartTime", layer.autoplay.loopStartTime)}${input("loopEndTime", layer.autoplay.loopEndTime)}<label>keepParticlesAlive<input data-single-id="${layer.id}" data-single-field="keepParticlesAlive" type="checkbox" ${layer.autoplay.keepParticlesAlive ? "checked" : ""}/></label>` : ""}` : ""}`;
+          : layer.kind === "popup-object"
+            ? ""
+            : layer.kind === "spine"
+              ? `<label><input data-single-id="${layer.id}" data-single-field="autoplay" type="checkbox" ${layer.autoplay ? "checked" : ""}/>autoplay</label>${layer.autoplay ? `${input("animation", layer.autoplay.animation, "text")}<label>loop<input data-single-id="${layer.id}" data-single-field="loop" type="checkbox" ${layer.autoplay.loop ? "checked" : ""}/></label>` : ""}`
+              : `<label><input data-single-id="${layer.id}" data-single-field="autoplay" type="checkbox" ${layer.autoplay ? "checked" : ""}/>autoplay</label>${layer.autoplay ? `<label>mode<select data-single-vni-mode="${layer.id}"><option value="once" ${layer.autoplay.mode === "once" ? "selected" : ""}>once</option><option value="segmented" ${layer.autoplay.mode === "segmented" ? "selected" : ""}>segmented</option></select></label>${layer.autoplay.mode === "segmented" ? `${input("loopStartTime", layer.autoplay.loopStartTime)}${input("loopEndTime", layer.autoplay.loopEndTime)}<label>keepParticlesAlive<input data-single-id="${layer.id}" data-single-field="keepParticlesAlive" type="checkbox" ${layer.autoplay.keepParticlesAlive ? "checked" : ""}/></label>` : ""}` : ""}`;
   return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${input("id", layer.id, "text")}${singleStateParentMarkup(layer, project)}${input("order", layer.order)}${input("alpha", layer.alpha)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${specific}<button data-delete-single-layer="${layer.id}">删除图层</button></article>`;
 }
 
@@ -1338,7 +1367,9 @@ function spineMarkup(project: PopupEditorProject) {
   );
   const animations = spineAnimationNames(project);
   const overlayResources = [...project.resources.values()].filter((resource) =>
-    ["image", "image-string", "spine", "vni"].includes(resource.kind),
+    ["image", "image-string", "spine", "vni", "popup-object"].includes(
+      resource.kind,
+    ),
   );
   const animationSelect = (
     field: "startAnimation" | "loopAnimation" | "endAnimation",
@@ -1366,15 +1397,17 @@ function overlayMarkup(layer: PopupOverlayLayer, project: PopupEditorProject) {
         ? `${input("name", layer.name, "text")}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`
         : layer.kind === "text"
           ? `${input("name", layer.name, "text")}${fontSelectMarkup("overlay", layer.id, layer.resource, project)}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("overlay", layer.id, layer.style)}`
-          : layer.kind === "spine"
-            ? (["startAnimation", "loopAnimation", "endAnimation"] as const)
-                .map((field) => input(field, layer.playback[field], "text"))
-                .join("")
-            : `${`<label>mode<select data-overlay-vni-mode="${layer.id}"><option value="segmented" ${layer.playback.mode === "segmented" ? "selected" : ""}>segmented</option><option value="once" ${layer.playback.mode === "once" ? "selected" : ""}>once</option></select></label>`}${
-                layer.playback.mode === "segmented"
-                  ? `${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-overlay-id="${layer.id}" data-overlay-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`
-                  : `<p>VNI once</p>`
-              }`;
+          : layer.kind === "popup-object"
+            ? ""
+            : layer.kind === "spine"
+              ? (["startAnimation", "loopAnimation", "endAnimation"] as const)
+                  .map((field) => input(field, layer.playback[field], "text"))
+                  .join("")
+              : `${`<label>mode<select data-overlay-vni-mode="${layer.id}"><option value="segmented" ${layer.playback.mode === "segmented" ? "selected" : ""}>segmented</option><option value="once" ${layer.playback.mode === "once" ? "selected" : ""}>once</option></select></label>`}${
+                  layer.playback.mode === "segmented"
+                    ? `${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-overlay-id="${layer.id}" data-overlay-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`
+                    : `<p>VNI once</p>`
+                }`;
   return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "spine-popup" }, "overlay")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale", "rotation"] as const).map((field) => input(field, layer.transform[field])).join("")}${visibility}${playback}<button data-delete-overlay="${layer.id}">删除 overlay</button></article>`;
 }
 
@@ -1696,17 +1729,19 @@ function layerMarkup(
   const input = (field: string, value: string | number, type = "number") =>
     `<label>${field}<input data-layer-id="${layer.id}" data-layer-field="${field}" type="${type}" ${type === "number" ? 'step="0.1"' : ""} value="${value}"/></label>`;
   const playback =
-    layer.kind === "vni"
-      ? vniPlaybackMarkup(layer, project)
-      : layer.kind === "spine"
-        ? (["startAnimation", "loopAnimation", "endAnimation"] as const)
-            .map((field) => input(field, layer.playback[field], "text"))
-            .join("")
-        : layer.kind === "image-string"
-          ? `${input("name", layer.name ?? "win-amount", "text")}${layer.binding === "manual" ? input("defaultText", layer.defaultText ?? "", "text") : ""}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`
-          : layer.kind === "text"
-            ? `${input("name", layer.name, "text")}${fontSelectMarkup("layer", layer.id, layer.resource, project)}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("layer", layer.id, layer.style)}`
-            : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`;
+    layer.kind === "popup-object"
+      ? ""
+      : layer.kind === "vni"
+        ? vniPlaybackMarkup(layer, project)
+        : layer.kind === "spine"
+          ? (["startAnimation", "loopAnimation", "endAnimation"] as const)
+              .map((field) => input(field, layer.playback[field], "text"))
+              .join("")
+          : layer.kind === "image-string"
+            ? `${input("name", layer.name ?? "win-amount", "text")}${layer.binding === "manual" ? input("defaultText", layer.defaultText ?? "", "text") : ""}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`
+            : layer.kind === "text"
+              ? `${input("name", layer.name, "text")}${fontSelectMarkup("layer", layer.id, layer.resource, project)}${input("defaultText", layer.defaultText, "text")}${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}${textStyleMarkup("layer", layer.id, layer.style)}`
+              : `${input("anchor-x", layer.anchor.x)}${input("anchor-y", layer.anchor.y)}`;
   return `<article class="card"><strong>${layer.id}</strong><span>${layer.kind} / ${layer.resource ?? "system"}</span>${attachmentMarkup(layer, project, { kind: "award", tierId }, "layer")}${input("order", layer.order)}${input("alpha", layer.alpha ?? 1)}${(["x", "y", "scale"] as const).map((field) => input(field, layer.transform[field])).join("")}${layer.kind === "text" || layer.kind === "image-string" ? input("rotation", layer.transform.rotation ?? 0) : ""}${playback}<button data-delete-layer="${layer.id}">删除当前档配置</button></article>`;
 }
 
@@ -1851,6 +1886,16 @@ function vniTimingSummary(
   }
 }
 function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
+  if (project.type === "popup-object") {
+    let manifest = "";
+    try {
+      manifest = JSON.stringify(projectToPopupObjectManifest(project), null, 2);
+    } catch {
+      manifest = "尚未形成合法 popup-object manifest";
+    }
+    const nameError = popupIdValidationError(project.name);
+    return `<div class="project-actions"><button id="export-project">导出 Popup Object ZIP</button><button id="close-project">关闭项目</button></div><h2>Popup Object 项目</h2><p>独立格式 v1；Popup manifest 仍保持 v9。</p><label class="field-stack">name<input data-project-field="project-name" value="${project.name}" aria-invalid="${String(Boolean(nameError))}" class="${nameError ? "invalid" : ""}"/><small class="field-error" ${nameError ? "" : "hidden"}>${nameError}</small></label><p>该项目不配置全屏压暗、重点区域、独立状态或输入，只作为其他 Popup 的原子子对象。</p><h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Popup Object manifest preview</h3><pre>${manifest}</pre>`;
+  }
   let manifest = "";
   try {
     manifest = JSON.stringify(projectToManifest(project), null, 2);

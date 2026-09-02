@@ -6,3 +6,4 @@ export * from "./state-visibility.js";
 export * from "./attachment.js";
 export * from "./path.js";
 export * from "./package-closure.js";
+export * from "./object-manifest.js";
