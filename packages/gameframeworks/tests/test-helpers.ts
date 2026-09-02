@@ -4,6 +4,7 @@ import type {
   SlotGameAdapter,
   SlotGameBetOption,
   SlotGameClientLike,
+  SlotGameFramePolicy,
   SlotGameMountContext,
   SlotGameStateSnapshot,
 } from "../src/index.js";
@@ -12,6 +13,14 @@ export const BET_OPTIONS: readonly SlotGameBetOption[] = Object.freeze([
   Object.freeze({ bet: 1, lines: 10 }),
   Object.freeze({ bet: 2, lines: 20, times: 2, label: "2 x 20" }),
 ]);
+
+export const TEST_FRAME_POLICY: SlotGameFramePolicy = Object.freeze({
+  mode: "maximized-focus",
+  resolveViewportSize: (pageSize: {
+    readonly width: number;
+    readonly height: number;
+  }) => Object.freeze({ ...pageSize }),
+});
 
 export function createGmiFixture(
   options: {

@@ -66,6 +66,7 @@ const gameAdapter: SlotGameAdapter = {
 const framework = createSlotGameFramework({
   root: document.querySelector("#app")!,
   gameAdapter,
+  framePolicy,
   live: {
     serverUrl: "wss://example.test/game",
     token: "token",
@@ -137,6 +138,7 @@ const framework = createSlotGameFramework({
   live,
   liveSession,
   betOptions,
+  framePolicy,
 });
 
 await framework.connect();
@@ -193,6 +195,7 @@ const framework = createSlotGameFramework({
   live,
   betOptions,
   uiFactory,
+  framePolicy,
 });
 ```
 
@@ -202,7 +205,7 @@ const framework = createSlotGameFramework({
 
 ## Frame Policy
 
-`createSlotGameFramework()` 接受 `framePolicy` 并透传给底层 `uiframeworks`。默认不传时保持固定设计分辨率行为；传入 focus policy 时，DOM frame 会根据浏览器 viewport 计算提交给游戏 canvas 的逻辑尺寸、CSS 缩放和黑边居中：
+`createSlotGameFramework()` 要求提供 `framePolicy` 并透传给底层 `uiframeworks`。DOM frame 根据浏览器 viewport 与 policy 计算提交给游戏 canvas 的逻辑尺寸、CSS 缩放和黑边居中；不再接受独立 `designSize`，也不会隐式回退到固定设计分辨率：
 
 ```ts
 const framework = createSlotGameFramework({
@@ -210,7 +213,6 @@ const framework = createSlotGameFramework({
   gameAdapter,
   live,
   betOptions,
-  designSize: { width: 1125, height: 2000 },
   framePolicy: {
     mode: "focus",
     maxDesignSize: { width: 2000, height: 2000 },

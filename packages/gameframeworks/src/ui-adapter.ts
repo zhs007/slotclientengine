@@ -22,14 +22,11 @@ export function createDefaultSlotGameUiFactory(): SlotGameUiFactory {
 
 class SlotGameUiAdapter implements SlotGameUi {
   readonly #controller: SlotUiController;
-  readonly #designSize: { readonly width: number; readonly height: number };
 
   constructor(context: SlotGameUiCreateContext) {
-    this.#designSize = context.designSize;
     this.#controller = createSlotUiController({
       root: context.root,
-      designSize: context.designSize,
-      framePolicy: context.framePolicy as SlotUiFramePolicy | undefined,
+      framePolicy: context.framePolicy as SlotUiFramePolicy,
       betOptions: context.betOptions,
       initialBetIndex: context.initialState.betIndex,
       initialBalance: context.initialState.balance ?? undefined,
@@ -67,12 +64,7 @@ class SlotGameUiAdapter implements SlotGameUi {
   }
 
   update(state: SlotGameStateSnapshot): void {
-    this.#controller.update(
-      Object.freeze({
-        designSize: this.#designSize,
-        ...state,
-      }),
-    );
+    this.#controller.update(state);
   }
 
   destroy(): void {

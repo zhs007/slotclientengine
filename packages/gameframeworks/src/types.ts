@@ -114,7 +114,6 @@ export interface SlotGameMaximizedFocusFramePolicy {
 }
 
 export type SlotGameFramePolicy =
-  | { readonly mode: "fixed" }
   | SlotGameFocusFramePolicy
   | SlotGameOrientationFocusFramePolicy
   | SlotGameMaximizedFocusFramePolicy;
@@ -188,8 +187,7 @@ export interface SlotGameUiCommands {
 
 export interface SlotGameUiCreateContext {
   readonly root: HTMLElement;
-  readonly designSize: { readonly width: number; readonly height: number };
-  readonly framePolicy?: SlotGameFramePolicy;
+  readonly framePolicy: SlotGameFramePolicy;
   readonly betOptions: readonly SlotGameBetOption[];
   readonly initialState: SlotGameStateSnapshot;
   readonly brandLabel?: string;
@@ -312,8 +310,7 @@ export interface SlotGameFrameworkOptions {
   readonly initialMuted?: boolean;
   readonly initialFastMode?: boolean;
   readonly initialAutoMode?: boolean;
-  readonly designSize?: { readonly width: number; readonly height: number };
-  readonly framePolicy?: SlotGameFramePolicy;
+  readonly framePolicy: SlotGameFramePolicy;
   readonly brandLabel?: string;
   readonly currency?: string;
   readonly locale?: string;

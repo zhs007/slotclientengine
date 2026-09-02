@@ -3,6 +3,7 @@ import {
   BET_OPTIONS,
   MockAdapter,
   MockClient,
+  TEST_FRAME_POLICY,
   createSpinResult,
 } from "./test-helpers.js";
 
@@ -19,6 +20,7 @@ describe("render nonblocking behavior", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       clientFactory: () => client,
     });
 

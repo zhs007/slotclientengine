@@ -5,7 +5,6 @@ import { createSlotIcon, type SlotUiIconName } from "./icons.js";
 import type {
   SlotUiBuyBonusOptions,
   SlotUiClockOptions,
-  SlotUiDesignSize,
   SlotUiFramePolicy,
   SlotUiStateSnapshot,
   SlotUiViewportListener,
@@ -28,8 +27,7 @@ export interface SlotUiDomHandlers {
 
 export interface SlotUiDomOptions {
   readonly root: HTMLElement;
-  readonly designSize: SlotUiDesignSize;
-  readonly framePolicy?: SlotUiFramePolicy;
+  readonly framePolicy: SlotUiFramePolicy;
   readonly brandLabel?: string;
   readonly clock?: false | SlotUiClockOptions;
   readonly buyBonus?: false | SlotUiBuyBonusOptions;
@@ -80,7 +78,6 @@ interface ListenerBinding {
 export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
   const frameHost = createSlotUiFrameHost({
     root: options.root,
-    designSize: options.designSize,
     framePolicy: options.framePolicy,
   });
   const { page, frame, gameLayer, overlay } = frameHost.elements;
@@ -246,8 +243,6 @@ export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
     },
   };
 }
-
-export { applyFrameScale } from "./frame-host.js";
 
 export function renderState(
   elements: SlotUiDomElements,

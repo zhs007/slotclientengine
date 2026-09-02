@@ -48,8 +48,7 @@ class LeoSlotGameUi implements SlotGameUi {
   constructor(context: SlotGameUiCreateContext, labels: LeoSlotGameUiLabels) {
     this.#host = createSlotUiFrameHost({
       root: context.root,
-      designSize: context.designSize,
-      framePolicy: context.framePolicy as SlotUiFramePolicy | undefined,
+      framePolicy: context.framePolicy as SlotUiFramePolicy,
     });
     const mount = document.createElement("div");
     mount.className = "slot-leo-ui-mount";

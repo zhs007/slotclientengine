@@ -57,7 +57,6 @@ export interface SlotUiMaximizedFocusFramePolicy {
 }
 
 export type SlotUiFramePolicy =
-  | { readonly mode: "fixed" }
   | SlotUiFocusFramePolicy
   | SlotUiOrientationFocusFramePolicy
   | SlotUiMaximizedFocusFramePolicy;
@@ -114,7 +113,6 @@ export type SlotUiSpinState =
   | "disabled";
 
 export interface SlotUiStateSnapshot {
-  readonly designSize: SlotUiDesignSize;
   readonly connected: boolean;
   readonly spinState: SlotUiSpinState;
   readonly balance: number | null;
@@ -143,7 +141,6 @@ export interface SlotInitialState {
 }
 
 export interface SlotGameMountContext {
-  readonly designSize: SlotUiDesignSize;
   readonly frame: HTMLElement;
   readonly gameLayer: HTMLElement;
   readonly overlay: HTMLElement;
@@ -179,8 +176,7 @@ export interface SlotUiControllerHandlers {
 
 export interface SlotUiControllerOptions {
   readonly root: HTMLElement;
-  readonly designSize?: SlotUiDesignSize;
-  readonly framePolicy?: SlotUiFramePolicy;
+  readonly framePolicy: SlotUiFramePolicy;
   readonly betOptions: readonly SlotUiBetOption[];
   readonly initialBetIndex?: number;
   readonly initialBalance?: number;
@@ -225,8 +221,7 @@ export type SlotcraftClientFactory = (
 export interface SlotUiFrameworkOptions {
   readonly root: HTMLElement;
   readonly gameAdapter: SlotGameAdapter;
-  readonly designSize?: SlotUiDesignSize;
-  readonly framePolicy?: SlotUiFramePolicy;
+  readonly framePolicy: SlotUiFramePolicy;
   readonly live: SlotUiLiveConfig;
   readonly betOptions: readonly SlotUiBetOption[];
   readonly initialBetIndex?: number;

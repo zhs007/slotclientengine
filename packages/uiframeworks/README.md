@@ -1,8 +1,8 @@
 # @slotclientengine/uiframeworks
 
-`createSlotUiFrameHost()` 是 presentation-neutral 的公开 host：同步创建稳定的 `page/frame/gameLayer/overlay`，并统一拥有 fixed、focus、orientation-focus、maximized-focus viewport 与 resize 生命周期。默认 DOM/controller 和可注入游戏 UI 必须复用这一实现，不能复制 frame 计算。
+`createSlotUiFrameHost()` 是 presentation-neutral 的公开 host：同步创建稳定的 `page/frame/gameLayer/overlay`，并统一拥有 focus、orientation-focus、maximized-focus viewport 与 resize 生命周期。默认 DOM/controller 和可注入游戏 UI 必须复用这一实现，不能复制 frame 计算。
 
-通用 slot 游戏 DOM UI 框架。该包负责固定设计分辨率 frame、游戏层、UI overlay、slot HUD 控件、viewport 缩放，以及兼容旧调用方的 live `netcore` + `logiccore` spin 数据流编排。
+通用 slot 游戏 DOM UI 框架。该包负责 policy 驱动的 DOM frame、游戏层、UI overlay、slot HUD 控件、viewport 缩放，以及兼容旧调用方的 live `netcore` + `logiccore` spin 数据流编排。
 
 后续完整游戏默认应优先依赖 `@slotclientengine/gameframeworks`。`uiframeworks` 现在同时提供 UI-only controller，供上层框架复用 HUD/DOM/状态渲染，而不强制使用本包旧的网络与 collect 流程。
 
@@ -29,6 +29,10 @@ const adapter: SlotGameAdapter = {
 const framework = createSlotUiFramework({
   root: document.querySelector("#app")!,
   gameAdapter: adapter,
+  framePolicy: {
+    mode: "maximized-focus",
+    resolveViewportSize: (pageSize) => pageSize,
+  },
   live: {
     serverUrl: "wss://example.test/game",
     token: "token",
@@ -66,14 +70,11 @@ await framework.spin();
 </main>
 ```
 
-默认不传 `framePolicy` 时，`.slot-ui-frame` 使用设计分辨率固定宽高，默认 `941 x 1672`，并通过 `calculateFrameScale(viewportWidth, viewportHeight, designSize)` 按完整 frame 缩放。游戏层始终保持设计坐标，不需要自己适配浏览器视口。
-
-需要让游戏画面根据 focus 区域适配不同设备时，可以传 `framePolicy: { mode: "focus" }`。`uiframeworks` 会根据真实浏览器 viewport 计算 `frameDesignSize`、CSS 缩放、居中 offset 和黑边空间，并保证提交给 canvas 的逻辑尺寸不超过 `maxDesignSize`：
+`framePolicy` 是必填配置。`uiframeworks` 根据真实浏览器 viewport 计算 `frameDesignSize`、CSS 缩放、居中 offset 和黑边空间；不再接受独立 `designSize`，也不会隐式回退到固定设计分辨率。需要让游戏画面根据 focus 区域适配不同设备时，可以使用 `framePolicy: { mode: "focus" }`：
 
 ```ts
 const controller = createSlotUiController({
   root,
-  designSize: { width: 1125, height: 2000 },
   framePolicy: {
     mode: "focus",
     maxDesignSize: { width: 2000, height: 2000 },
@@ -151,6 +152,7 @@ import { createSlotUiController } from "@slotclientengine/uiframeworks";
 
 const controller = createSlotUiController({
   root,
+  framePolicy,
   betOptions: [{ bet: 1, lines: 10 }],
   handlers: {
     onSpin: () => void frameworkSpin(),
@@ -189,14 +191,6 @@ controller.update(snapshot);
 8. 更新 `win`、`balance`，并调用 `gameAdapter.applySpinResult()`。
 
 `netcore` 的 `error`、非预期 `disconnect`、`reconnecting`、`message` 错误，以及 logger `warn/error` 都会让当前操作失败，UI 进入 error 状态并 reject 对应 Promise。
-
-## Viewer
-
-`apps/uiframeworksviewer` 提供 mock/live 两种模式，用来检查 `docs/ui002.png` 风格、不同视口、长金额、sound off、error、loading、win、auto、fast active、buy bonus disabled、no brand 和 clock disabled 状态。
-
-```bash
-pnpm --filter uiframeworksviewer dev -- --host 0.0.0.0
-```
 
 ## 验收命令
 

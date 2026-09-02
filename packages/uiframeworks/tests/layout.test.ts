@@ -1,8 +1,6 @@
 import {
-  calculateFrameScale,
   calculateSlotUiFrameViewport,
   createDefaultSlotLayout,
-  validateDesignSize,
 } from "../src/index.js";
 
 const FOCUS_POLICY = Object.freeze({
@@ -48,28 +46,35 @@ const MAXIMIZED_FOCUS_POLICY = Object.freeze({
 });
 
 describe("layout", () => {
-  it("calculates frame scale for portrait and exact design viewports", () => {
-    expect(calculateFrameScale(941, 1672)).toBe(1);
-    expect(calculateFrameScale(470.5, 836)).toBe(0.5);
-  });
-
-  it("uses the limiting side for landscape and tall viewports", () => {
-    expect(calculateFrameScale(1366, 768)).toBeCloseTo(768 / 1672);
-    expect(calculateFrameScale(941, 2200)).toBe(1);
-  });
-
-  it("rejects invalid design and viewport sizes", () => {
-    expect(() => validateDesignSize({ width: 0, height: 1 })).toThrow(/width/);
+  it("rejects invalid frame and page sizes", () => {
+    expect(() => createDefaultSlotLayout({ width: 0, height: 1 })).toThrow(
+      /width/,
+    );
     expect(() =>
-      validateDesignSize({ width: 1, height: Number.POSITIVE_INFINITY }),
+      createDefaultSlotLayout({
+        width: 1,
+        height: Number.POSITIVE_INFINITY,
+      }),
     ).toThrow(/height/);
-    expect(() => calculateFrameScale(0, 100)).toThrow(/viewportWidth/);
-    expect(() => calculateFrameScale(100, -1)).toThrow(/viewportHeight/);
+    expect(() =>
+      calculateSlotUiFrameViewport({
+        viewportWidth: 0,
+        viewportHeight: 100,
+        policy: MAXIMIZED_FOCUS_POLICY,
+      }),
+    ).toThrow(/viewportWidth/);
+    expect(() =>
+      calculateSlotUiFrameViewport({
+        viewportWidth: 100,
+        viewportHeight: -1,
+        policy: MAXIMIZED_FOCUS_POLICY,
+      }),
+    ).toThrow(/viewportHeight/);
   });
 
-  it("creates a responsive default layout from design size", () => {
+  it("creates a responsive default layout from frame design size", () => {
     const layout = createDefaultSlotLayout({ width: 1200, height: 800 });
-    expect(layout.designSize).toEqual({ width: 1200, height: 800 });
+    expect(layout.frameDesignSize).toEqual({ width: 1200, height: 800 });
     expect(layout.bottomHudHeight).toBeGreaterThanOrEqual(188);
     expect(layout.leftRailButtonSize).toBeGreaterThan(0);
     expect(layout.leftRailGap).toBeGreaterThan(0);
@@ -82,29 +87,11 @@ describe("layout", () => {
     );
   });
 
-  it("calculates a fixed frame viewport compatible with frame scaling", () => {
-    const viewport = calculateSlotUiFrameViewport({
-      viewportWidth: 470.5,
-      viewportHeight: 836,
-      designSize: { width: 941, height: 1672 },
-    });
-
-    expect(viewport).toEqual({
-      pageSize: { width: 470.5, height: 836 },
-      frameDesignSize: { width: 941, height: 1672 },
-      scale: 0.5,
-      cssSize: { width: 470.5, height: 836 },
-      offsetX: 0,
-      offsetY: 0,
-    });
-  });
-
   it("calculates focus frame viewports with canvas caps and black margins", () => {
     expect(
       calculateSlotUiFrameViewport({
         viewportWidth: 1125,
         viewportHeight: 2000,
-        designSize: { width: 1125, height: 2000 },
         policy: FOCUS_POLICY,
       }).frameDesignSize,
     ).toEqual({ width: 1125, height: 2000 });
@@ -113,7 +100,6 @@ describe("layout", () => {
       calculateSlotUiFrameViewport({
         viewportWidth: 1200,
         viewportHeight: 1200,
-        designSize: { width: 1125, height: 2000 },
         policy: FOCUS_POLICY,
       }).frameDesignSize,
     ).toEqual({ width: 1200, height: 1200 });
@@ -121,7 +107,6 @@ describe("layout", () => {
     const ultraWide = calculateSlotUiFrameViewport({
       viewportWidth: 3000,
       viewportHeight: 1200,
-      designSize: { width: 1125, height: 2000 },
       policy: FOCUS_POLICY,
     });
     expect(ultraWide.frameDesignSize).toEqual({ width: 2000, height: 1200 });
@@ -132,7 +117,6 @@ describe("layout", () => {
     const phone = calculateSlotUiFrameViewport({
       viewportWidth: 375,
       viewportHeight: 812,
-      designSize: { width: 1125, height: 2000 },
       policy: FOCUS_POLICY,
     });
     expect(phone.frameDesignSize.width).toBeCloseTo(923.645, 3);
@@ -144,7 +128,6 @@ describe("layout", () => {
     const landscape = calculateSlotUiFrameViewport({
       viewportWidth: 1280,
       viewportHeight: 720,
-      designSize: { width: 1174, height: 2000 },
       policy: ORIENTATION_FOCUS_POLICY,
     });
     expect(landscape.frameDesignSize.width).toBeCloseTo(1886.222, 3);
@@ -153,7 +136,6 @@ describe("layout", () => {
     const square = calculateSlotUiFrameViewport({
       viewportWidth: 1000,
       viewportHeight: 1000,
-      designSize: { width: 1174, height: 2000 },
       policy: ORIENTATION_FOCUS_POLICY,
     });
     expect(square.frameDesignSize).toEqual({ width: 2000, height: 2000 });
@@ -161,7 +143,6 @@ describe("layout", () => {
     const portrait = calculateSlotUiFrameViewport({
       viewportWidth: 390,
       viewportHeight: 844,
-      designSize: { width: 1174, height: 2000 },
       policy: ORIENTATION_FOCUS_POLICY,
     });
     expect(portrait.frameDesignSize).toEqual({ width: 1174, height: 2000 });
@@ -187,6 +168,13 @@ describe("layout", () => {
   });
 
   it("rejects invalid focus frame policies", () => {
+    expect(() =>
+      calculateSlotUiFrameViewport({
+        viewportWidth: 1000,
+        viewportHeight: 1000,
+        policy: undefined as never,
+      }),
+    ).toThrow(/framePolicy is required/);
     expect(() =>
       calculateSlotUiFrameViewport({
         viewportWidth: 1000,

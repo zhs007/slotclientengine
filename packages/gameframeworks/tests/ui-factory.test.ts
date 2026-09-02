@@ -14,7 +14,12 @@ import {
   type SlotGameViewportListener,
   type SlotGameViewportSnapshot,
 } from "../src/index.js";
-import { BET_OPTIONS, MockAdapter, createSpinResult } from "./test-helpers.js";
+import {
+  BET_OPTIONS,
+  MockAdapter,
+  TEST_FRAME_POLICY,
+  createSpinResult,
+} from "./test-helpers.js";
 
 describe("SlotGameUiFactory contract", () => {
   it("keeps the default controller DOM and button command behavior", async () => {
@@ -25,6 +30,7 @@ describe("SlotGameUiFactory contract", () => {
       gameAdapter: new MockAdapter(),
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
+      framePolicy: TEST_FRAME_POLICY,
       liveSession: session,
     });
     await framework.connect();
@@ -57,7 +63,6 @@ describe("SlotGameUiFactory contract", () => {
       factory,
       adapter: firstAdapter,
       uiConfig: {
-        framePolicy: { mode: "fixed" },
         brandLabel: "FACTORY TEST",
         currency: "USD",
         locale: "en-US",
@@ -69,7 +74,6 @@ describe("SlotGameUiFactory contract", () => {
     expect(factory.contexts).toHaveLength(2);
     const firstContext = factory.contexts[0];
     expect(Object.isFrozen(firstContext)).toBe(true);
-    expect(Object.isFrozen(firstContext.designSize)).toBe(true);
     expect(Object.isFrozen(firstContext.betOptions)).toBe(true);
     expect(Object.isFrozen(firstContext.betOptions[0])).toBe(true);
     expect(Object.isFrozen(firstContext.initialState)).toBe(true);
@@ -354,7 +358,7 @@ function createFramework(options: {
     gameAdapter: options.adapter ?? new MockAdapter(),
     live: { serverUrl: "ws://localhost" },
     betOptions: BET_OPTIONS,
-    designSize: { width: 1125, height: 2000 },
+    framePolicy: TEST_FRAME_POLICY,
     liveSession: options.session ?? new DeferredLiveSession(),
     uiFactory: options.factory,
     onError: options.onError,

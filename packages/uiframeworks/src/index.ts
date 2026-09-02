@@ -7,7 +7,6 @@ import {
   SlotUiRuntimeError,
 } from "./errors.js";
 import { createMoneyFormatter } from "./format.js";
-import { validateDesignSize } from "./layout.js";
 import { SlotUiLiveSession, requireFiniteBalance } from "./session.js";
 import { SlotUiStateStore } from "./state.js";
 import type {
@@ -37,9 +36,7 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
   constructor(options: SlotUiFrameworkOptions) {
     validateFrameworkOptions(options);
     this.#options = options;
-    const designSize = validateDesignSize(options.designSize);
     this.#state = new SlotUiStateStore({
-      designSize,
       betOptions: options.betOptions,
       initialBetIndex: options.initialBetIndex,
       initialBalance: options.initialBalance,
@@ -50,7 +47,6 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
     });
     this.#dom = createSlotUiDom({
       root: options.root,
-      designSize,
       framePolicy: options.framePolicy,
       brandLabel: options.brandLabel,
       clock: options.clock,
@@ -83,7 +79,7 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
       logicFactory: options.logicFactory,
       logger: options.logger,
     });
-    this.#mountPromise = this.#mountGameAdapter(designSize);
+    this.#mountPromise = this.#mountGameAdapter();
     this.#applyState();
   }
 
@@ -208,11 +204,8 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
     this.#options.gameAdapter.destroy?.();
   }
 
-  async #mountGameAdapter(
-    designSize: SlotUiStateSnapshot["designSize"],
-  ): Promise<void> {
+  async #mountGameAdapter(): Promise<void> {
     const context: SlotGameMountContext = Object.freeze({
-      designSize,
       frame: this.#dom.elements.frame,
       gameLayer: this.#dom.elements.gameLayer,
       overlay: this.#dom.elements.overlay,
@@ -292,11 +285,8 @@ function validateFrameworkOptions(options: SlotUiFrameworkOptions): void {
 
 export { SlotUiConfigError, SlotUiRuntimeError } from "./errors.js";
 export {
-  DEFAULT_SLOT_UI_DESIGN_SIZE,
-  calculateFrameScale,
   calculateSlotUiFrameViewport,
   createDefaultSlotLayout,
-  validateDesignSize,
 } from "./layout.js";
 export { createMoneyFormatter } from "./format.js";
 export { createSlotUiController } from "./controller.js";
