@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   formatGameLayoutRuntimeAddress,
   parseGameLayoutRuntimeAddress,
@@ -30,6 +30,38 @@ describe("Game Layout runtime address", () => {
         formatGameLayoutRuntimeAddress("resource", "json", "spin-config"),
       ),
     ).toThrow(/Unknown Game Layout runtime address/);
+    controller.destroy();
+  });
+
+  it("publishes program audio as an effect endpoint and forwards play options", () => {
+    const handle = { state: "playing", finished: Promise.resolve(), stop() {} };
+    const playEffect = vi.fn(() => handle);
+    const controller = createGameLayoutRuntimeAddresses(
+      {
+        manifest: {
+          nodes: [],
+          reels: {},
+          gameModes: { modes: [], transitions: [] },
+        },
+        popupPackages: {},
+        programmaticAudioEffects: new Set(["feature-loop"]),
+      } as any,
+      { playEffect, stopEffect() {} } as any,
+    );
+    const address = formatGameLayoutRuntimeAddress(
+      "audio",
+      "effect",
+      "feature-loop",
+    );
+    const endEvent = formatGameLayoutRuntimeAddress("event", "variant-changed");
+    const endpoint = controller.addresses.resolve(address);
+    expect(endpoint.kind).toBe("audio-effect");
+    if (endpoint.kind !== "audio-effect") throw new Error("unreachable");
+    expect(endpoint.play({ loop: true, endEvent })).toBe(handle);
+    expect(playEffect).toHaveBeenCalledWith("feature-loop", {
+      loop: true,
+      endEvent,
+    });
     controller.destroy();
   });
 

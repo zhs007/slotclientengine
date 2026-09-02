@@ -8,8 +8,11 @@ import {
   prepareSlotGameLiveSession,
 } from "../src/index.js";
 import type {
+  AudioPlaybackHandle,
+  SceneLayoutAudioEffectPlayOptions,
   SceneLayoutJsonData,
   SceneLayoutPackageResource,
+  SceneLayoutPackageRuntime,
 } from "../src/index.js";
 import { assertSlotGameStaticConfig } from "../src/static-config/index.js";
 
@@ -50,6 +53,14 @@ describe("exports", () => {
     expect(() => parseSpinConfig({ localReels: [["A", 2]] })).toThrow(
       /localReels/,
     );
+  });
+
+  it("exposes the Scene Layout program audio play contract", () => {
+    const play = (
+      runtime: Pick<SceneLayoutPackageRuntime, "playEffect">,
+      options: SceneLayoutAudioEffectPlayOptions,
+    ): AudioPlaybackHandle => runtime.playEffect("feature-loop", options);
+    expect(typeof play).toBe("function");
   });
 });
 

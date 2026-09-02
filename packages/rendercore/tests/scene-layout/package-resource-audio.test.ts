@@ -65,6 +65,13 @@ describe("scene layout package audio program resource", () => {
         resource as never,
         {} as never,
       );
+      expect(resource.programmaticAudioEffects).toEqual(new Set(["jingle"]));
+      expect(addresses.addresses.list({ kind: "audio-effect" })).toEqual([
+        expect.objectContaining({
+          address: "gamelayout:/audio/effect/jingle",
+          kind: "audio-effect",
+        }),
+      ]);
       expect(addresses.addresses.list({ kind: "resource-factory" })).toEqual(
         [],
       );
@@ -140,5 +147,49 @@ describe("scene layout package audio program resource", () => {
       await resource.destroy();
       createObjectUrl.mockRestore();
     }
+  });
+
+  it("rejects a program audio key that collides with an aggregated effect route", async () => {
+    const base = audioManifest();
+    await expect(
+      createSceneLayoutPackageResourceFromResolvedFiles({
+        manifest: {
+          ...base,
+          audio: {
+            version: 1,
+            effects: [
+              {
+                name: "jingle",
+                asset: {
+                  sources: [
+                    {
+                      path: "assets/legacy-jingle.ogg",
+                      mediaType: "audio/ogg",
+                    },
+                  ],
+                },
+                playback: "once",
+                offsetSeconds: 0,
+                voices: {
+                  maxConcurrent: 1,
+                  overflow: "restart-oldest",
+                },
+                bgm: { kind: "keep" },
+              },
+            ],
+            music: [],
+            programmaticEffects: [],
+          },
+        },
+        files: new Map([
+          ["assets/bg.png", new Uint8Array([1])],
+          ["assets/jingle.ogg", new Uint8Array([0x4f, 0x67, 0x67, 0x53])],
+          [
+            "assets/legacy-jingle.ogg",
+            new Uint8Array([0x4f, 0x67, 0x67, 0x53]),
+          ],
+        ]),
+      }),
+    ).rejects.toThrow(/conflicts with an aggregated audio effect/);
   });
 });

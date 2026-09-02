@@ -6,7 +6,7 @@
 - `@slotclientengine/audiocore/core`：game runtime；使用宿主 ticker 驱动延迟、渐变和 focus，不创建 Pixi Application、RAF 或全局 alias。
 - `@slotclientengine/audiocore/editor`：统一音效字段、导入识别和复用 core 的试听 session。
 
-Popup/Symbol package 只保存 local effect name。Game Layout 绑定 package 后才把 binding path 与 local name 编译为全局 route，例如 `award.coin`。游戏只通过编译后的 `playEffect(route)` / `stopEffect(route)` 使用音效。
+Popup/Symbol package 只保存 local effect name。Game Layout 绑定 package 后才把 binding path 与 local name 编译为全局 route，例如 `award.coin`；Scene Layout 的 audio 程序资源 key 也会派生同名 effect route。游戏只通过编译后的 `playEffect(route, options?)` / `stopEffect(route)` 使用音效。按次 `loop` 可覆盖历史 effect 的 authored playback；返回的 `AudioPlaybackHandle.stop()` 只停止该次播放。package owner 可通过 AudioCore 的 deferred source seam 让 pending handle 等待 lazy URL，期间 stop/destroy 后即使加载完成也不会补播。
 
 BGM 对每个 mode 都是可选的；已配置的 BGM 始终 loop，切 mode 使用绑定声明的渐隐/渐现。音频不加入 splash/loading 进度 gate，是否按需准备由对应 mode/animation owner 决定。
 

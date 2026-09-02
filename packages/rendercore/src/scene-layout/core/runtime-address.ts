@@ -23,6 +23,7 @@ import type { PopupManifest } from "../../popup/data/index.js";
 import { SceneLayoutError } from "../errors.js";
 import type {
   SceneLayoutGameModeSnapshot,
+  SceneLayoutAudioEffectPlayOptions,
   SceneLayoutPackageResource,
   SceneLayoutPopupStringInput,
   SceneLayoutRenderObject,
@@ -83,7 +84,7 @@ export interface GameLayoutPopupStringEndpoint extends EndpointBase<"popup-strin
   input(text: string): SceneLayoutPopupStringInput;
 }
 export interface GameLayoutAudioEffectEndpoint extends EndpointBase<"audio-effect"> {
-  play(): AudioPlaybackHandle;
+  play(options?: SceneLayoutAudioEffectPlayOptions): AudioPlaybackHandle;
   stop(): void;
 }
 export interface GameLayoutAudioMusicEndpoint extends EndpointBase<"audio-music"> {
@@ -142,7 +143,10 @@ interface RuntimeBridge {
   getRenderLayer(ref: string): RenderObjectLayer;
   getArea(id: string): import("../../reel/index.js").PresentableSymbolArea;
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
-  playEffect(route: string): AudioPlaybackHandle;
+  playEffect(
+    route: string,
+    options?: SceneLayoutAudioEffectPlayOptions,
+  ): AudioPlaybackHandle;
   stopEffect(route: string): void;
   getAudioSnapshot(): AudioRuntimeSnapshot;
   getPopupLayer(popupId: string, layerId: string): RenderObject;
@@ -689,7 +693,8 @@ export function createGameLayoutRuntimeAddresses(
         Object.freeze({
           kind: "audio-effect",
           descriptor,
-          play: () => bridge.playEffect(route),
+          play: (options?: SceneLayoutAudioEffectPlayOptions) =>
+            bridge.playEffect(route, options),
           stop: () => bridge.stopEffect(route),
         }),
     );

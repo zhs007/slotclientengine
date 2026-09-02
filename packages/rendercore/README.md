@@ -263,7 +263,7 @@ Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字�
 
 `@slotclientengine/rendercore/scene-layout` 提供严格且向后兼容的 scene-layout v1–v6 parser、精确资源闭包和 production package runtime。package resource 会把合法 v1–v5 规范化为 v6，并生成确定性的 `runtimeAllocation` v2、空旧音频目录与默认 event-audio 合同；原生 v6 必须完整且与 typed 引用严格一致。v6 中普通 node 始终使用独立 `landscape` / `portrait` placement，单背景仍以 `default` 控制 geometry/background；旧单背景 ordinary `default` 会深复制到两侧。v5 的 optional loop BGM/event audio 合同继续保留；`ignoreLegacyAudio` 只 gate 自动 mode/Popup/Symbol producer，不影响显式程序 effect API。
 
-`runtimeResources` 可声明 `{ kind: "json", path }` 的 program-only 数据，也可声明 `{ kind: "audio", path, mediaType }` 的 program audio。`SceneLayoutPackageResource.loadJsonData(exactKey)` 按需读取、严格解析并返回深度冻结的 JSON object/array；`loadRuntimeResource(exactKey, "audio")` 返回 package-owned URL 与 exact mediaType。JSON/audio 都不产生 RenderObject 或 `gamelayout:/resource/...` 地址，audio 的播放行为仍由 AudioCore owner 管理。
+`runtimeResources` 可声明 `{ kind: "json", path }` 的 program-only 数据，也可声明 `{ kind: "audio", path, mediaType }` 的 program audio。`SceneLayoutPackageResource.loadJsonData(exactKey)` 按需读取、严格解析并返回深度冻结的 JSON object/array；`loadRuntimeResource(exactKey, "audio")` 返回 package-owned URL 与 exact mediaType。JSON/audio 都不产生 RenderObject 或 `gamelayout:/resource/...` 地址；audio 程序键会额外派生 `gamelayout:/audio/effect/<key>` endpoint，并进入 `playEffect(key, options?)`。程序 audio 默认 once，`{ loop: true, endEvent? }` 可由 exact Event 或返回 handle 停止，`stopEffect(key)` 停止该 route。URL/cache 仍由 package resource 拥有，voice/handle 仍由 AudioCore 拥有。
 
 第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 
@@ -943,7 +943,7 @@ for (const transfer of transfers) {
 
 ## Scene Layout named RenderObject 与 ImgNumber
 
-`SceneLayoutPackageRuntime.createRenderObject(name)` 从 package manifest 的 exact `runtimeResources` name 创建 detached、caller-owned `RenderObject`，支持 image、official Spine 和 VNI；不会把 name 当路径或猜 kind。Spine/VNI 实例由创建它的 package runtime 在 `update(deltaSeconds)` 中推进，object destroy 会注销并释放 player，runtime destroy 会清理剩余实例。image-string 必须使用 typed `createImgNumberRenderObject(name, {text, anchor?})`；video、JSON 和 audio 不支持此对象 factory，JSON/audio 只通过 typed load API 取得。
+`SceneLayoutPackageRuntime.createRenderObject(name)` 从 package manifest 的 exact `runtimeResources` name 创建 detached、caller-owned `RenderObject`，支持 image、official Spine 和 VNI；不会把 name 当路径或猜 kind。Spine/VNI 实例由创建它的 package runtime 在 `update(deltaSeconds)` 中推进，object destroy 会注销并释放 player，runtime destroy 会清理剩余实例。image-string 必须使用 typed `createImgNumberRenderObject(name, {text, anchor?})`；video、JSON 和 audio 不支持此对象 factory。JSON 使用 typed load API，audio 可继续 typed load，也可用同名 effect route 播放。
 
 `createParticleTrailRenderObject(name,{emitter,config})`只接受exact image runtime resource，创建固定容量、共享纹理的pooled trail。它挂到受管`RenderObjectLayer`后由同一个owner clock采样opaque emitter anchor并生成world-space粒子；`stopEmissionAndDrain()`只停止新发射，存量粒子按自身lifetime继续更新，归零后Promise才resolve。正常完成必须等待该Promise后destroy；abort/runtime destroy可直接强制清理。配置必须显式给出capacity、rate、lifetime、speed、size、direction/spread、gravity与seed，游戏不得自建Pixi ticker或无界粒子队列。
 

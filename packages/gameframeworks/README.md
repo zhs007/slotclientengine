@@ -8,6 +8,8 @@ facade 同时导出 `SceneLayoutGameModePrepareOptions` 与 `SceneLayoutGameMode
 
 Scene Layout 的 program-only JSON 数据也由 facade 暴露类型。游戏在创建画面 runtime 前可调用 `packageResource.loadJsonData("spin-config")`，再交给 app-owned strict parser。数据源选择必须由 app 配置显式决定：选择 `gameConfig` 时继续使用现有 Symbols game config；选择 `gameLayout` 时才加载 exact JSON key。两者没有自动优先级、同名覆盖或 fallback，解析后的公开本地轮带/权重表再传给既有 reel/value resolver API。
 
+facade 同时导出 `SceneLayoutAudioEffectPlayOptions` 与 `AudioPlaybackHandle`。audio 程序键可直接 `runtime.playEffect(key)` 单次播放，或传 `{ loop: true, endEvent }`；结束 Event、`handle.stop()` 与 `runtime.stopEffect(key)` 分别提供自动、单次精确和 route 级停止边界。
+
 facade re-export `gamelayout:/` runtime address formatter、parser、resolver 与 endpoint/event 类型。
 程序接入见 [`docs/gamelayout-runtime-addresses.md`](../../docs/gamelayout-runtime-addresses.md)。
 

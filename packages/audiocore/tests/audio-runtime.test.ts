@@ -4,6 +4,7 @@ import type {
   AudioBackendActivityState,
   AudioBackendInstance,
   AudioBackendSound,
+  AudioBackendSource,
 } from "../src/core/index.js";
 import {
   createAudioCueTimeline,
@@ -34,12 +35,20 @@ class FakeInstance implements AudioBackendInstance {
 class FakeSound implements AudioBackendSound {
   readonly instances: FakeInstance[] = [];
   readonly pendingPlayResolvers: Array<(instance: FakeInstance) => void> = [];
+  readonly playOptions: Array<{
+    readonly loop: boolean;
+    readonly volume: number;
+  }> = [];
   readonly #deferPlay: boolean;
   destroyed = false;
   constructor(deferPlay = false) {
     this.#deferPlay = deferPlay;
   }
-  play(): AudioBackendInstance | Promise<AudioBackendInstance> {
+  play(options: {
+    readonly loop: boolean;
+    readonly volume: number;
+  }): AudioBackendInstance | Promise<AudioBackendInstance> {
+    this.playOptions.push(options);
     const instance = new FakeInstance();
     this.instances.push(instance);
     if (this.#deferPlay)
@@ -57,6 +66,7 @@ class FakeSound implements AudioBackendSound {
 }
 class FakeBackend implements AudioBackend {
   readonly sounds: FakeSound[] = [];
+  readonly preparedSources: Array<readonly AudioBackendSource[]> = [];
   readonly activityListeners = new Set<
     (state: AudioBackendActivityState) => void
   >();
@@ -78,8 +88,11 @@ class FakeBackend implements AudioBackend {
     this.activity = activity;
     for (const listener of [...this.activityListeners]) listener(activity);
   }
-  async prepare(): Promise<AudioBackendSound> {
+  async prepare(
+    sources: readonly AudioBackendSource[],
+  ): Promise<AudioBackendSound> {
     this.prepareCount += 1;
+    this.preparedSources.push(sources);
     const sound = new FakeSound(this.deferNextPlay);
     this.deferNextPlay = false;
     this.sounds.push(sound);
@@ -179,6 +192,115 @@ describe("audio runtime", () => {
     runtime.stopEffect("award.coin");
     await expect(first.finished).resolves.toBe("stopped");
     expect(runtime.getSnapshot().activeEffects).toBe(0);
+    runtime.destroy();
+  });
+
+  it("overrides authored playback per call and stops the returned loop handle", async () => {
+    const backend = new FakeBackend();
+    const runtime = createAudioRuntime({
+      backend,
+      effects: {
+        coin: {
+          binding: effect("coin", "once"),
+          sources: [{ url: "coin.mp3", mediaType: "audio/mpeg" }],
+        },
+      },
+    });
+    const once = runtime.playEffect("coin", { delaySeconds: 0 });
+    await flushMicrotasks();
+    const handle = runtime.playEffect("coin", {
+      delaySeconds: 0,
+      loop: true,
+    });
+    expect(handle).not.toBe(once);
+    expect(runtime.playEffect("coin", { delaySeconds: 0, loop: true })).toBe(
+      handle,
+    );
+    await flushMicrotasks();
+    expect(backend.sounds[0]!.playOptions).toEqual([
+      { loop: false, volume: 0 },
+      { loop: true, volume: 0 },
+    ]);
+    handle.stop();
+    await expect(handle.finished).resolves.toBe("stopped");
+    expect(backend.sounds[0]!.instances[1]!.stopped).toBe(true);
+    once.stop();
+    runtime.destroy();
+  });
+
+  it("returns a pending deferred handle and never starts after early stop", async () => {
+    const backend = new FakeBackend();
+    let resolveSources!: (
+      sources: readonly {
+        readonly url: string;
+        readonly mediaType: "audio/ogg";
+      }[],
+    ) => void;
+    const sources = new Promise<
+      readonly { readonly url: string; readonly mediaType: "audio/ogg" }[]
+    >((resolve) => {
+      resolveSources = resolve;
+    });
+    const runtime = createAudioRuntime({ backend, effects: {} });
+    const handle = runtime.playDeferredEffect(
+      "feature_loop.effect",
+      {
+        resolveSources: () => sources,
+        voices: { maxConcurrent: 4, overflow: "restart-oldest" },
+        bgm: { kind: "keep" },
+      },
+      { loop: true },
+    );
+    expect(handle.state).toBe("pending");
+    handle.stop();
+    resolveSources([{ url: "feature.ogg", mediaType: "audio/ogg" }]);
+    await flushMicrotasks();
+    await expect(handle.finished).resolves.toBe("stopped");
+    expect(backend.prepareCount).toBe(0);
+    runtime.destroy();
+  });
+
+  it("settles a deferred source failure on the returned handle", async () => {
+    const backend = new FakeBackend();
+    const failure = new Error("lazy audio unavailable");
+    const runtime = createAudioRuntime({ backend, effects: {} });
+    const handle = runtime.playDeferredEffect("feature", {
+      resolveSources: async () => {
+        throw failure;
+      },
+      voices: { maxConcurrent: 4, overflow: "restart-oldest" },
+      bgm: { kind: "keep" },
+    });
+    expect(handle.state).toBe("pending");
+    await expect(handle.finished).resolves.toBe("failed");
+    expect(handle.error).toBe(failure);
+    expect(backend.prepareCount).toBe(0);
+    runtime.destroy();
+  });
+
+  it("plays a deferred effect once by default and supports route stop", async () => {
+    const backend = new FakeBackend();
+    const runtime = createAudioRuntime({ backend, effects: {} });
+    const definition = {
+      resolveSources: async () => [
+        { url: "feature.ogg", mediaType: "audio/ogg" as const },
+      ],
+      voices: { maxConcurrent: 4, overflow: "restart-oldest" as const },
+      bgm: { kind: "keep" as const },
+    };
+    const once = runtime.playDeferredEffect("feature", definition);
+    await flushMicrotasks();
+    expect(backend.sounds[0]!.playOptions[0]?.loop).toBe(false);
+    backend.sounds[0]!.instances[0]!.end();
+    await expect(once.finished).resolves.toBe("ended");
+
+    const loop = runtime.playDeferredEffect("feature", definition, {
+      loop: true,
+    });
+    await flushMicrotasks();
+    expect(backend.sounds[0]!.playOptions[1]?.loop).toBe(true);
+    runtime.stopDeferredEffect("feature");
+    await expect(loop.finished).resolves.toBe("stopped");
     runtime.destroy();
   });
 
