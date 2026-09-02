@@ -29,6 +29,7 @@ import {
   upgradeSceneLayoutManifestToLatest,
   upgradeSceneLayoutManifestToV6,
 } from "./manifest-v3.js";
+import { collectSceneLayoutUiControlImages } from "./ui-control.js";
 
 const PATH_SEGMENT = /^[A-Za-z0-9._-]+$/;
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]*$/;
@@ -243,8 +244,8 @@ export function collectSceneLayoutAssetPaths(
       for (const source of binding.audio.asset.sources) paths.add(source.path);
   for (const node of parsed.nodes) {
     if ("uiControl" in node) {
-      paths.add(node.uiControl.off.path);
-      paths.add(node.uiControl.on.path);
+      for (const image of collectSceneLayoutUiControlImages(node.uiControl))
+        paths.add(image.path);
       continue;
     }
     const resource = node.resource;
@@ -1130,8 +1131,7 @@ function parseGameModes(
   nodes: readonly SceneLayoutGraphicNode[],
   legacySymbolPackage: SceneLayoutSymbolPackageBinding | undefined,
   symbolPackages:
-    | Readonly<Record<string, SceneLayoutSymbolPackageBinding>>
-    | undefined,
+    Readonly<Record<string, SceneLayoutSymbolPackageBinding>> | undefined,
   popups: Readonly<Record<string, SceneLayoutPopupBinding>> | undefined,
 ): SceneLayoutGameModes {
   const record = readRecord(value, "scene layout gameModes");
@@ -1184,8 +1184,7 @@ function parseGameModes(
   const parsedHeads = rawModes.map(({ mode, label }) => {
     const id = stateIdentifier(mode.id, `${label}.id`);
     let backgroundNodes:
-      | Readonly<Partial<Record<SceneLayoutVariantId, string>>>
-      | undefined;
+      Readonly<Partial<Record<SceneLayoutVariantId, string>>> | undefined;
     if (canonical) {
       if (mode.backgroundNodes === undefined)
         fail(`${label}.backgroundNodes is required for canonical gameModes.`);

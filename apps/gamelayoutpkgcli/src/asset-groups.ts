@@ -7,9 +7,10 @@ import {
   collectMappedPopupAssetKeys,
   parsePopupManifest,
 } from "@slotclientengine/rendercore/popup/data";
-import type {
-  SceneLayoutManifest,
-  SceneLayoutNode,
+import {
+  collectSceneLayoutUiControlImages,
+  type SceneLayoutManifest,
+  type SceneLayoutNode,
 } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   collectSymbolPackageEntryPaths,
@@ -517,8 +518,8 @@ function nodeClosure(
   const keys = new Set<string>();
   for (const node of nodes) {
     if ("uiControl" in node) {
-      keys.add(node.uiControl.off.path);
-      keys.add(node.uiControl.on.path);
+      for (const image of collectSceneLayoutUiControlImages(node.uiControl))
+        keys.add(image.path);
       continue;
     }
     const resource = node.resource;

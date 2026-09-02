@@ -14,11 +14,14 @@ Game Layout production runtime 的统一对象定位、资源 factory 与事件�
 [`docs/gamelayout-runtime-addresses.md`](../../docs/gamelayout-runtime-addresses.md)。
 
 Scene Layout v7 的 node 是图层 union：既有图形分支保存 `resource`，UI 控件分支保存可扩展的
-`uiControl` discriminated union。当前 `radio` 控件用两张不同且尺寸相同的 off/on 图片，一个稳定 Sprite
+`uiControl` discriminated union。`radio` 控件用两张不同且尺寸相同的 off/on 图片，一个稳定 Sprite
 在固定 `off` 初值与 `on` 之间切换。consumer 通过 `getUiControl(id)` 或
 `gamelayout:/ui-control/<id>` 获得 borrowed `radio` capability；它不属于 RenderObject，也不公开 Pixi 对象。
 每次真实状态提交发布 state-specific `.../radio/state/<off|on>/entered` event，初始化和 same-state set 不发布。
 控件命中的 pointertap 会消费对应 federated pointer 与随后 native click，宿主 canvas 的 primary action 不会处理同一次输入。
+`step-slider` 用不同的 track/thumb 图片和稳定 Container，配置 `steps >= 2` 与正吸附时长；点击或拖动松开后由
+runtime manual clock 吸附，完成时才提交数字档位并发布 `.../step-slider/state/<index>/entered`。其 capability 的
+`setState(index)` 为可等待 Promise。
 
 ## Reel rolling 与 settled occurrence
 

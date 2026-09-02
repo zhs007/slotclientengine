@@ -588,20 +588,56 @@ function parseUiControlNode(
   if (!placements.landscape && !placements.portrait)
     fail(`${label} must have a landscape or portrait placement.`);
   const control = record(node.uiControl, `${label}.uiControl`);
-  if (control.kind !== "radio") fail(`${label}.uiControl.kind must be radio.`);
-  known(control, new Set(["kind", "off", "on"]), `${label}.uiControl`);
-  const off = parseUiControlImage(control.off, `${label}.uiControl.off`);
-  const on = parseUiControlImage(control.on, `${label}.uiControl.on`);
-  if (off.path === on.path)
-    fail(`${label}.uiControl off/on paths must be different.`);
-  if (off.size.width !== on.size.width || off.size.height !== on.size.height)
-    fail(`${label}.uiControl off/on sizes must be equal.`);
+  let uiControl;
+  if (control.kind === "radio") {
+    known(control, new Set(["kind", "off", "on"]), `${label}.uiControl`);
+    const off = parseUiControlImage(control.off, `${label}.uiControl.off`);
+    const on = parseUiControlImage(control.on, `${label}.uiControl.on`);
+    if (off.path === on.path)
+      fail(`${label}.uiControl off/on paths must be different.`);
+    if (off.size.width !== on.size.width || off.size.height !== on.size.height)
+      fail(`${label}.uiControl off/on sizes must be equal.`);
+    uiControl = { kind: "radio" as const, off, on };
+  } else if (control.kind === "step-slider") {
+    known(
+      control,
+      new Set(["kind", "track", "thumb", "steps", "snapDurationSeconds"]),
+      `${label}.uiControl`,
+    );
+    const track = parseUiControlImage(
+      control.track,
+      `${label}.uiControl.track`,
+    );
+    const thumb = parseUiControlImage(
+      control.thumb,
+      `${label}.uiControl.thumb`,
+    );
+    if (track.path === thumb.path)
+      fail(`${label}.uiControl track/thumb paths must be different.`);
+    if (track.size.width <= thumb.size.width)
+      fail(`${label}.uiControl track width must be greater than thumb width.`);
+    const steps = safeInteger(control.steps, `${label}.uiControl.steps`);
+    if (steps < 2) fail(`${label}.uiControl.steps must be at least 2.`);
+    const snapDurationSeconds = positive(
+      control.snapDurationSeconds,
+      `${label}.uiControl.snapDurationSeconds`,
+    );
+    uiControl = {
+      kind: "step-slider" as const,
+      track,
+      thumb,
+      steps,
+      snapDurationSeconds,
+    };
+  } else {
+    fail(`${label}.uiControl.kind must be radio or step-slider.`);
+  }
   return deepFreeze({
     id,
     order,
     ...(scope ? { scope } : {}),
     placements,
-    uiControl: { kind: "radio", off, on },
+    uiControl,
   });
 }
 
@@ -860,8 +896,7 @@ function legacyNodeContexts(
   node: SceneLayoutGraphicNode,
   orientation: SceneLayoutOrientationVariantId,
   backgroundScope:
-    | Record<string, SceneLayoutOrientationVariantId[]>
-    | undefined,
+    Record<string, SceneLayoutOrientationVariantId[]> | undefined,
   modeVariants: ReadonlyMap<
     string,
     Readonly<Record<SceneLayoutOrientationVariantId, LegacyVariant>>

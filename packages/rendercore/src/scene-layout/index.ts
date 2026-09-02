@@ -7,6 +7,7 @@ export * from "./manifest-v6.js";
 export * from "./manifest-v7.js";
 export * from "./runtime-allocation.js";
 export * from "./geometry.js";
+export * from "./ui-control.js";
 export * from "./resource.js";
 export * from "./package-resource.js";
 export {

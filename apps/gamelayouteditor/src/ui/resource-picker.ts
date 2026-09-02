@@ -37,17 +37,24 @@ export function createResourcePickerState(
     context,
     query: "",
     type:
-      context.kind === "add-radio" || context.kind === "rebind-radio"
+      context.kind === "add-radio" ||
+      context.kind === "rebind-radio" ||
+      context.kind === "add-step-slider" ||
+      context.kind === "rebind-step-slider"
         ? "image"
         : "all",
     selectedResourceId,
     secondaryResourceId: "",
     nodeId:
-      context.kind === "rebind-layer" || context.kind === "rebind-radio"
+      context.kind === "rebind-layer" ||
+      context.kind === "rebind-radio" ||
+      context.kind === "rebind-step-slider"
         ? context.nodeId
         : selectedResourceId,
     variants: [...ordinaryLayerVariantIds],
     defaultAnimation: "",
+    steps: 3,
+    snapDurationSeconds: 0.12,
   };
   state.defaultAnimation = preferredResourcePickerAnimation(
     project,
@@ -95,7 +102,9 @@ export function getResourcePickerCandidates(
     )
     .filter((resource) =>
       state.context.kind === "add-radio" ||
-      state.context.kind === "rebind-radio"
+      state.context.kind === "rebind-radio" ||
+      state.context.kind === "add-step-slider" ||
+      state.context.kind === "rebind-step-slider"
         ? resource.kind === "image"
         : true,
     )

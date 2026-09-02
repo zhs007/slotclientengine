@@ -96,7 +96,7 @@ texture、Spine/VNI player、reel 或当前 mode。
 ## v7 UI 控件图层
 
 Scene Layout latest 仍为 v7。`nodes[*]` 是严格互斥的图层 union：图形图层声明 `resource`，UI 控件图层声明
-`uiControl`，不得同时声明或同时省略。历史 v1–v6 只接受图形图层。当前首个 UI 控件为二态图片单选框：
+`uiControl`，不得同时声明或同时省略。历史 v1–v6 只接受图形图层。`radio` 分支为二态图片单选框：
 
 ```json
 {
@@ -135,6 +135,36 @@ runtime 通过 `getUiControl("splash-flag")` 或 `gamelayout:/ui-control/splash-
 event detail 包含 controlId、controlKind、previousState、state 与 `pointer | programmatic` source。初始化、same-state
 set、失败和 destroy 不发布 occurrence；shared catalog family 为 `ui-control-state`，facets 为
 control/control-kind/state/edge，因此 Event dialog 无需解析地址即可配置 exact event。
+
+`step-slider` 分支是水平多档选择框：
+
+```json
+{
+  "id": "fast-play",
+  "order": 21,
+  "uiControl": {
+    "kind": "step-slider",
+    "track": {
+      "kind": "image",
+      "path": "fastplay-bar.png",
+      "size": { "width": 336, "height": 50 }
+    },
+    "thumb": {
+      "kind": "image",
+      "path": "fastplay-tag.png",
+      "size": { "width": 46, "height": 46 }
+    },
+    "steps": 3,
+    "snapDurationSeconds": 0.12
+  },
+  "placements": { "landscape": { "x": 0, "y": 0, "scale": 1 } }
+}
+```
+
+track/thumb 必须是不同图片且 `track.width > thumb.width`；`steps` 是至少 2 的安全整数，吸附时长为正有限数。
+runtime 初始档位为 `0`，等距档位覆盖有效行程的左右端点。拖动只改变临时位置，点击或松开后由 runtime manual clock
+吸附到最近档位，完成时才提交状态。窄化 `kind === "step-slider"` 后可读取 `steps/getState()` 并
+`await setState(index)`。每档对应 exact `.../step-slider/state/<index>/entered` event。
 
 ```json
 {

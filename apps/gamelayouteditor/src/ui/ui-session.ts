@@ -3,12 +3,7 @@ import type { EditorProject } from "../model/editor-project.js";
 import type { SymbolOtherScenePreviewBinding } from "../preview/other-scene-preview.js";
 
 export type WorkspaceTab =
-  | "assets"
-  | "layout"
-  | "transitions"
-  | "symbols"
-  | "bigwin"
-  | "project";
+  "assets" | "layout" | "transitions" | "symbols" | "bigwin" | "project";
 
 export type LayoutSelection =
   | { readonly kind: "reel"; readonly reelId: "main" }
@@ -17,11 +12,17 @@ export type LayoutSelection =
 export type LayoutResourceBindingContext =
   | { readonly kind: "add-layer" }
   | { readonly kind: "add-radio" }
+  | { readonly kind: "add-step-slider" }
   | { readonly kind: "rebind-layer"; readonly nodeId: string }
   | {
       readonly kind: "rebind-radio";
       readonly nodeId: string;
       readonly state: "off" | "on";
+    }
+  | {
+      readonly kind: "rebind-step-slider";
+      readonly nodeId: string;
+      readonly role: "track" | "thumb";
     };
 
 export interface ResourcePickerState {
@@ -33,6 +34,8 @@ export interface ResourcePickerState {
   nodeId: string;
   variants: SceneLayoutVariantId[];
   defaultAnimation: string;
+  steps: number;
+  snapDurationSeconds: number;
 }
 
 export interface EditorUiSession {
@@ -84,10 +87,7 @@ export type PreviewTransitionUiState =
       readonly to: string;
       readonly kind: PreviewTransitionKind;
       readonly boundary:
-        | "popup"
-        | "awaiting-video-start"
-        | "before-switch"
-        | "after-switch";
+        "popup" | "awaiting-video-start" | "before-switch" | "after-switch";
     }
   | { readonly phase: "complete"; readonly stableMode: string }
   | { readonly phase: "error"; readonly message: string };

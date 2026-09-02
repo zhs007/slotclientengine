@@ -25,7 +25,7 @@ address。选择按钮、breadcrumb、结果与已保存行使用同一组显示
 `全部格` 也会参与全 catalog 搜索，但不会生成 catalog 中不存在的坐标组合。
 
 `ui-control-state` 同样只消费 shared catalog，并以“UI 控件状态”及 control/control-kind/state/edge facets 展示。
-例如 radio 的 off/on entered 地址可搜索、逐级选择和保存；EditorCore 不解析地址，也不维护控件 kind 或状态候选表。
+例如 radio 的 off/on 与 step-slider 的数字档位 entered 地址均可搜索、逐级选择和保存；数字状态显示为“档位 N（state i）”。EditorCore 不解析地址，也不维护控件 kind 或状态候选表。
 
 只需要选择一个 exact event 的宿主使用 `mountEditorGameLayoutEventPickerDialog()`。它复用相同的 source、catalog
 和渐进 facet 选择器，但不显示 event 组列表；确认后只返回一个 immutable event item。

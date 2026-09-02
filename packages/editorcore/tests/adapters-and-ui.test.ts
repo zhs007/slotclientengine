@@ -732,6 +732,66 @@ describe("default adapters", () => {
     dialog.destroy();
   });
 
+  it("labels and configures an exact step-slider档位 event", async () => {
+    const rootKey = "current-layout.manifest.json";
+    const address =
+      "gamelayout:/ui-control/fast-play/step-slider/state/1/entered" as const;
+    const catalog: EditorGameLayoutEventCatalog = {
+      rootKey,
+      entries: [
+        {
+          descriptor: {
+            address,
+            kind: "event",
+            ownerAddress: "gamelayout:/ui-control/fast-play",
+            authored: true,
+            capability: "event",
+          },
+          family: "ui-control-state",
+          facets: [
+            { key: "control", value: "fast-play" },
+            { key: "control-kind", value: "step-slider" },
+            { key: "state", value: "1" },
+            { key: "edge", value: "entered" },
+          ],
+          dispatchAddresses: [address],
+        },
+      ],
+    };
+    const host = document.createElement("div");
+    document.body.append(host);
+    const confirmation: { value: EditorGameLayoutEventGroup | null } = {
+      value: null,
+    };
+    const dialog = mountEditorGameLayoutEventDialog({
+      root: host,
+      sources: [{ key: rootKey, label: "当前项目" }],
+      value: { rootKey, events: [] },
+      inspectCatalog: () => catalog,
+      onConfirm(value) {
+        confirmation.value = value;
+      },
+    });
+
+    dialog.open();
+    await flush();
+    click(required(host, '[data-event-action="add"]'));
+    pickEventChoice(host, "ui-control-state", "family");
+    pickEventChoice(host, "fast-play", "pick");
+    expect(host.textContent).toContain("多档选择框（step-slider）");
+    pickEventChoice(host, "step-slider", "pick");
+    expect(host.textContent).toContain("档位 2（state 1）");
+    pickEventChoice(host, "1", "pick");
+    pickEventChoice(host, "entered", "pick");
+    click(required(host, '[data-event-action="save-row"]'));
+    click(required(host, "[data-event-confirm]"));
+    await flush();
+    expect(confirmation.value?.events.map((event) => event.address)).toEqual([
+      address,
+    ]);
+    dialog.destroy();
+  });
+
   it("selects exact and wildcard Spin lifecycle scopes from catalog facets", async () => {
     const standardCatalog = await inspectSpinEventCatalog("standard");
     const gridCellCatalog = await inspectSpinEventCatalog("grid-cell");

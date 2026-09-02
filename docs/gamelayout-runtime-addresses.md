@@ -145,6 +145,10 @@ radio 初始化为 `off`。只有真实状态改变才发布
 `gamelayout:/ui-control/<id>/radio/state/<off|on>/entered`；detail 包含 previous/current state 和
 `pointer | programmatic` source。初始化和 same-state set 不发事件，控件和 capability 均由 runtime 拥有。
 
+`step-slider` capability 另暴露 readonly `steps`，初始档位为 `0`；`await setState(index)` 在 manual-clock
+吸附完成并提交后 resolve。每档发布 `gamelayout:/ui-control/<id>/step-slider/state/<index>/entered`，拖动过程、取消、
+same-state、supersede 和 destroy 不发布。调用者必须先按 `kind` 窄化，不能把 radio 与数字档位混用。
+
 ## 创建程序 RenderObject
 
 runtime resource 必须在 Game Layout manifest 中显式声明；它和 authored node 是不同 namespace：

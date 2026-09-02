@@ -425,14 +425,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #layout;
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
   readonly #areaSpinFunction:
-    | import("../reel/index.js").AreaSpinFunction
-    | undefined;
+    import("../reel/index.js").AreaSpinFunction | undefined;
   readonly #symbolValueTextBindings:
-    | import("../symbol/index.js").SymbolValueTextBindingMap
-    | undefined;
+    import("../symbol/index.js").SymbolValueTextBindingMap | undefined;
   readonly #symbolValueTextFormatters:
-    | import("../symbol/index.js").SymbolValueTextFormatterMap
-    | undefined;
+    import("../symbol/index.js").SymbolValueTextFormatterMap | undefined;
   readonly #gridCellPresentation:
     | {
         readonly createEffectController?: (options: {
@@ -444,8 +441,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #createGridCellReel: (() => RenderGridCellReelSet) | undefined;
   readonly #hostUpdatesMainReel: boolean;
   readonly #formatPopupAmount:
-    | import("../popup/data/types.js").PopupAmountFormatter
-    | undefined;
+    import("../popup/data/types.js").PopupAmountFormatter | undefined;
   readonly #createTransitionPlayer: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
@@ -554,11 +550,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     reelPresentation: SlotReelPresentationProfileV1 | undefined,
     areaSpinFunction: import("../reel/index.js").AreaSpinFunction | undefined,
     symbolValueTextBindings:
-      | import("../symbol/index.js").SymbolValueTextBindingMap
-      | undefined,
+      import("../symbol/index.js").SymbolValueTextBindingMap | undefined,
     symbolValueTextFormatters:
-      | import("../symbol/index.js").SymbolValueTextFormatterMap
-      | undefined,
+      import("../symbol/index.js").SymbolValueTextFormatterMap | undefined,
     gridCellPresentation:
       | {
           readonly createEffectController?: (options: {
@@ -570,8 +564,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     createGridCellReel: (() => RenderGridCellReelSet) | undefined,
     hostUpdatesMainReel: boolean,
     formatPopupAmount:
-      | import("../popup/data/types.js").PopupAmountFormatter
-      | undefined,
+      import("../popup/data/types.js").PopupAmountFormatter | undefined,
     createTransitionPlayer:
       | ((options: {
           readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
@@ -590,8 +583,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       | undefined,
     audioBackend: AudioBackend | undefined,
     renderObjectFactoryDependencies:
-      | SceneLayoutRenderObjectFactoryDependencies
-      | undefined,
+      SceneLayoutRenderObjectFactoryDependencies | undefined,
   ) {
     this.#renderObjectMotionRuntime = createRenderObjectMotionRuntime({
       createError: (message) => new SceneLayoutError(message),
@@ -3197,7 +3189,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       event.controlId,
       event.controlKind,
       "state",
-      event.state,
+      String(event.state),
       "entered",
     );
     this.#addressController.emit(address, () => ({
@@ -5230,8 +5222,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const finished = createPopupSessionDeferred();
     const sessionId = this.#nextPopupSessionId++;
     let popupInstance:
-      | ProgrammaticPopupSessionController["popupInstance"]
-      | undefined;
+      ProgrammaticPopupSessionController["popupInstance"] | undefined;
     if (capturedRequest.instanceId !== undefined) {
       const root = new Container();
       root.label = `scene-layout-popup-instance:${id}:${capturedRequest.instanceId}`;
