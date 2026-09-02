@@ -24,4 +24,6 @@ activity pause 与 BGM focus pause 组合生效，任何一方仍持有时都不
 
 Pixi backend 以 prepared sound 生命周期引用计数关闭 `@pixi/sound` 的全局 auto-pause，最后一个
 sound destroy 时恢复原值。调用方不应持有 mutable Pixi sound、直接批量 resume，或另建
-visibility/focus 音频恢复逻辑。
+visibility/focus 音频恢复逻辑。backend 会先完整读取并校验 exact source response，再把独立
+ArrayBuffer 副本交给 WebAudio 解码；首次瞬时 decode 失败只以相同字节受控重试一次，第二次失败
+仍显式返回原始错误上下文，确定性坏资源不会被静默降级。

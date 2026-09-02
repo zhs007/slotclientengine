@@ -16,6 +16,7 @@ interface AutoPauseLease {
 
 let autoPauseLeaseCount = 0;
 let originalDisableAutoPause = false;
+const AUDIO_DECODE_ATTEMPTS = 2;
 
 export function createPixiSoundBackend(): AudioBackend {
   return new PixiSoundBackend();
@@ -64,16 +65,8 @@ class PixiSoundBackend implements AudioBackend {
           audio.canPlayType(mediaType).replace(/^no$/u, "") !== "",
       );
       if (!source) throw new Error("No supported file type found");
-      const sound = lease.module.Sound.from({
-        url: source.url,
-        preload: false,
-      });
-      try {
-        await waitUntilLoaded(sound);
-      } catch (error) {
-        sound.destroy();
-        throw error;
-      }
+      const bytes = await fetchAudioBytes(source.url);
+      const sound = await decodeAudioBytes(lease.module, bytes, source.url);
       return new PixiBackendSound(sound, lease.release);
     } catch (error) {
       lease.release();
@@ -245,4 +238,56 @@ function waitUntilLoaded(sound: Sound): Promise<void> {
       else resolve();
     });
   });
+}
+
+async function fetchAudioBytes(url: string): Promise<ArrayBuffer> {
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    throw new Error(
+      `Failed to fetch audio source "${url}": ${formatError(error)}`,
+    );
+  }
+  if (!response.ok)
+    throw new Error(
+      `Failed to fetch audio source "${url}": HTTP ${response.status}.`,
+    );
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength === 0)
+    throw new Error(`Audio source "${url}" is empty.`);
+  return bytes;
+}
+
+async function decodeAudioBytes(
+  module: PixiSoundModule,
+  bytes: ArrayBuffer,
+  url: string,
+): Promise<Sound> {
+  let lastError: unknown = new Error("audio decode did not start.");
+  for (let attempt = 1; attempt <= AUDIO_DECODE_ATTEMPTS; attempt += 1) {
+    const sound = module.Sound.from({
+      source: bytes.slice(0),
+      preload: false,
+    });
+    try {
+      await waitUntilLoaded(sound);
+      return sound;
+    } catch (error) {
+      lastError = error;
+      sound.destroy();
+      if (attempt < AUDIO_DECODE_ATTEMPTS) await yieldDecodeRetry();
+    }
+  }
+  throw new Error(
+    `Failed to decode audio source "${url}" after ${AUDIO_DECODE_ATTEMPTS} attempts: ${formatError(lastError)}`,
+  );
+}
+
+function yieldDecodeRetry(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
