@@ -62,6 +62,38 @@ describe("AAC audio optimizer", () => {
     ]);
   });
 
+  it("optimizes a program-only audio runtime resource as an effect", async () => {
+    const base = audioManifest([]);
+    const manifest = {
+      ...base,
+      runtimeResources: {
+        jingle: {
+          kind: "audio" as const,
+          path: "jingle.wav",
+          mediaType: "audio/wav" as const,
+        },
+      },
+    };
+    const source = sourcePackage(manifest, {
+      "jingle.wav": { bytes: new Uint8Array([1]), mediaType: "audio/wav" },
+    });
+    const fake = runner((label) =>
+      label.endsWith("jingle.m4a") ? aac(monoPcm) : monoPcm,
+    );
+    const result = await optimizeLayoutAudio({
+      source,
+      optimization: optimization(source),
+      audio: options(),
+      runner: fake,
+    });
+
+    expect(result.keyMapping.get("jingle.wav")).toBe("jingle.m4a");
+    expect(result.convertedAudioCount).toBe(1);
+    expect(fake.encode).toHaveBeenCalledWith(
+      expect.objectContaining({ bitrateKbps: 64 }),
+    );
+  });
+
   it("keeps compliant low-bitrate AAC-LC M4A without re-encoding", async () => {
     const manifest = audioManifest([{ key: "base.m4a", role: "music" }]);
     const source = sourcePackage(manifest, {

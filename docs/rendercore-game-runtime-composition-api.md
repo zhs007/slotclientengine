@@ -313,3 +313,29 @@ detach/destroy。runtime destroy 会清理关系，但不应作为日常 cleanup
 
 更完整的 Scene Layout layer ref、authored coordinate 与 ownership 说明见
 [`rendercore-layer-symbol-area-render-object-coordinate-guide.md`](./rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
+
+## 8. 程序音效播放与停止
+
+绑定为 audio `runtimeResources` 的程序键会派生同名 effect route 和
+`gamelayout:/audio/effect/<encoded-key>` endpoint。它不会回填 legacy audio catalog，也不会创建
+RenderObject：
+
+```ts
+const once = runtime.playEffect("feature-jingle");
+
+const loop = runtime.playEffect("feature-loop", {
+  loop: true,
+  endEvent: "gamelayout:/mode/BaseGame/state/stable/exited",
+});
+
+// exact invocation
+loop.stop();
+
+// 或停止 route 的全部 pending/active voice
+runtime.stopEffect("feature-loop");
+```
+
+程序 audio 默认 once；历史 effect 省略 `loop` 时保持 authored playback，只有显式 boolean 才覆盖本次播放。
+`endEvent` 只接受 effective loop 和已编译的 exact Event address，不回放订阅前的 occurrence。loop 的等价重复调用
+返回同一 live handle；不同结束 Event 显式失败。lazy/CDN source 在加载期间返回 `pending` handle，manual/Event/route
+stop 或 runtime destroy 后即使资源稍后完成也不会起播；加载和 backend 错误则让该 handle 以 `failed` settle。

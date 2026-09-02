@@ -591,11 +591,19 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     const programmaticAudioEffects = new Set(
       manifest.audio.programmaticEffects,
     );
-    for (const route of programmaticAudioEffects)
+    for (const route of manifest.audio.programmaticEffects)
       if (!audioEffects[route])
         throw new SceneLayoutError(
           `Programmatic audio route is not declared by the Scene Layout package: ${route}.`,
         );
+    for (const [key, spec] of Object.entries(manifest.runtimeResources ?? {})) {
+      if (spec.kind !== "audio") continue;
+      if (audioEffects[key])
+        throw new SceneLayoutError(
+          `Programmatic audio runtime resource route conflicts with an aggregated audio effect: ${key}.`,
+        );
+      programmaticAudioEffects.add(key);
+    }
     const audioMusic = Object.fromEntries(
       manifest.audio.music.map((binding) => [
         binding.name,

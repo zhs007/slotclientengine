@@ -61,7 +61,7 @@ Editor draft 只保存中心 main 坐标和 focus 四边外扩量；legacy top-l
 
 Popup Spine 的 atlas page logical name 不随物理 filename key 前缀化。导入提交前会用完整 SHA-256 比较 Popup 与 Layout 自有 Spine 中同名的 atlas/texture；同名不同 bytes 时列出冲突，由用户取消整次导入或确认继续隔离导入，不自动覆盖、改名或推断 skeleton JSON 兼容性。
 
-资源列表可把任一已识别的 image、Spine、VNI、ImgNumber、MP4、audio 或 JSON data root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片/音频优化后仍保持不变。展开已绑定渲染资源的详情可复制 canonical 地址；ImgNumber 例如 `gamelayout:/resource/image-string/win-amount`。JSON data 只显示 `loadJsonData` API 提示，audio 只显示 `loadRuntimeResource(key, "audio")`；两者都不生成渲染地址。同一 audio root 可同时由 Event binding 和一个程序键引用。
+资源列表可把任一已识别的 image、Spine、VNI、ImgNumber、MP4、audio 或 JSON data root 设为“程序资源”。程序键默认取 root filename 去扩展名并转小写；手工输入也会 trim 并转小写。最终键必须唯一，以字母或数字开头，且只允许字母、数字、点、下划线和连字符。该资源即使没有 Scene 引用也会写入 production ZIP。取消绑定后，若没有其它引用，它恢复为不会导出。程序键和 typed resource spec 保存在 `layout.manifest.json` 的 `runtimeResources`，ZIP 重新导入或图片/音频优化后仍保持不变。展开已绑定渲染资源的详情可复制 canonical 地址；ImgNumber 例如 `gamelayout:/resource/image-string/win-amount`。JSON data 只显示 `loadJsonData` API 提示；audio 程序键同时派生 `gamelayout:/audio/effect/<key>`，可用 `playEffect(key)` 默认单次播放，或传 loop、结束 Event，并由返回 handle 停止。同一 audio root 可同时由 Event binding 和一个程序键引用，但 Editor 不保存第二份 loop/Event 程序配置。
 
 手工验收例子：导入一个 ImgNumber ZIP，在资源行填写 `win-amount` 并点“设为程序资源”，展开详情复制 factory 地址；再导入一个未绑定 mode/transition 的 Popup ZIP，在 Popup 工作区点“设为程序 Popup”，复制 `gamelayout:/popup/<id>`，点播放后状态区应显示该 exact 地址。Popup active 时再次播放应明确报错，点“立即关闭”后应可用同一地址再次播放。导出并重导 ZIP 后，两项程序用途和地址应保持。
 

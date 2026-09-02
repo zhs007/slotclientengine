@@ -254,6 +254,13 @@ describe("audio assets", () => {
       path: "jingle.ogg",
       mediaType: "audio/ogg",
     });
+    expect(manifest.audio).toEqual({
+      version: 1,
+      effects: [],
+      music: [],
+      programmaticEffects: [],
+    });
+    expect(manifest.eventAudio.ignoreLegacyAudio).toBe(true);
     expect(
       editorProjectToPreviewManifest(project, "default")?.runtimeResources,
     ).toBeUndefined();
@@ -266,7 +273,8 @@ describe("audio assets", () => {
       thumbnailUrls: new Map(),
     });
     expect(markup).toContain('data-runtime-resource-key="jingle.ogg"');
-    expect(markup).toContain('loadRuntimeResource(key, "audio")');
+    expect(markup).toContain("runtime.playEffect(key)");
+    expect(markup).toContain("gamelayout:/audio/effect/feature-jingle");
     expect(markup).not.toContain("gamelayout:/resource/audio/");
 
     const exported = await exportLayoutZip({

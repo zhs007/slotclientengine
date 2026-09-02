@@ -105,6 +105,7 @@ import type {
   SceneLayoutGameMode,
   SceneLayoutGameModeV7,
   SceneLayoutGameModeV2,
+  SceneLayoutAudioEffectPlayOptions,
   SceneLayoutCameraEffectSession,
   SceneLayoutCameraEffectTarget,
   SceneLayoutGameModeTransition,
@@ -164,6 +165,12 @@ import {
 } from "./data/runtime-address.js";
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
+
+interface ProgrammaticAudioLoop {
+  readonly handle: AudioPlaybackHandle;
+  readonly endEvent: GameLayoutRuntimeAddress | null;
+  readonly disposeEndEvent: () => void;
+}
 
 function readEventAudio(
   document: SceneLayoutManifest,
@@ -459,6 +466,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #disposeAudioMusicObserver: () => void;
   readonly #disposeEventAudioBindings: (() => void)[] = [];
   readonly #eventAudioLoopIntents = new Set<string>();
+  readonly #programmaticAudioLoops = new Map<string, ProgrammaticAudioLoop>();
   #audioUnlocked = false;
   #audioMode: string | null = null;
   #audioFailure: SceneLayoutError | null = null;
@@ -644,7 +652,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       getRenderLayer: (ref) => this.getRenderLayer(ref),
       getArea: (id) => this.getSymbolArea(id),
       getGameModeSnapshot: () => this.getGameModeSnapshot(),
-      playEffect: (route) => this.playEffect(route),
+      playEffect: (route, options) => this.playEffect(route, options),
       stopEffect: (route) => this.stopEffect(route),
       getAudioSnapshot: () => this.#audio.getSnapshot(),
       getPopupLayer: (popupId, layerId) => {
@@ -1799,16 +1807,100 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     );
   }
 
-  playEffect(route: string): AudioPlaybackHandle {
+  playEffect(
+    route: string,
+    options: SceneLayoutAudioEffectPlayOptions = {},
+  ): AudioPlaybackHandle {
     this.assertReady();
     this.assertProgrammaticAudioRoute(route);
-    return this.#audio.playEffect(route);
+    if (options.loop !== undefined && typeof options.loop !== "boolean")
+      throw new SceneLayoutError(
+        "Scene Layout audio effect loop must be boolean when provided.",
+      );
+    const runtimeSpec = this.#document.runtimeResources?.[route];
+    const programAudio = runtimeSpec?.kind === "audio";
+    const legacyEffect = this.#resource.audioEffects[route];
+    const effectiveLoop =
+      options.loop ??
+      (programAudio ? false : legacyEffect?.binding.playback === "loop");
+    if (options.endEvent !== undefined && !effectiveLoop)
+      throw new SceneLayoutError(
+        "Scene Layout audio effect endEvent requires loop playback.",
+      );
+    if (options.endEvent !== undefined)
+      this.addresses.resolve(options.endEvent, "event");
+
+    const existing = this.#programmaticAudioLoops.get(route);
+    if (existing && isTerminalAudioPlayback(existing.handle.state)) {
+      existing.disposeEndEvent();
+      this.#programmaticAudioLoops.delete(route);
+    } else if (existing && effectiveLoop) {
+      const endEvent = options.endEvent ?? null;
+      if (existing.endEvent !== endEvent)
+        throw new SceneLayoutError(
+          `Scene Layout audio effect loop "${route}" is already active with a different endEvent.`,
+        );
+      return existing.handle;
+    }
+
+    const handle = programAudio
+      ? this.#audio.playDeferredEffect(
+          route,
+          {
+            resolveSources: async () => {
+              const resource = await this.#resource.loadRuntimeResource(
+                route,
+                "audio",
+              );
+              return Object.freeze([
+                Object.freeze({
+                  url: resource.url,
+                  mediaType: resource.mediaType,
+                }),
+              ]);
+            },
+            voices: Object.freeze({
+              maxConcurrent: 4,
+              overflow: "restart-oldest",
+            }),
+            bgm: Object.freeze({ kind: "keep" }),
+          },
+          { loop: effectiveLoop },
+        )
+      : this.#audio.playEffect(route, {
+          ...(options.loop === undefined ? {} : { loop: options.loop }),
+        });
+    if (!effectiveLoop) return handle;
+
+    const disposeEndEvent =
+      options.endEvent !== undefined
+        ? this.addresses.bind(options.endEvent, () => handle.stop())
+        : () => {};
+    const record: ProgrammaticAudioLoop = Object.freeze({
+      handle,
+      endEvent: options.endEvent ?? null,
+      disposeEndEvent,
+    });
+    this.#programmaticAudioLoops.set(route, record);
+    void handle.finished.then(() => {
+      if (this.#programmaticAudioLoops.get(route) !== record) return;
+      disposeEndEvent();
+      this.#programmaticAudioLoops.delete(route);
+    });
+    return handle;
   }
 
   stopEffect(route: string): void {
     this.assertReady();
     this.assertProgrammaticAudioRoute(route);
-    this.#audio.stopEffect(route);
+    const runtimeSpec = this.#document.runtimeResources?.[route];
+    if (runtimeSpec?.kind === "audio") this.#audio.stopDeferredEffect(route);
+    else this.#audio.stopEffect(route);
+    const loop = this.#programmaticAudioLoops.get(route);
+    if (loop) {
+      loop.disposeEndEvent();
+      this.#programmaticAudioLoops.delete(route);
+    }
   }
 
   async unlockAudio(): Promise<void> {
@@ -3138,6 +3230,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#disposeAudioMusicObserver();
     for (const dispose of this.#disposeEventAudioBindings.splice(0)) dispose();
     this.#eventAudioLoopIntents.clear();
+    for (const loop of this.#programmaticAudioLoops.values())
+      loop.disposeEndEvent();
+    this.#programmaticAudioLoops.clear();
     this.#addressController.destroy();
     this.#renderObjectFactory.destroy();
     this.#audio.destroy();
@@ -5886,6 +5981,12 @@ function asSceneLayoutError(error: unknown): SceneLayoutError {
     : new SceneLayoutError(
         error instanceof Error ? error.message : String(error),
       );
+}
+
+function isTerminalAudioPlayback(
+  state: import("@slotclientengine/audiocore/core").AudioPlaybackState,
+): boolean {
+  return state === "ended" || state === "stopped" || state === "failed";
 }
 
 function createPopupSessionDeferred(): PopupSessionDeferred {

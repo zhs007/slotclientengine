@@ -24,7 +24,9 @@ const handle = runtime.playEffect("award.coin");
 runtime.stopEffect("award.coin");
 ```
 
-`stopEffect()` 会同时取消相同 route 的未触发延迟和 active loop。loop route 重复启动不会叠加第二个 active generation。
+`playEffect(route, { loop })` 可按次覆盖历史 binding 的 playback；返回的 handle 可立即处于 `pending`，并用 `handle.stop()` 精确停止该次播放。Scene Layout 的 audio runtime-resource key 也会派生 effect route，默认 once，并可通过受控 deferred source prepare 等待 lazy/CDN URL。等待期间 stop 或 destroy 后，late resolve 不得起播；资源或 backend 失败写入同一 handle 的 `failed/error`。
+
+`stopEffect()` 会同时取消相同 route 的未触发延迟、lazy pending 和 active voice。loop route 重复启动不会叠加第二个 active generation。Game Layout 可为 loop 额外绑定一个 canonical `endEvent`，但 Event subscription 与 exact-handle stop 属于 Scene Layout owner，AudioCore 不解析业务地址。
 
 ## Cue 与 BGM focus
 

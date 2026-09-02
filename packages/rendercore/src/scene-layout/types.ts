@@ -1168,6 +1168,13 @@ export interface SceneLayoutCameraEffectSession {
   cancel(): void;
 }
 
+export interface SceneLayoutAudioEffectPlayOptions {
+  /** Overrides the legacy authored mode; program audio defaults to once. */
+  readonly loop?: boolean;
+  /** Stops this loop on the next exact runtime Event occurrence. */
+  readonly endEvent?: GameLayoutRuntimeAddress;
+}
+
 export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   /** Canonical owner-first lookup, capability, and event subscription SPI. */
   readonly addresses: import("./core/runtime-address.js").GameLayoutRuntimeAddresses;
@@ -1179,6 +1186,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   /** Plays a Game Layout allowlisted global route such as `award.coin`. */
   playEffect(
     route: string,
+    options?: SceneLayoutAudioEffectPlayOptions,
   ): import("@slotclientengine/audiocore/core").AudioPlaybackHandle;
   /** Idempotently cancels delayed and active instances for an allowlisted route. */
   stopEffect(route: string): void;

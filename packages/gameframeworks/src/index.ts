@@ -56,6 +56,7 @@ export type {
   SceneLayoutGameModeRequestOptions,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,
+  SceneLayoutAudioEffectPlayOptions,
   SceneLayoutPopupCloseOptions,
   SceneLayoutPopupOpenRequest,
   SceneLayoutPopupSession,

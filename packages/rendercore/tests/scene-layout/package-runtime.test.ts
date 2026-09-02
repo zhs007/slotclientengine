@@ -18,6 +18,7 @@ import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
   createSceneLayoutRuntimeAllocation,
   createSceneLayoutPackageResource,
+  createSceneLayoutPackageResourceFromResolvedFiles,
   createSceneLayoutPackageRuntime,
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifestLatest,
@@ -684,6 +685,166 @@ describe("scene layout package runtime", () => {
 
       dispose();
       runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("plays a program audio loop and stops it by end event or exact handle", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    const backend = new EventAudioBackend();
+    try {
+      const latest = upgradeSceneLayoutManifestToLatest(game003LayoutFixture);
+      const draft = {
+        ...latest,
+        nodes: latest.nodes.slice(0, 2),
+        runtimeResources: {
+          "feature-loop": {
+            kind: "audio" as const,
+            path: "assets/feature-loop.ogg",
+            mediaType: "audio/ogg" as const,
+          },
+          "other-loop": {
+            kind: "audio" as const,
+            path: "assets/other-loop.ogg",
+            mediaType: "audio/ogg" as const,
+          },
+        },
+      };
+      const manifest = {
+        ...draft,
+        runtimeAllocation: createSceneLayoutRuntimeAllocation(draft),
+      };
+      const resource = await createSceneLayoutPackageResource({
+        manifest,
+        files: new Map([
+          ["assets/bg1.png", new Uint8Array([1])],
+          ["assets/bg2.png", new Uint8Array([2])],
+          ["assets/feature-loop.ogg", new Uint8Array([0x4f, 0x67, 0x67, 0x53])],
+          ["assets/other-loop.ogg", new Uint8Array([0x4f, 0x67, 0x67, 0x53])],
+        ]),
+      });
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        presentationOnly: true,
+        audioBackend: backend,
+      });
+      await runtime.init();
+      runtime.applyViewport({ width: 1920, height: 1080 });
+      const endEvent = formatGameLayoutRuntimeAddress(
+        "event",
+        "variant-changed",
+      );
+      expect(() => runtime.playEffect("feature-loop", { endEvent })).toThrow(
+        /endEvent requires loop playback/,
+      );
+      expect(() =>
+        runtime.playEffect("feature-loop", {
+          loop: true,
+          endEvent: "" as never,
+        }),
+      ).toThrow(/runtime address/);
+      expect(backend.sounds).toHaveLength(0);
+      const first = runtime.playEffect("feature-loop", {
+        loop: true,
+        endEvent,
+      });
+      expect(runtime.playEffect("feature-loop", { loop: true, endEvent })).toBe(
+        first,
+      );
+      expect(() =>
+        runtime.playEffect("feature-loop", {
+          loop: true,
+          endEvent: formatGameLayoutRuntimeAddress(
+            "mode",
+            "BaseGame",
+            "state",
+            "stable",
+            "exited",
+          ),
+        }),
+      ).toThrow(/already active with a different endEvent/);
+      const sameRouteOnce = runtime.playEffect("feature-loop", {
+        loop: false,
+      });
+      const other = runtime.playEffect("other-loop", { loop: true });
+      for (let index = 0; index < 5; index += 1) await Promise.resolve();
+      expect(backend.sounds).toHaveLength(2);
+      expect(first.state).toBe("playing");
+      expect(sameRouteOnce.state).toBe("playing");
+      expect(other.state).toBe("playing");
+      runtime.applyViewport({ width: 1200, height: 1800 });
+      expect(first.state).toBe("stopped");
+      expect(sameRouteOnce.state).toBe("playing");
+      expect(other.state).toBe("playing");
+      expect(backend.sounds[0]?.instances[0]?.stopped).toBe(true);
+      expect(backend.sounds[0]?.instances[1]?.stopped).toBe(false);
+      expect(backend.sounds[1]?.instances[0]?.stopped).toBe(false);
+      sameRouteOnce.stop();
+      expect(sameRouteOnce.state).toBe("stopped");
+      other.stop();
+      expect(other.state).toBe("stopped");
+      expect(backend.sounds[1]?.instances[0]?.stopped).toBe(true);
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("does not start a lazy program audio voice after its pending handle stops", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    const backend = new EventAudioBackend();
+    let resolveAudio!: (bytes: Uint8Array) => void;
+    const audioBytes = new Promise<Uint8Array>((resolve) => {
+      resolveAudio = resolve;
+    });
+    try {
+      const latest = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
+      const draft = {
+        ...latest,
+        runtimeResources: {
+          jingle: {
+            kind: "audio" as const,
+            path: "assets/jingle.ogg",
+            mediaType: "audio/ogg" as const,
+          },
+        },
+      };
+      const manifest = {
+        ...draft,
+        runtimeAllocation: createSceneLayoutRuntimeAllocation(draft),
+      };
+      const loader = vi.fn(() => audioBytes);
+      const resource = await createSceneLayoutPackageResourceFromResolvedFiles({
+        manifest,
+        files: new Map([["assets/bg.png", new Uint8Array([1])]]),
+        lazyRuntimeResources: true,
+        loadRuntimeResourceBytes: loader,
+      });
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        presentationOnly: true,
+        audioBackend: backend,
+      });
+      await runtime.init();
+      const handle = runtime.playEffect("jingle", { loop: true });
+      expect(handle.state).toBe("pending");
+      expect(loader).toHaveBeenCalledTimes(1);
+      handle.stop();
+      resolveAudio(new Uint8Array([0x4f, 0x67, 0x67, 0x53]));
+      for (let index = 0; index < 5; index += 1) await Promise.resolve();
+      await expect(handle.finished).resolves.toBe("stopped");
+      expect(backend.sounds).toHaveLength(0);
+      runtime.destroy();
+      await resource.destroy();
     } finally {
       load.mockRestore();
       unload.mockRestore();

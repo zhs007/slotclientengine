@@ -85,7 +85,7 @@ describe("Popup audio asset collection", () => {
     },
   );
 
-  it("keeps program-only audio out of optimization roles and validates shared media types", () => {
+  it("classifies program-only audio as an effect and validates shared media types", () => {
     const programOnly = {
       version: 7,
       runtimeResources: {
@@ -100,7 +100,9 @@ describe("Popup audio asset collection", () => {
     };
     expect(
       collectPackageAudioAssetRoles(programOnly as never, new Map()),
-    ).toEqual(new Map());
+    ).toEqual(
+      new Map([["jingle.ogg", { role: "effect", mediaType: "audio/ogg" }]]),
+    );
 
     const conflicting = {
       ...programOnly,
