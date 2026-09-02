@@ -36,6 +36,7 @@ import {
   projectToManifest,
   popupEditorVisibilityStates,
   resourceReferenceCount,
+  validatePopupEditorAttachments,
   type PopupEditorProject,
 } from "../model/project.js";
 import {
@@ -437,9 +438,12 @@ export class PopupEditorApp {
                 ({ id }) => id === select.dataset.singleParent,
               );
               if (!layer) throw new Error("single-state 图层不存在。");
+              const attachment = parseSingleStateParent(select.value);
               (
                 layer as { attachment: SingleStatePopupLayerV9["attachment"] }
-              ).attachment = parseSingleStateParent(select.value);
+              ).attachment = attachment;
+              if (attachment.kind === "vni-text-layer")
+                validatePopupEditorAttachments(draft);
             }),
           ),
         ),
@@ -799,45 +803,48 @@ export class PopupEditorApp {
       .querySelectorAll<HTMLSelectElement>("[data-attachment-target-id]")
       .forEach((select) =>
         select.addEventListener("change", () =>
-          this.#store.transact((draft) => {
-            const layer = findAttachmentLayer(
-              draft,
-              this.#tier,
-              select.dataset.attachmentOwner!,
-              select.dataset.attachmentTargetId!,
-            );
-            if (select.value === "popup-root") {
-              (layer as any).attachment = { kind: "popup-root" };
-              return;
-            }
-            if (select.value.startsWith("vni:")) {
-              const [vniLayerId, textLayerId] = select.value
-                .slice("vni:".length)
-                .split(":", 2)
-                .map(decodeURIComponent);
-              if (!vniLayerId || !textLayerId || layer.kind !== "image-string")
-                throw new Error("VNI 文字层挂接选择无效。");
+          this.safe(() =>
+            this.#store.transact((draft) => {
+              const layer = findAttachmentLayer(
+                draft,
+                this.#tier,
+                select.dataset.attachmentOwner!,
+                select.dataset.attachmentTargetId!,
+              );
+              if (select.value === "popup-root") {
+                (layer as any).attachment = { kind: "popup-root" };
+                return;
+              }
+              if (select.value.startsWith("vni:")) {
+                const [vniLayerId, textLayerId] = select.value
+                  .slice("vni:".length)
+                  .split(":", 2)
+                  .map(decodeURIComponent);
+                if (!vniLayerId || !textLayerId)
+                  throw new Error("VNI 文字层挂接选择无效。");
+                (layer as any).attachment = {
+                  kind: "vni-text-layer",
+                  vniLayerId,
+                  textLayerId,
+                };
+                validatePopupEditorAttachments(draft);
+                return;
+              }
+              if (!select.value.startsWith("spine:"))
+                throw new Error("Spine 挂接目标无效。");
+              const targetKey = decodeURIComponent(
+                select.value.slice("spine:".length),
+              );
               (layer as any).attachment = {
-                kind: "vni-text-layer",
-                vniLayerId,
-                textLayerId,
+                kind: "spine-slot",
+                target:
+                  targetKey === "main-spine"
+                    ? { kind: "main-spine" }
+                    : { kind: "layer", layerId: targetKey },
+                slot: "",
               };
-              return;
-            }
-            if (!select.value.startsWith("spine:"))
-              throw new Error("Spine 挂接目标无效。");
-            const targetKey = decodeURIComponent(
-              select.value.slice("spine:".length),
-            );
-            (layer as any).attachment = {
-              kind: "spine-slot",
-              target:
-                targetKey === "main-spine"
-                  ? { kind: "main-spine" }
-                  : { kind: "layer", layerId: targetKey },
-              slot: "",
-            };
-          }),
+            }),
+          ),
         ),
       );
     this.#root
@@ -923,9 +930,9 @@ export class PopupEditorApp {
       }),
     );
     this.#root
-      .querySelectorAll<
-        HTMLInputElement | HTMLSelectElement
-      >("[data-spine-popup-field]")
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+        "[data-spine-popup-field]",
+      )
       .forEach((input) =>
         input.addEventListener("change", () =>
           this.transactField((draft) => {
@@ -1272,17 +1279,18 @@ function singleStateParentMarkup(
     // Project diagnostics reports exact invalid resource details.
   }
   let vniOptions: readonly string[] = [];
-  if (layer.kind === "image-string")
-    try {
-      vniOptions = getPopupVniTextLayerTargets(project, "single-state")
-        .filter(({ vniLayerId }) => vniLayerId !== layer.id)
-        .map(({ vniLayerId, textLayerId, textLayerName }) => {
-          const value = `vni:${encodeURIComponent(vniLayerId)}:${encodeURIComponent(textLayerId)}`;
-          return `<option value="${value}" ${value === selected ? "selected" : ""}>VNI 文字层：${vniLayerId} / ${textLayerName} (${textLayerId})</option>`;
-        });
-    } catch {
-      // Project diagnostics reports exact invalid resource details.
-    }
+  try {
+    vniOptions = getPopupVniTextLayerTargets(project, {
+      kind: "single-state",
+    })
+      .filter(({ vniLayerId }) => vniLayerId !== layer.id)
+      .map(({ vniLayerId, textLayerId, textLayerName }) => {
+        const value = `vni:${encodeURIComponent(vniLayerId)}:${encodeURIComponent(textLayerId)}`;
+        return `<option value="${value}" ${value === selected ? "selected" : ""}>VNI 文字层：${vniLayerId} / ${textLayerName} (${textLayerId})</option>`;
+      });
+  } catch {
+    // Project diagnostics reports exact invalid resource details.
+  }
   const options = [
     `<option value="popup-root" ${selected === "popup-root" ? "selected" : ""}>Popup 根节点</option>`,
     ...vniOptions,
@@ -1735,21 +1743,19 @@ function attachmentMarkup(
         ? `vni:${encodeURIComponent(attachment.vniLayerId)}:${encodeURIComponent(attachment.textLayerId)}`
         : `spine:${encodeURIComponent(attachment.target.kind === "main-spine" ? "main-spine" : attachment.target.layerId)}`;
   const options = [
-    `<option value="popup-root">Popup 根节点</option>`,
-    ...(scope.kind === "award" && layer.kind === "image-string"
-      ? (() => {
-          try {
-            return getPopupVniTextLayerTargets(project, scope.tierId).map(
-              ({ vniLayerId, textLayerId, textLayerName }) => {
-                const value = `vni:${encodeURIComponent(vniLayerId)}:${encodeURIComponent(textLayerId)}`;
-                return `<option value="${value}" ${value === selected ? "selected" : ""}>VNI 文字层：${vniLayerId} / ${textLayerName} (${textLayerId})</option>`;
-              },
-            );
-          } catch {
-            return [];
-          }
-        })()
-      : []),
+    `<option value="popup-root" ${selected === "popup-root" ? "selected" : ""}>Popup 根节点</option>`,
+    ...(() => {
+      try {
+        return getPopupVniTextLayerTargets(project, scope)
+          .filter(({ vniLayerId }) => vniLayerId !== layer.id)
+          .map(({ vniLayerId, textLayerId, textLayerName }) => {
+            const value = `vni:${encodeURIComponent(vniLayerId)}:${encodeURIComponent(textLayerId)}`;
+            return `<option value="${value}" ${value === selected ? "selected" : ""}>VNI 文字层：${vniLayerId} / ${textLayerName} (${textLayerId})</option>`;
+          });
+      } catch {
+        return [];
+      }
+    })(),
     ...spineTargets.map((target) => {
       const value = `spine:${encodeURIComponent(target.key)}`;
       return `<option value="${value}" ${value === selected ? "selected" : ""}>${target.label}</option>`;

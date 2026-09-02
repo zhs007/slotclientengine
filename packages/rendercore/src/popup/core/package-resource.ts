@@ -288,6 +288,11 @@ function validateAnimationBindings(
           );
       }
     }
+    validatePopupVniTextLayerAttachments(
+      manifest.spine.overlays ?? [],
+      resources,
+      "spine.overlays",
+    );
     return;
   }
   if (manifest.type === "single-state") {
@@ -323,54 +328,20 @@ function validateAnimationBindings(
         });
       }
     }
-    for (const layer of manifest.singleState.layers) {
-      const attachment = resolvePopupLayerAttachment(layer);
-      if (attachment.kind !== "vni-text-layer") continue;
-      const target = manifest.singleState.layers.find(
-        ({ id }) => id === attachment.vniLayerId,
-      );
-      const targetResource = target?.resource
-        ? resources[target.resource]
-        : undefined;
-      if (target?.kind !== "vni" || targetResource?.kind !== "vni")
-        throw new Error("single-state popup ImgNumber VNI parent mismatch.");
-      const textLayer = targetResource.project.layers.find(
-        ({ id }) => id === attachment.textLayerId,
-      );
-      if (!textLayer || textLayer.type !== "text")
-        throw new Error(
-          `single-state popup ImgNumber layer ${layer.id} references missing VNI text layer ${attachment.textLayerId}.`,
-        );
-    }
+    validatePopupVniTextLayerAttachments(
+      manifest.singleState.layers,
+      resources,
+      "singleState.layers",
+    );
     return;
   }
-  for (const tier of [
-    manifest.awardCelebration.base,
-    manifest.awardCelebration.standard,
-    ...manifest.awardCelebration.celebrationTiers,
-  ]) {
-    const amount = tier.layers.find(
-      (layer) =>
-        layer.kind === "image-string" && layer.binding === "win-amount",
-    )!;
-    const amountParent = resolvePopupLayerAttachment(amount);
-    if (amountParent.kind === "vni-text-layer") {
-      const target = tier.layers.find(
-        ({ id }) => id === amountParent.vniLayerId,
-      )!;
-      const targetResource = target.resource
-        ? resources[target.resource]
-        : undefined;
-      if (targetResource?.kind !== "vni")
-        throw new Error("popup ImgNumber VNI parent resource mismatch.");
-      const textLayer = targetResource.project.layers.find(
-        ({ id }) => id === amountParent.textLayerId,
-      );
-      if (!textLayer || textLayer.type !== "text")
-        throw new Error(
-          `popup ImgNumber layer ${amount.id} references missing VNI text layer ${amountParent.textLayerId}.`,
-        );
-    }
+  for (const [tierId, tier] of [
+    ["base", manifest.awardCelebration.base],
+    ["standard", manifest.awardCelebration.standard],
+    ...manifest.awardCelebration.celebrationTiers.map(
+      (tier) => [tier.id, tier] as const,
+    ),
+  ] as const) {
     for (const layer of tier.layers) {
       const resource = layer.resource ? resources[layer.resource] : undefined;
       if (layer.kind === "image-string" && layer.binding === "manual") {
@@ -408,6 +379,37 @@ function validateAnimationBindings(
         });
       }
     }
+    validatePopupVniTextLayerAttachments(
+      tier.layers,
+      resources,
+      `awardCelebration.${tierId}.layers`,
+    );
+  }
+}
+
+function validatePopupVniTextLayerAttachments(
+  layers: readonly (PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV9)[],
+  resources: Readonly<Record<string, PopupPreparedResource>>,
+  label: string,
+): void {
+  const byId = new Map(layers.map((layer) => [layer.id, layer]));
+  for (const layer of layers) {
+    const attachment = resolvePopupLayerAttachment(layer);
+    if (attachment.kind !== "vni-text-layer") continue;
+    const target = byId.get(attachment.vniLayerId);
+    const targetResource =
+      target?.kind === "vni" ? resources[target.resource] : undefined;
+    if (target?.kind !== "vni" || targetResource?.kind !== "vni")
+      throw new Error(
+        `${label} layer ${layer.id} references unavailable VNI parent ${attachment.vniLayerId}.`,
+      );
+    const textLayer = targetResource.project.layers.find(
+      ({ id }) => id === attachment.textLayerId,
+    );
+    if (!textLayer || textLayer.type !== "text")
+      throw new Error(
+        `${label} layer ${layer.id} references missing VNI text layer ${attachment.vniLayerId}/${attachment.textLayerId}.`,
+      );
   }
 }
 

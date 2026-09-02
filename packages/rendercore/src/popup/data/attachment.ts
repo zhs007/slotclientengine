@@ -6,9 +6,7 @@ import type {
 } from "./types.js";
 
 export type PopupAttachableLayer =
-  | PopupLayer
-  | PopupOverlayLayer
-  | SingleStatePopupLayerV8;
+  PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV8;
 
 export function resolvePopupLayerAttachment(
   layer: PopupAttachableLayer,
@@ -52,15 +50,12 @@ export function validatePopupLayerAttachmentGraph(options: {
       );
     orders.set(layer.order, layer.id);
     if (attachment.kind === "vni-text-layer") {
-      if (layer.kind !== "image-string")
-        throw new Error(
-          `${options.label} layer ${layer.id} must be image-string to attach to a VNI text layer.`,
-        );
       const target = byId.get(attachment.vniLayerId);
       if (!target || target.kind !== "vni")
         throw new Error(
           `${options.label} layer ${layer.id} references missing VNI layer ${attachment.vniLayerId}.`,
         );
+      edge.set(layer.id, target.id);
       continue;
     }
     if (attachment.kind !== "spine-slot") continue;
@@ -86,7 +81,7 @@ export function validatePopupLayerAttachmentGraph(options: {
     if (current === "visiting") {
       const start = stack.indexOf(id);
       throw new Error(
-        `${options.label} Spine attachment cycle: ${[...stack.slice(start), id].join(" -> ")}.`,
+        `${options.label} attachment cycle: ${[...stack.slice(start), id].join(" -> ")}.`,
       );
     }
     state.set(id, "visiting");

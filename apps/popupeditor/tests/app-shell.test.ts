@@ -1,6 +1,14 @@
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { addLayer, createPopupEditorProject } from "../src/model/project.js";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import {
+  addLayer,
+  addSingleStateLayer,
+  addSingleStateTextLayer,
+  createPopupEditorProject,
+  renameSingleStateLayer,
+} from "../src/model/project.js";
 
 const preview = {
   init: vi.fn(async () => {}),
@@ -859,6 +867,40 @@ describe("PopupEditorApp", () => {
     expect(root.textContent).toContain("effect.json");
     expect(root.textContent).toContain("Spine.json");
     expect(root.textContent).toContain("BG.PNG");
+    const attachableCards = [
+      ...root.querySelectorAll<HTMLElement>(".card"),
+    ].filter(
+      (card) => !card.querySelector("span")?.textContent?.startsWith("vni /"),
+    );
+    const vniParentSelects = attachableCards
+      .map((card) =>
+        card.querySelector<HTMLSelectElement>("[data-attachment-target-id]"),
+      )
+      .filter((select): select is HTMLSelectElement => Boolean(select));
+    expect(vniParentSelects.length).toBeGreaterThanOrEqual(4);
+    expect(
+      vniParentSelects.every((select) =>
+        select.textContent.includes("VNI 文字层"),
+      ),
+    ).toBe(true);
+    const fontCard = attachableCards.find((card) =>
+      card
+        .querySelector("span")
+        ?.textContent?.startsWith("text / Prompt.woff2"),
+    )!;
+    const fontParent = fontCard.querySelector<HTMLSelectElement>(
+      "[data-attachment-target-id]",
+    )!;
+    const fontLayerId = fontParent.dataset.attachmentTargetId!;
+    fontParent.value = [...fontParent.options].find(({ value }) =>
+      value.startsWith("vni:"),
+    )!.value;
+    fontParent.dispatchEvent(new Event("change"));
+    expect(
+      root.querySelector<HTMLSelectElement>(
+        `[data-attachment-target-id="${fontLayerId}"]`,
+      )!.value,
+    ).toMatch(/^vni:/);
     const textLayerId = root.querySelector<HTMLInputElement>(
       '[data-layer-field="fontSize"]',
     )!.dataset.layerId!;
@@ -915,6 +957,46 @@ describe("PopupEditorApp", () => {
     expect(root.querySelector("#project-type")).toBeNull();
     app.destroy();
   });
+
+  it.each(["spine", "single-state"] as const)(
+    "offers VNI text parents to %s text layers",
+    async (type) => {
+      const { PopupEditorApp } = await import("../src/ui/app-shell.js");
+      const { importPopupZip } = await import("../src/io/popup-zip.js");
+      const project = vniParentProject(type);
+      vi.mocked(importPopupZip).mockResolvedValueOnce(project);
+      const root = document.querySelector<HTMLElement>("#app")!;
+      const app = new PopupEditorApp(root);
+      await app.init();
+      const zip = createDeterministicZip(
+        new Map([["popup.manifest.json", new TextEncoder().encode("{}")]]),
+      );
+      const importer = root.querySelector<HTMLInputElement>("#import-project")!;
+      Object.defineProperty(importer, "files", {
+        value: [new File([zip.slice().buffer], `${type}.zip`)],
+        configurable: true,
+      });
+      importer.dispatchEvent(new Event("change"));
+      await vi.waitFor(() =>
+        expect(root.querySelector("nav")?.hidden).toBe(false),
+      );
+      root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
+      const parent = root.querySelector<HTMLSelectElement>(
+        type === "spine"
+          ? '[data-attachment-owner="overlay"][data-attachment-target-id="text-child"]'
+          : '[data-single-parent="text-child"]',
+      )!;
+      expect(parent.textContent).toContain("VNI 文字层");
+      parent.value = [...parent.options].find(({ value }) =>
+        value.startsWith("vni:"),
+      )!.value;
+      parent.dispatchEvent(new Event("change"));
+      expect(root.querySelector("#diagnostics")!.textContent).not.toContain(
+        "文字层不存在",
+      );
+      app.destroy();
+    },
+  );
 });
 
 function structuredCloneCandidate() {
@@ -1009,11 +1091,19 @@ function validProject() {
     mediaType: "font/woff2",
     bytes: new Uint8Array([0x77, 0x4f, 0x46, 0x32]),
   });
+  const vniBytes = new Uint8Array(
+    readFileSync(
+      resolve(
+        process.cwd(),
+        "../../packages/vnicore/tests/fixtures/export/number2.json",
+      ),
+    ),
+  );
   project.assets.set("effect.json", {
     ...asset,
     key: "effect.json",
-    byteLength: 24,
-    bytes: new TextEncoder().encode(JSON.stringify({ stage: { duration: 3 } })),
+    byteLength: vniBytes.byteLength,
+    bytes: vniBytes,
   });
   addLayer(project, "base", "BG.PNG");
   addLayer(project, "base", "effect.json");
@@ -1033,5 +1123,67 @@ function validSpineProject() {
     loopAnimation: "Loop",
     endAnimation: "End",
   };
+  return project;
+}
+
+function vniParentProject(type: "spine" | "single-state") {
+  const source = validProject();
+  const project = createPopupEditorProject({ type });
+  project.id = `${type}-vni-parent`;
+  project.resources = source.resources;
+  project.assets = source.assets;
+  if (type === "single-state") {
+    addSingleStateLayer(project, "effect.json");
+    addSingleStateTextLayer(project);
+    renameSingleStateLayer(
+      project,
+      project.singleState.layers[0]!.id,
+      "vni-host",
+    );
+    renameSingleStateLayer(
+      project,
+      project.singleState.layers[1]!.id,
+      "text-child",
+    );
+    return project;
+  }
+  project.spine.resource = "Spine.json";
+  project.spine.playback = {
+    startAnimation: "Start",
+    loopAnimation: "Loop",
+    endAnimation: "End",
+  };
+  project.spine.overlays = [
+    {
+      id: "vni-host",
+      kind: "vni",
+      resource: "effect.json",
+      order: 0,
+      alpha: 1,
+      attachment: { kind: "popup-root" },
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      playback: { mode: "once" },
+      visibleStates: ["start", "loop", "end"],
+    },
+    {
+      id: "text-child",
+      kind: "text",
+      name: "text-child",
+      defaultText: "Child",
+      order: 1,
+      alpha: 1,
+      attachment: { kind: "popup-root" },
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+      style: {
+        fontSize: 24,
+        letterSpacing: 0,
+        fill: { kind: "solid", color: "#ffffff" },
+        arcDegrees: 0,
+        widthRange: { minWidth: 0, maxWidth: 0 },
+      },
+      visibleStates: ["start", "loop", "end"],
+    },
+  ];
   return project;
 }

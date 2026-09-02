@@ -12,7 +12,7 @@ VNI bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自�
 
 音乐音效统一由 Game Layout Event 驱动，因此 Popup Editor 不再导入、配置或预览 tier/segment cue。含旧 effect/cue 的合法 ZIP 会先完成 source schema、map/hash、closure 和可选资源 prepare，再移除旧配置与仅由其引用的 audio payload并显示摘要。canonical v9 继续写 schema 要求的空 `audio.effects/cues`；RenderCore 仍可严格读取和运行未重导的历史 Popup。
 
-`single-state` 图层的 exact `id` 同时是 Editor name、runtime lookup name 和 Game Layout 地址 segment。父节点只能选择同一 Popup 中已经存在的 Spine exact slot，或由 ImgNumber 选择已经存在的 VNI 文字层；不提供主 Spine fallback。runtime 通过 `getLayer(name)` 取得 borrowed `RenderObject`，通过 `getTextNode(name)` / `getImageStringNode(name)` 修改文字。
+`single-state` 图层的 exact `id` 同时是 Editor name、runtime lookup name 和 Game Layout 地址 segment。每种图层的父节点都可选择同一 Popup 中已经存在的 Spine exact slot或 VNI exact 文字层；不提供主 Spine fallback。runtime 通过 `getLayer(name)` 取得 borrowed `RenderObject`，通过 `getTextNode(name)` / `getImageStringNode(name)` 修改文字。
 
 普通 Spine 类型不再提供独立 prompt authoring；提示语与其它文案一样使用命名的字体文字 overlay。旧 v1/v2 prompt 在导入边界自动结构化迁移为 `name=prompt` 的文字层，名称、order 或资源冲突会使整次导入失败。可追加任意数量 image、字体文字、ImgNumber、Spine 或 VNI overlay，编辑其位置、缩放、旋转、order 及各类型 playback/项目状态可见性。
 
@@ -31,7 +31,7 @@ preview/export。
 
 每个 image、字体文字、ImgNumber、VNI 或 Spine 图层都可先选择当前作用域内的 Spine 目标，再选择该 skeleton 的 exact slot；普通 Spine Popup 还可选择主 Spine。award 目标限定在同档位，普通 overlay 目标限定在同一 Popup。目标 slot 内可同时挂图片背景、文字和 ImgNumber，`order` 只比较同一父节点下的兄弟；局部 transform 会跟随 slot bone、颜色和 draw order。循环引用、失效 target/slot、同父 order 冲突以及覆盖资源后 slot 消失都会阻止提交，删除仍被引用的 Spine layer 也会被拒绝。
 
-ImgNumber 图层还可显式选择同档 VNI 的文字占位层。选择文字层后，`x/y/scale/anchor` 相对该层编辑并跟随其动画；候选从严格校验的 VNI project 枚举，目标缺失或替换后失效会阻止 preview/export，不会自动换到其它文字层或根节点。
+每个 image、字体文字、ImgNumber、VNI 或 Spine 图层也可显式选择当前作用域 VNI 的任意 exact 文字占位层；award 候选限定同档位，普通 Spine overlays 和 single-state 各限定自身 layer 集合，未放入画面的 VNI resource 不作为父节点。选择文字层后，图层 transform 与适用的 anchor 相对该层编辑并跟随其动画；同一文字层可按唯一 `order` 挂多个 child。候选从严格校验的 VNI project 枚举，self、VNI/Spine 混合循环、目标缺失或替换后失效都会阻止 transaction/preview/export，不会自动换到其它文字层或根节点。
 
 预览区可单独设置 ImgNumber 的固定小数位数（默认 `0`，范围 `0..6`）和千位分隔
 （默认关闭）。预览 raw 金额按整数单位显示：例如 raw `1234567` 配置两位小数与分组后
