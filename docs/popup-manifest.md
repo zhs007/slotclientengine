@@ -70,6 +70,8 @@ v4 保留 v3 的无界 focus 合同，并要求每个 award layer 与普通 Spin
 
 `main-spine` 只适用于普通 Spine Popup；award layer 只能引用同档位的 Spine layer，普通 overlay 只能引用同一 Popup 的 Spine overlay。target 必须是 exact layer id，slot 必须是目标 skeleton 声明的大小写精确名称。self edge、任意长度循环、跨作用域引用、非 Spine target 和资源覆盖后消失的 slot 都会在 display tree mutation 前失败，不会自动回到根节点。
 
+`vni-text-layer` 同样适用于 image、字体 text、image-string、VNI 与 Spine 五种 child layer。award target 只能是同档位已存在的 VNI layer，普通 Spine overlay 只能引用同一 overlays，single-state 只能引用同一 `singleState.layers`；只导入 resources 而未建立 VNI layer 的资源不是父节点。`textLayerId` 必须是该 VNI strict project 中大小写精确的 `type="text"` layer。同一个文字层可由一个 stable group 承载多个 child，并按该 resolved parent 内唯一 `order` 排序；child transform 是文字层局部 transform，继承 VNI 的时间轴、可见性、透明度和 display-tree 变换。VNI 与 Spine parent edge 使用同一有向图校验，因此 self、纯 VNI、纯 Spine 或混合任意长度循环都会在 materialize 前失败。
+
 挂接层的 `x/y/scale/rotation` 是 slot 局部 transform，并继承 official Spine slot 的 bone transform、颜色和 draw order。同一个 `(target, slot)` 由一个稳定 group 承载多个 child；`order` 只要求在同一 resolved parent 内唯一并决定该 group 内的兄弟顺序。不同 slot 的视觉顺序仍由 skeleton draw order 决定。v1/v2/v3 继续使用原有全层 `order` 唯一规则。旧 ImgNumber `parent` 在 Editor 导入时等价迁移为 v4 `attachment`，canonical v4 不再写 `parent`。
 
 ## v5 项目状态可见性

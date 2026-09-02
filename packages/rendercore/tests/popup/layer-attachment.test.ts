@@ -45,7 +45,91 @@ const imageLayer = (
     visibleSegments: ["start", "loop", "end"],
   }) as const satisfies PopupLayer;
 
-describe("popup layer Spine attachment graph", () => {
+const vniLayer = (
+  id: string,
+  order: number,
+  attachment: PopupLayer["attachment"],
+) =>
+  ({
+    id,
+    kind: "vni",
+    resource: `${id}-resource`,
+    order,
+    alpha: 1,
+    attachment,
+    transform: { x: 0, y: 0, scale: 1 },
+    playback: {
+      mode: "segmented",
+      loopStartTime: 1,
+      loopEndTime: 2,
+      keepParticlesAlive: false,
+    },
+  }) as const satisfies PopupLayer;
+
+describe("popup layer attachment graph", () => {
+  it("accepts every layer kind as a VNI text-layer child", () => {
+    const layers = [
+      vniLayer("host", 0, { kind: "popup-root" }),
+      imageLayer("image", 1, {
+        kind: "vni-text-layer",
+        vniLayerId: "host",
+        textLayerId: "content",
+      }),
+      spineLayer("spine", 2, {
+        kind: "vni-text-layer",
+        vniLayerId: "host",
+        textLayerId: "content",
+      }),
+      vniLayer("vni", 3, {
+        kind: "vni-text-layer",
+        vniLayerId: "host",
+        textLayerId: "content",
+      }),
+    ];
+    expect(() =>
+      validatePopupLayerAttachmentGraph({
+        layers,
+        label: "tier",
+        allowMainSpine: false,
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects VNI self references and mixed VNI/Spine cycles", () => {
+    expect(() =>
+      validatePopupLayerAttachmentGraph({
+        layers: [
+          vniLayer("self", 0, {
+            kind: "vni-text-layer",
+            vniLayerId: "self",
+            textLayerId: "content",
+          }),
+        ],
+        label: "tier",
+        allowMainSpine: false,
+      }),
+    ).toThrow(/self -> self/);
+
+    expect(() =>
+      validatePopupLayerAttachmentGraph({
+        layers: [
+          vniLayer("vni", 0, {
+            kind: "spine-slot",
+            target: { kind: "layer", layerId: "spine" },
+            slot: "Content",
+          }),
+          spineLayer("spine", 1, {
+            kind: "vni-text-layer",
+            vniLayerId: "vni",
+            textLayerId: "content",
+          }),
+        ],
+        label: "tier",
+        allowMainSpine: false,
+      }),
+    ).toThrow(/vni -> spine -> vni/);
+  });
+
   it("accepts nested Spine targets and per-parent order", () => {
     const layers = [
       spineLayer("host", 1, { kind: "popup-root" }),
@@ -198,6 +282,62 @@ describe("popup layer Spine attachment graph", () => {
     handle.destroy();
     handle.destroy();
     expect(removeSlotObject).toHaveBeenCalledTimes(1);
+    expect(host.parent).toBeNull();
+    expect(back.parent).toBeNull();
+    expect(front.parent).toBeNull();
+  });
+
+  it("mounts one VNI text owner group with ordered caller-owned children", () => {
+    const root = new Container();
+    const textRoot = new Container();
+    const mountNodeToTextLayer = vi.fn(
+      ({
+        node,
+      }: {
+        readonly textLayerId: string;
+        readonly node: Container;
+      }) => {
+        textRoot.addChild(node);
+        return () => node.parent?.removeChild(node);
+      },
+    );
+    const layers = [
+      vniLayer("host", 0, { kind: "popup-root" }),
+      imageLayer("front", 20, {
+        kind: "vni-text-layer",
+        vniLayerId: "host",
+        textLayerId: "content",
+      }),
+      imageLayer("back", 10, {
+        kind: "vni-text-layer",
+        vniLayerId: "host",
+        textLayerId: "content",
+      }),
+    ];
+    const host = new Container();
+    const front = new Container();
+    const back = new Container();
+    const handle = attachPopupLayerRuntimes({
+      layers,
+      root,
+      runtimes: new Map([
+        ["host", { container: host, mountNodeToTextLayer }],
+        ["front", { container: front }],
+        ["back", { container: back }],
+      ]),
+    });
+
+    expect(root.children).toEqual([host]);
+    expect(mountNodeToTextLayer).toHaveBeenCalledWith({
+      textLayerId: "content",
+      node: expect.any(Container),
+    });
+    const group = textRoot.children[0] as Container;
+    expect(group.children).toEqual([back, front]);
+
+    handle.destroy();
+    handle.destroy();
+    expect(textRoot.children).toEqual([]);
     expect(host.parent).toBeNull();
     expect(back.parent).toBeNull();
     expect(front.parent).toBeNull();

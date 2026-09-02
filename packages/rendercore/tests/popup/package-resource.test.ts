@@ -416,6 +416,82 @@ describe("popup package resource", () => {
     ).rejects.toThrow(/missing VNI text layer/);
   });
 
+  it("validates exact VNI text parents for image, text, and ImgNumber layers", async () => {
+    const { createPopupPackageResource } =
+      await import("../../src/popup/package-resource.js");
+    const { loadPopupManifest } =
+      await import("../../src/popup/data/normalize.js");
+    const source = fixture();
+    const projectPath = (source.manifest.resources.vni as { project: string })
+      .project;
+    const project = JSON.parse(
+      new TextDecoder().decode(source.files.get(projectPath)),
+    );
+    project.layers.push({
+      ...project.layers[0],
+      id: "content",
+      name: "Content",
+      type: "text",
+      assetId: null,
+      text: "Content",
+    });
+    source.files.set(
+      projectPath,
+      new TextEncoder().encode(JSON.stringify(project)),
+    );
+    const manifest = structuredClone(
+      loadPopupManifest(source.manifest).manifest,
+    ) as any;
+    const base = manifest.awardCelebration.base.layers;
+    const parent = {
+      kind: "vni-text-layer",
+      vniLayerId: "vni",
+      textLayerId: "content",
+    };
+    base.find(({ id }: { id: string }) => id === "image").attachment = parent;
+    base.find(
+      ({ kind }: { kind: string }) => kind === "image-string",
+    ).attachment = parent;
+    base.push({
+      id: "title",
+      kind: "text",
+      name: "title",
+      defaultText: "Title",
+      order: 11,
+      alpha: 1,
+      attachment: parent,
+      transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+      anchor: { x: 0.5, y: 0.5 },
+      style: {
+        fontSize: 24,
+        letterSpacing: 0,
+        fill: { kind: "solid", color: "#ffffff" },
+        arcDegrees: 0,
+        widthRange: { minWidth: 0, maxWidth: 0 },
+      },
+    });
+
+    const resource = await createPopupPackageResource({
+      manifest,
+      files: source.files,
+      loadTexture: async () => ({ width: 1, height: 1, destroy() {} }) as never,
+    });
+    await resource.destroy();
+
+    base.find(({ id }: { id: string }) => id === "image").attachment = {
+      ...parent,
+      textLayerId: "missing",
+    };
+    await expect(
+      createPopupPackageResource({
+        manifest,
+        files: source.files,
+        loadTexture: async () =>
+          ({ width: 1, height: 1, destroy() {} }) as never,
+      }),
+    ).rejects.toThrow(/image.*vni\/missing/);
+  });
+
   it("flattens legacy structured resources and resolves one mapped file closure", async () => {
     const {
       collectMappedPopupAssetKeys,

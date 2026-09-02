@@ -338,6 +338,63 @@ describe("popup manifest", () => {
     expect(() => parsePopupManifest(duplicate)).toThrow(/order 1/);
   });
 
+  it("parses v4 image attachments to exact VNI text layers", () => {
+    const value = v2SpineManifestFixture();
+    value.version = 4;
+    delete value.designViewport;
+    value.resources.vni = {
+      kind: "vni",
+      project: `assets/${"d".repeat(64)}.json`,
+    };
+    value.resources.image = {
+      kind: "image",
+      path: `assets/${"e".repeat(64)}.png`,
+      size: { width: 100, height: 50 },
+    };
+    value.spine.overlays = [
+      {
+        id: "vni-host",
+        kind: "vni",
+        order: 0,
+        alpha: 1,
+        resource: "vni",
+        attachment: { kind: "popup-root" },
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        playback: { mode: "once" },
+      },
+      {
+        id: "image-child",
+        kind: "image",
+        order: 1,
+        alpha: 1,
+        resource: "image",
+        attachment: {
+          kind: "vni-text-layer",
+          vniLayerId: "vni-host",
+          textLayerId: "content",
+        },
+        transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+        anchor: { x: 0.5, y: 0.5 },
+        visibleSegments: ["start", "loop", "end"],
+      },
+    ];
+
+    const manifest = parsePopupManifest(value);
+    if (manifest.type !== "spine") throw new Error("Expected Spine popup.");
+    expect(manifest.spine.overlays?.[1]?.attachment).toEqual({
+      kind: "vni-text-layer",
+      vniLayerId: "vni-host",
+      textLayerId: "content",
+    });
+
+    value.spine.overlays[0].attachment = {
+      kind: "vni-text-layer",
+      vniLayerId: "vni-host",
+      textLayerId: "content",
+    };
+    expect(() => parsePopupManifest(value)).toThrow(/vni-host -> vni-host/);
+  });
+
   it.each([
     ["name", (value: any) => delete value.name],
     ["adaptation", (value: any) => delete value.adaptation],

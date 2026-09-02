@@ -43,6 +43,10 @@ export interface PopupVniTextLayerTarget {
   readonly textLayerId: string;
   readonly textLayerName: string;
 }
+export type PopupVniTextLayerScope =
+  | { readonly kind: "award"; readonly tierId: AwardTierId }
+  | { readonly kind: "spine-popup" }
+  | { readonly kind: "single-state" };
 export interface PopupSpineAttachmentTarget {
   readonly key: "main-spine" | string;
   readonly label: string;
@@ -537,24 +541,6 @@ export function popupEditorProjectDiagnostics(
     ]);
   try {
     projectToManifest(project);
-    for (const [tierId, tier] of project.tiers) {
-      const amount = tier.layers.find(
-        (layer): layer is Extract<PopupLayer, { kind: "image-string" }> =>
-          layer.kind === "image-string" && layer.binding === "win-amount",
-      );
-      if (!amount) continue;
-      const amountParent = resolvePopupLayerAttachment(amount);
-      if (amountParent.kind !== "vni-text-layer") continue;
-      const matches = getPopupVniTextLayerTargets(project, tierId).some(
-        (target) =>
-          target.vniLayerId === amountParent.vniLayerId &&
-          target.textLayerId === amountParent.textLayerId,
-      );
-      if (!matches)
-        throw new Error(
-          `${tierId} ImgNumber parent 引用的 VNI 文字层不存在：${amountParent.vniLayerId}/${amountParent.textLayerId}。`,
-        );
-    }
     return Object.freeze([]);
   } catch (error) {
     return Object.freeze([
@@ -565,13 +551,18 @@ export function popupEditorProjectDiagnostics(
 
 export function getPopupVniTextLayerTargets(
   project: PopupEditorProject,
-  tierId: AwardTierId | "single-state",
+  scope: PopupVniTextLayerScope,
 ): readonly PopupVniTextLayerTarget[] {
   const layers =
-    tierId === "single-state"
-      ? project.singleState.layers
-      : project.tiers.get(tierId)?.layers;
-  if (!layers) throw new Error(`tier 不存在：${tierId}`);
+    scope.kind === "award"
+      ? project.tiers.get(scope.tierId)?.layers
+      : scope.kind === "spine-popup"
+        ? project.spine.overlays
+        : project.singleState.layers;
+  if (!layers)
+    throw new Error(
+      `Popup VNI 文字层作用域不存在：${scope.kind === "award" ? scope.tierId : scope.kind}`,
+    );
   const targets: PopupVniTextLayerTarget[] = [];
   for (const layer of layers) {
     if (layer.kind !== "vni") continue;
@@ -968,20 +959,35 @@ export function validatePopupEditorAttachments(
 ): void {
   const validateScope = (
     layers: readonly (
-      | PopupLayer
-      | PopupOverlayLayer
-      | SingleStatePopupLayerV9
+      PopupLayer | PopupOverlayLayer | SingleStatePopupLayerV9
     )[],
     label: string,
     allowMainSpine: boolean,
-    getTargets: () => readonly PopupSpineAttachmentTarget[],
+    getSpineTargets: () => readonly PopupSpineAttachmentTarget[],
+    getVniTargets: () => readonly PopupVniTextLayerTarget[],
   ) => {
     validatePopupLayerAttachmentGraph({ layers, label, allowMainSpine });
-    const targets = getTargets();
-    const byKey = new Map(targets.map((target) => [target.key, target]));
+    const spineTargets = getSpineTargets();
+    const byKey = new Map(spineTargets.map((target) => [target.key, target]));
+    const hasVniAttachment = layers.some(
+      (layer) => resolvePopupLayerAttachment(layer).kind === "vni-text-layer",
+    );
+    const vniTargets = hasVniAttachment ? getVniTargets() : [];
     for (const layer of layers) {
-      const attachment = layer.attachment;
-      if (attachment?.kind !== "spine-slot") continue;
+      const attachment = resolvePopupLayerAttachment(layer);
+      if (attachment.kind === "vni-text-layer") {
+        const matches = vniTargets.some(
+          (target) =>
+            target.vniLayerId === attachment.vniLayerId &&
+            target.textLayerId === attachment.textLayerId,
+        );
+        if (!matches)
+          throw new Error(
+            `${label} 图层 ${layer.id} 引用的 VNI 文字层不存在：${attachment.vniLayerId}/${attachment.textLayerId}。`,
+          );
+        continue;
+      }
+      if (attachment.kind !== "spine-slot") continue;
       const targetKey =
         attachment.target.kind === "main-spine"
           ? "main-spine"
@@ -994,20 +1000,32 @@ export function validatePopupEditorAttachments(
     }
   };
   if (project.type === "spine") {
-    validateScope(project.spine.overlays, "spine.overlays", true, () =>
-      getPopupSpineAttachmentTargets(project, { kind: "spine-popup" }),
+    validateScope(
+      project.spine.overlays,
+      "spine.overlays",
+      true,
+      () => getPopupSpineAttachmentTargets(project, { kind: "spine-popup" }),
+      () => getPopupVniTextLayerTargets(project, { kind: "spine-popup" }),
     );
     return;
   }
   if (project.type === "single-state") {
-    validateScope(project.singleState.layers, "singleState.layers", false, () =>
-      getPopupSpineAttachmentTargets(project, { kind: "single-state" }),
+    validateScope(
+      project.singleState.layers,
+      "singleState.layers",
+      false,
+      () => getPopupSpineAttachmentTargets(project, { kind: "single-state" }),
+      () => getPopupVniTextLayerTargets(project, { kind: "single-state" }),
     );
     return;
   }
   for (const [tierId, tier] of project.tiers)
-    validateScope(tier.layers, `awardCelebration.${tierId}.layers`, false, () =>
-      getPopupSpineAttachmentTargets(project, { kind: "award", tierId }),
+    validateScope(
+      tier.layers,
+      `awardCelebration.${tierId}.layers`,
+      false,
+      () => getPopupSpineAttachmentTargets(project, { kind: "award", tierId }),
+      () => getPopupVniTextLayerTargets(project, { kind: "award", tierId }),
     );
 }
 

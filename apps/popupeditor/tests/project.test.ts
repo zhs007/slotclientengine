@@ -892,13 +892,86 @@ describe("popup editor filename-key project", () => {
     });
     addLayer(project, "base", "amount.json");
     addLayer(project, "base", "number2.json");
-    expect(getPopupVniTextLayerTargets(project, "base")).toEqual([
+    expect(
+      getPopupVniTextLayerTargets(project, {
+        kind: "award",
+        tierId: "base",
+      }),
+    ).toEqual([
       {
         vniLayerId: "layer-0",
         textLayerId: "layer_text_mqz6k97v_z",
         textLayerName: "文字",
       },
     ]);
+
+    const layers = project.tiers.get("base")!.layers;
+    layers.push(
+      {
+        id: "image-child",
+        kind: "image",
+        resource: "image.png",
+        order: 2,
+        alpha: 1,
+        attachment: {
+          kind: "vni-text-layer",
+          vniLayerId: "layer-0",
+          textLayerId: "layer_text_mqz6k97v_z",
+        },
+        transform: { x: 5, y: 6, scale: 1, rotation: 0 },
+        anchor: { x: 0.5, y: 0.5 },
+      },
+      {
+        id: "text-child",
+        kind: "text",
+        name: "text-child",
+        defaultText: "Child",
+        order: 3,
+        alpha: 1,
+        attachment: {
+          kind: "vni-text-layer",
+          vniLayerId: "layer-0",
+          textLayerId: "layer_text_mqz6k97v_z",
+        },
+        transform: { x: 7, y: 8, scale: 1, rotation: 0 },
+        anchor: { x: 0.5, y: 0.5 },
+        style: {
+          fontSize: 24,
+          letterSpacing: 0,
+          fill: { kind: "solid", color: "#ffffff" },
+          arcDegrees: 0,
+          widthRange: { minWidth: 0, maxWidth: 0 },
+        },
+      },
+    );
+    expect(() => validatePopupEditorAttachments(project)).not.toThrow();
+
+    const imageChild = layers.find(({ id }) => id === "image-child")!;
+    (imageChild as any).attachment.textLayerId = "missing";
+    expect(() => validatePopupEditorAttachments(project)).toThrow(
+      /image-child.*layer-0\/missing/,
+    );
+    (imageChild as any).attachment.textLayerId = "layer_text_mqz6k97v_z";
+
+    const vni = layers.find(({ id }) => id === "layer-0")!;
+    (vni as any).attachment = {
+      kind: "vni-text-layer",
+      vniLayerId: "layer-0",
+      textLayerId: "layer_text_mqz6k97v_z",
+    };
+    expect(() => validatePopupEditorAttachments(project)).toThrow(
+      /layer-0 -> layer-0/,
+    );
+    (vni as any).attachment = { kind: "popup-root" };
+
+    project.spine.overlays = [structuredClone(vni) as any];
+    expect(
+      getPopupVniTextLayerTargets(project, { kind: "spine-popup" }),
+    ).toHaveLength(1);
+    project.singleState.layers = [structuredClone(vni) as any];
+    expect(
+      getPopupVniTextLayerTargets(project, { kind: "single-state" }),
+    ).toHaveLength(1);
   });
 });
 
