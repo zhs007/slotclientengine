@@ -16,7 +16,7 @@
   - `attack` 1.30 秒、`idle` 2.03 秒、`victory` 1.53 秒、`walk` 2.03 秒；每段 60 个 transform channels。
   - 3 张内嵌 `image/ktx2` UASTC 纹理，均为 2048×2048、12 级 mipmap；GLB required extension 为
     `KHR_texture_basisu`，无 PNG/WebP fallback 或外部 URI。
-  - SHA-256：`efb42a0ffcd39a1a00158ffb6b597148c6bf32265690893102c404800aa4c2f5`。
+  - SHA-256：`12d8d2e5a34798ab777db7311d6c41dde318ecbaab6f0ce681ef5eacfa86475c`。
 - `apps/castleknight3ddemo/viewer.html`
   - 独立查看器页面及可访问名称明确的控制面板。
 - `apps/castleknight3ddemo/src/model-viewer.ts`
@@ -136,6 +136,27 @@ foot bone 的世界 X 回到各自固定轨道。最终左脚横向/前后范围
 第五版不修改另外三个动作，而是在 walk 第 1 帧及其余 8 个 gait key poses 根据蒙皮后鞋面几何数值求解 foot Z，
 将脚尖持续对准角色正前方。最终 GLB 密集采样最大朝向偏差为左脚 0.164°、右脚 0.075°，validator 以 2° 为失败
 门禁；Blender 九相位渲染和真实 Three.js viewer 的 walk 起点均已复验。
+
+用户继续指出脚尖已变但腿链未变。诊断证实第五版 walk 中膝盖相对髋部仍向外约 4.3–4.5cm，脚踝向外 6.5cm；
+第六版在每个 gait key pose 联立数值求解 thigh Z 与 shin Z，使左右两侧的髋、膝、踝分别处于同一角色前后平面，
+再独立求解鞋尖朝向。最终 GLB 密集采样的腿链最大横向偏差约 0.05mm、鞋尖最大朝向偏差约 0.081°，脚踝保持
+约 10.385cm 的前后步幅；validator 增加 5mm 腿平面门禁，Blender 九相位和真实 Three.js viewer 起步/换步均通过。
+
+用户随后指出 `victory` 抬剑时剑穿过面甲。第七版将持剑侧肩和前臂由向面部内收改为从角色右外侧抬起，五个
+关键姿态中剑身均与头盔、头饰、躯干和披风保持间距。validator 对整段 victory 做 13 点密集采样，并以 BVH 检查
+right-hand/sword 网格与除相连前臂外全部身体和装备分组，所有样本相交数均为 0；双脚继续保持零位移/零旋转，
+Blender 五相位与真实 Three.js viewer 的最高抬剑姿态均已复验。
+
+用户提供正面截图指出第六版 walk 的腿仍然怪异。几何诊断确认“髋、膝、踝零横向偏差”约束过度：鞋几何中心
+间距只有约 8.5cm，两鞋横向范围明显重叠，造成膝盖内扣和换步交叉感。第八版改为自然宽度的左右独立轨道：
+膝盖相对髋部各向外 2cm，左/右脚踝分别向外 4cm/5cm，同时继续数值求解鞋尖朝前。最终 GLB 密集采样的鞋中心
+间距稳定在 18.56–18.90cm；validator 改为自然腿距、轨道稳定性和最小 14cm 鞋中心间距门禁。与用户截图一致的
+正面九相位渲染及真实 Three.js viewer 换步姿态均无内扣、拥挤或交叉。
+
+用户继续指出第八版的大腿仍向外斜。诊断确认膝盖相对髋部外移 2cm 会直接造成髋—膝段外张；第九版将左右膝盖
+重新对齐到对应髋部正下方，只保留左/右脚踝分别向外 4cm/5cm，使大腿竖直而小腿自然接到分开的鞋轨道。最终
+GLB 密集采样的膝盖最大横向偏差约 0.0075mm，左右鞋几何中心间距稳定在 19.75–20.71cm；validator 增加膝盖
+最大 5mm 偏差门禁。正面九相位 Blender 渲染与真实 Three.js viewer 的静止、迈步相位均已复验。
 
 ## 剩余风险
 
