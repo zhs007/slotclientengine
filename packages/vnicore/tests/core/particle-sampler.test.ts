@@ -3,6 +3,7 @@ import {
   getParticleProgress,
   hasActiveParticleAnimation,
   sampleParticleSpritesForLayer,
+  sampleParticleSpritesForLayerRuntime,
   seededRandom,
   type ParticleLayerSampleState,
 } from "../../src/core/particle-sampler";
@@ -523,6 +524,57 @@ describe("particle-sampler", () => {
           animation.duration + 0.01,
         ),
       ).toEqual([]);
+    }
+  });
+
+  it("keeps every particle type behind a fixed emission cutoff while age advances", () => {
+    const cutoff = 0.25;
+    const elapsed = 0.45;
+    const cases = [
+      { animation: particleBurst(), maxParticleIndex: 3 },
+      { animation: particleStream(), maxParticleIndex: 30 },
+      { animation: particleTwinkle(), maxParticleIndex: 4 },
+      { animation: particleWall(), maxParticleIndex: 6 },
+      { animation: particleCombo(), maxParticleIndex: 6 },
+    ];
+
+    for (const { animation, maxParticleIndex } of cases) {
+      const atCutoff = sampleParticleSpritesForLayerRuntime(
+        layer(animation),
+        sampledLayer,
+        { width: 100, height: 50 },
+        [
+          {
+            animationId: animation.id,
+            elapsed: cutoff,
+            emissionElapsedLimit: cutoff,
+            loopingEmission: false,
+          },
+        ],
+      );
+      const afterCutoff = sampleParticleSpritesForLayerRuntime(
+        layer(animation),
+        sampledLayer,
+        { width: 100, height: 50 },
+        [
+          {
+            animationId: animation.id,
+            elapsed,
+            emissionElapsedLimit: cutoff,
+            loopingEmission: false,
+          },
+        ],
+      );
+
+      expect(afterCutoff.length, animation.type).toBeGreaterThan(0);
+      expect(afterCutoff, animation.type).not.toEqual(atCutoff);
+      expect(
+        afterCutoff.every((particle) => {
+          const index = Number(particle.particleId.split(":").at(-1));
+          return Number.isInteger(index) && index <= maxParticleIndex;
+        }),
+        animation.type,
+      ).toBe(true);
     }
   });
 

@@ -30,12 +30,14 @@ import {
 import {
   VNISegmentedPlaybackSequence,
   assertPositiveFinite,
+  normalizeKeepParticlesAlive,
   normalizePlaybackPoint,
   normalizePlaybackRange,
   normalizeIgnoreAuthoredSeed,
   normalizeSegmentedPlaybackOptions,
   type VNIPlayOptions,
   type VNIPlaybackMode,
+  type VNIPlaybackParticleOptions,
   type VNIPlaybackPoint,
   type VNIPlaybackRange,
   type VNIPlaybackState,
@@ -92,9 +94,12 @@ import type {
 import { validateVNIProject } from "../data/validation.js";
 import { VNIRuntimeLoadedResources } from "./vni-runtime-loaded-resources.js";
 
+const ORPHAN_PARTICLE_FADE_SECONDS = 0.1;
+
 export type {
   VNIPlayOptions,
   VNIPlaybackMode,
+  VNIPlaybackParticleOptions,
   VNIPlaybackPoint,
   VNIPlaybackRange,
   VNIPlaybackState,
@@ -364,6 +369,7 @@ export class VNIRuntime implements VNIManualPlaybackHost {
   private initialized = false;
   private playbackMode: VNIPlaybackMode = "timeline";
   private playbackPhase: VNISegmentedPlaybackPhase = "idle";
+  private keepParticlesAlive = true;
   private activeRange: ActivePlaybackRange | null = null;
   private segmentedPlayback: VNISegmentedPlaybackSequence | null = null;
   private pendingComplete: VNIPlaybackCompleteContext | null = null;
@@ -741,19 +747,24 @@ export class VNIRuntime implements VNIManualPlaybackHost {
 
   play(options?: VNIPlayOptions): void {
     this.assertLegacyTransportAvailable("play");
-    const ignoreAuthoredSeed = normalizeIgnoreAuthoredSeed(options ?? {});
+    const normalizedOptions = options ?? {};
+    const ignoreAuthoredSeed = normalizeIgnoreAuthoredSeed(normalizedOptions);
+    const keepParticlesAlive = normalizeKeepParticlesAlive(normalizedOptions);
     if (options?.mode === "range") {
-      this.startRangePlayback(options, ignoreAuthoredSeed);
+      this.startRangePlayback(options, ignoreAuthoredSeed, keepParticlesAlive);
       return;
     }
     if (options?.mode === "segmented") {
       this.startSegmentedPlayback(options, ignoreAuthoredSeed);
       return;
     }
-    this.startTimelinePlayback(ignoreAuthoredSeed);
+    this.startTimelinePlayback(ignoreAuthoredSeed, keepParticlesAlive);
   }
 
-  private startTimelinePlayback(ignoreAuthoredSeed: boolean): void {
+  private startTimelinePlayback(
+    ignoreAuthoredSeed: boolean,
+    keepParticlesAlive: boolean,
+  ): void {
     if (this.playing) return;
     this.assertInitialized("play");
     if (this.particleRuntime.isDraining()) {
@@ -765,6 +776,7 @@ export class VNIRuntime implements VNIManualPlaybackHost {
     }
     this.playbackMode = "timeline";
     this.playbackPhase = "start";
+    this.keepParticlesAlive = keepParticlesAlive;
     if (!this.activeRange && this.currentTime >= this.project.stage.duration) {
       this.renderPlaybackFrame(0, 0);
     }
@@ -787,6 +799,7 @@ export class VNIRuntime implements VNIManualPlaybackHost {
     this.segmentedPlayback = null;
     this.playbackMode = "timeline";
     this.playbackPhase = "idle";
+    this.keepParticlesAlive = true;
     this.pendingComplete = null;
     this.drainPaused = false;
     this.particleRuntime.reset();
@@ -800,6 +813,7 @@ export class VNIRuntime implements VNIManualPlaybackHost {
     this.pendingComplete = null;
     this.playbackMode = "timeline";
     this.playbackPhase = "idle";
+    this.keepParticlesAlive = true;
     this.drainPaused = false;
     this.particleRuntime.reset();
     this.renderDeterministicFrame(time);
@@ -864,7 +878,7 @@ export class VNIRuntime implements VNIManualPlaybackHost {
         this.segmentedPlayback?.getLoopIndex() ??
         this.activeRange?.loopIndex ??
         0,
-      keepParticlesAlive: this.segmentedPlayback?.keepParticlesAlive ?? true,
+      keepParticlesAlive: this.keepParticlesAlive,
     };
   }
 
@@ -944,6 +958,7 @@ export class VNIRuntime implements VNIManualPlaybackHost {
     this.playbackCompleteListeners.clear();
     this.playbackMode = "timeline";
     this.playbackPhase = "idle";
+    this.keepParticlesAlive = true;
     this.currentTime = 0;
     this.loop = true;
     this.drainPaused = false;
@@ -1001,7 +1016,18 @@ export class VNIRuntime implements VNIManualPlaybackHost {
 
   playRange(options: VNIPlayRangeOptions): void {
     this.assertLegacyTransportAvailable("playRange");
-    this.startRangePlayback(options, false);
+    this.startRangePlayback(
+      options,
+      false,
+      normalizeKeepParticlesAlive(options),
+    );
+  }
+
+  clearOrphanParticles(): void {
+    this.assertInitialized("clearOrphanParticles");
+    if (this.particleRuntime.fadeOutOrphans(ORPHAN_PARTICLE_FADE_SECONDS)) {
+      this.drainPaused = false;
+    }
   }
 
   requestSegmentedPlaybackEnd(): void {
@@ -1035,21 +1061,21 @@ export class VNIRuntime implements VNIManualPlaybackHost {
 
   private startRangePlayback(
     options: VNIPlayRangeOptions,
-    ignoreAuthoredSeed?: boolean,
+    ignoreAuthoredSeed: boolean,
+    keepParticlesAlive: boolean,
   ): void {
     this.assertInitialized("playRange");
     const normalized = normalizePlaybackRange(
       options.range,
       this.project.stage.duration,
     );
-    if (ignoreAuthoredSeed !== undefined) {
-      this.startPlaybackSeedSession(ignoreAuthoredSeed);
-    }
+    this.startPlaybackSeedSession(ignoreAuthoredSeed);
     this.segmentedPlayback = null;
     this.pendingComplete = null;
     this.particleRuntime.reset();
     this.playbackMode = "range";
     this.playbackPhase = "start";
+    this.keepParticlesAlive = keepParticlesAlive;
     this.activeRange = {
       ...normalized,
       loop: options.loop ?? this.loop,
@@ -1075,6 +1101,7 @@ export class VNIRuntime implements VNIManualPlaybackHost {
     this.pendingComplete = null;
     this.particleRuntime.reset();
     this.playbackMode = "segmented";
+    this.keepParticlesAlive = normalized.keepParticlesAlive;
     this.segmentedPlayback = new VNISegmentedPlaybackSequence(normalized);
     this.playbackPhase = "start";
     this.renderPlaybackFrame(0, 0);
@@ -1144,6 +1171,7 @@ export class VNIRuntime implements VNIManualPlaybackHost {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.keepParticlesAlive = true;
     this.drainPaused = false;
     this.clearPlaybackSeedSession();
     this.particleRuntime.reset();
@@ -1206,30 +1234,52 @@ export class VNIRuntime implements VNIManualPlaybackHost {
     this.triggerPlaybackEvents(previousTime, currentTime, 0);
   }
 
+  setManualParticlePolicy(keepParticlesAlive: boolean): void {
+    this.keepParticlesAlive = keepParticlesAlive;
+  }
+
   completeManualRange(
     startTime: number,
     endTime: number,
+    keepParticlesAlive: boolean,
     completed: () => void,
   ): void {
     if (this.manualRangeCompletion) {
       throw new Error("VNI manual range completion is already pending.");
     }
     this.manualRangeCompletion = completed;
-    this.startParticleDrain(endTime, {
-      startTime,
+    this.startParticleDrain(
       endTime,
-      currentTime: endTime,
-      loopIndex: 0,
-    });
+      {
+        startTime,
+        endTime,
+        currentTime: endTime,
+        loopIndex: 0,
+      },
+      keepParticlesAlive,
+    );
   }
 
-  cancelManualRangeCompletion(): void {
-    if (!this.manualRangeCompletion) return;
+  cancelManualRange(
+    _startTime: number,
+    currentTime: number,
+    keepParticlesAlive: boolean,
+  ): void {
     this.manualRangeCompletion = null;
     this.pendingComplete = null;
-    this.particleRuntime.reset();
     this.playbackPhase = "idle";
     this.drainPaused = false;
+    if (this.particleRuntime.isDraining()) {
+      if (!keepParticlesAlive) {
+        this.particleRuntime.reset();
+        this.clearParticles();
+      }
+      return;
+    }
+    this.startParticleDrain(currentTime, null, keepParticlesAlive);
+    this.playbackPhase = "idle";
+    this.pendingComplete = null;
+    this.manualRangeCompletion = null;
   }
 
   setManualClockActive(active: boolean): void {
@@ -1295,12 +1345,16 @@ export class VNIRuntime implements VNIManualPlaybackHost {
           if (timeToEnd <= 0) break;
           continue;
         }
-        this.startParticleDrain(duration, {
-          startTime: 0,
-          endTime: duration,
-          currentTime: duration,
-          loopIndex: 0,
-        });
+        this.startParticleDrain(
+          duration,
+          {
+            startTime: 0,
+            endTime: duration,
+            currentTime: duration,
+            loopIndex: 0,
+          },
+          this.keepParticlesAlive,
+        );
         return;
       }
       const previousTime = this.currentTime;
@@ -1333,12 +1387,16 @@ export class VNIRuntime implements VNIManualPlaybackHost {
           continue;
         }
         this.activeRange = null;
-        this.startParticleDrain(range.endTime, {
-          startTime: range.startTime,
-          endTime: range.endTime,
-          currentTime: range.endTime,
-          loopIndex: range.loopIndex,
-        });
+        this.startParticleDrain(
+          range.endTime,
+          {
+            startTime: range.startTime,
+            endTime: range.endTime,
+            currentTime: range.endTime,
+            loopIndex: range.loopIndex,
+          },
+          this.keepParticlesAlive,
+        );
         return;
       }
       const previousTime = this.currentTime;
@@ -1356,12 +1414,16 @@ export class VNIRuntime implements VNIManualPlaybackHost {
     this.playbackPhase = result.phase;
     this.triggerSegmentedPlaybackEvents(segmented, result);
     if (result.timelineEnded) {
-      this.startParticleDrain(this.project.stage.duration, {
-        startTime: 0,
-        endTime: this.project.stage.duration,
-        currentTime: this.project.stage.duration,
-        loopIndex: result.loopIndex,
-      });
+      this.startParticleDrain(
+        this.project.stage.duration,
+        {
+          startTime: 0,
+          endTime: this.project.stage.duration,
+          currentTime: this.project.stage.duration,
+          loopIndex: result.loopIndex,
+        },
+        this.keepParticlesAlive,
+      );
       return;
     }
     const liveParticles =
@@ -1439,12 +1501,13 @@ export class VNIRuntime implements VNIManualPlaybackHost {
 
   private startParticleDrain(
     endTime: number,
-    completeEvent: VNIPlaybackCompleteContext,
+    completeEvent: VNIPlaybackCompleteContext | null,
+    keepParticlesAlive: boolean,
   ): void {
     this.playing = false;
     this.currentTime = endTime;
     this.pendingComplete = completeEvent;
-    this.playbackPhase = "particle-draining";
+    this.playbackPhase = completeEvent ? "particle-draining" : "idle";
     const sampled = this.applyProjectSample(endTime);
     const safeGlowSpriteCount = this.renderSafeGlowSamples(
       sampled.layers,
@@ -1462,17 +1525,10 @@ export class VNIRuntime implements VNIManualPlaybackHost {
       endTime,
     );
     const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
-    if (particleLayers.length > 0) {
-      const endParticles = sampleLiveParticleSprites(
-        particleLayers,
-        this.project.stage,
-        endTime,
-      );
-      if (endParticles.length > 0) {
-        this.particleRuntime.emit(particleLayers, this.project.stage, endTime);
-      }
-    }
-    const frame = this.particleRuntime.beginDrain();
+    this.particleRuntime.emit(particleLayers, this.project.stage, endTime);
+    const frame = keepParticlesAlive
+      ? this.particleRuntime.beginDrain()
+      : this.clearParticleRuntimeImmediately();
     const particleSpriteCount = this.renderParticleSamples(frame.particles);
     this.updateDiagnostics(
       countVisibleLayers(sampled.layers),
@@ -1519,8 +1575,11 @@ export class VNIRuntime implements VNIManualPlaybackHost {
   }
 
   private finishParticleDrain(): void {
-    this.playbackPhase = "complete";
-    this.segmentedPlayback?.markParticleDrainComplete();
+    const event = this.pendingComplete;
+    const manualCompletion = this.manualRangeCompletion;
+    const completesPlayback = event !== null || manualCompletion !== null;
+    this.playbackPhase = completesPlayback ? "complete" : "idle";
+    if (completesPlayback) this.segmentedPlayback?.markParticleDrainComplete();
     this.clearParticles();
     this.updateDiagnostics(
       countVisibleLayers(this.projectSampler.sample(this.currentTime).layers),
@@ -1530,15 +1589,26 @@ export class VNIRuntime implements VNIManualPlaybackHost {
       this.getRenderedSafeGlowCount(),
       this.getRenderedChaserLightCount(),
     );
-    const event = this.pendingComplete;
     this.pendingComplete = null;
     this.clearPlaybackSeedSession();
-    const manualCompletion = this.manualRangeCompletion;
     this.manualRangeCompletion = null;
     manualCompletion?.();
     if (event) {
       this.triggerPlaybackComplete(event);
     }
+  }
+
+  private clearParticleRuntimeImmediately(): {
+    particles: VNILiveParticleSpriteSample[];
+    isDraining: false;
+    isComplete: true;
+  } {
+    this.particleRuntime.reset();
+    return {
+      particles: [],
+      isDraining: false,
+      isComplete: true,
+    };
   }
 
   private triggerPlaybackEvents(
@@ -1578,7 +1648,12 @@ export class VNIRuntime implements VNIManualPlaybackHost {
   }
 
   private getEffectivePlaybackPhase(): VNISegmentedPlaybackPhase {
-    if (this.particleRuntime.isDraining()) return "particle-draining";
+    if (
+      this.particleRuntime.isDraining() &&
+      (this.pendingComplete !== null || this.manualRangeCompletion !== null)
+    ) {
+      return "particle-draining";
+    }
     if (this.segmentedPlayback) return this.segmentedPlayback.getPhase();
     return this.playbackPhase;
   }

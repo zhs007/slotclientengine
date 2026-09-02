@@ -41,26 +41,32 @@ interface VNILiveParticleAnimationLayer extends VNIParticleRuntimeLayer {
 export class VNIParticleRuntime {
   private lastParticles: VNILiveParticleSpriteSample[] = [];
   private liveAnimationElapsedByKey = new Map<string, number>();
+  private lastRuntimeLayers: VNILiveParticleAnimationLayer[] = [];
+  private lastStage: V5GStageConfig | null = null;
+  private drainLayers: VNILiveParticleAnimationLayer[] = [];
+  private drainStage: V5GStageConfig | null = null;
+  private drainRemainingSeconds = 0;
   private draining = false;
-  private drainElapsed = 0;
-  private drainDuration = 0;
-  private maxDrainDuration: number;
+  private forcedFadeElapsed = 0;
+  private forcedFadeDuration: number | null = null;
 
-  constructor(projectLayers: readonly V5GLayerConfig[]) {
-    this.maxDrainDuration = getMaxParticleDrainDuration(projectLayers);
-  }
+  constructor(_projectLayers: readonly V5GLayerConfig[]) {}
 
-  reconfigure(projectLayers: readonly V5GLayerConfig[]): void {
+  reconfigure(_projectLayers: readonly V5GLayerConfig[]): void {
     this.reset();
-    this.maxDrainDuration = getMaxParticleDrainDuration(projectLayers);
   }
 
   reset(): void {
     this.lastParticles = [];
     this.liveAnimationElapsedByKey.clear();
+    this.lastRuntimeLayers = [];
+    this.lastStage = null;
+    this.drainLayers = [];
+    this.drainStage = null;
+    this.drainRemainingSeconds = 0;
     this.draining = false;
-    this.drainElapsed = 0;
-    this.drainDuration = 0;
+    this.forcedFadeElapsed = 0;
+    this.forcedFadeDuration = null;
   }
 
   emit(
@@ -69,11 +75,11 @@ export class VNIParticleRuntime {
     time: number,
   ): VNIParticleRuntimeFrame {
     this.liveAnimationElapsedByKey.clear();
-    this.draining = false;
-    this.drainElapsed = 0;
-    this.drainDuration = 0;
+    this.clearDrainState();
     const particles = sampleLiveParticleSprites(layers, stage, time);
     this.lastParticles = particles;
+    this.lastRuntimeLayers = this.prepareAuthoredParticleLayers(layers, time);
+    this.lastStage = { ...stage };
     return {
       particles,
       isDraining: false,
@@ -88,9 +94,7 @@ export class VNIParticleRuntime {
     deltaSeconds: number,
     simulationTime?: number,
   ): VNIParticleRuntimeFrame {
-    this.draining = false;
-    this.drainElapsed = 0;
-    this.drainDuration = 0;
+    this.clearDrainState();
     const liveLayers = this.prepareLiveParticleLayers(
       layers,
       configTime,
@@ -99,6 +103,8 @@ export class VNIParticleRuntime {
     );
     const particles = sampleLiveParticleSpritesForRuntime(liveLayers, stage);
     this.lastParticles = particles;
+    this.lastRuntimeLayers = liveLayers.map(cloneRuntimeLayer);
+    this.lastStage = { ...stage };
     return {
       particles,
       isDraining: false,
@@ -108,7 +114,7 @@ export class VNIParticleRuntime {
 
   beginDrain(): VNIParticleRuntimeFrame {
     this.liveAnimationElapsedByKey.clear();
-    if (this.lastParticles.length === 0 || this.maxDrainDuration <= 0) {
+    if (this.lastRuntimeLayers.length === 0) {
       this.reset();
       return {
         particles: [],
@@ -117,8 +123,25 @@ export class VNIParticleRuntime {
       };
     }
     this.draining = true;
-    this.drainElapsed = 0;
-    this.drainDuration = this.maxDrainDuration;
+    this.drainLayers = this.lastRuntimeLayers.map((entry) => ({
+      ...cloneRuntimeLayer(entry),
+      runtimeStates: entry.runtimeStates.map((state) => ({
+        ...state,
+        emissionElapsedLimit: state.elapsed,
+      })),
+    }));
+    this.drainStage = this.lastStage;
+    this.drainRemainingSeconds = getDrainRemainingSeconds(this.drainLayers);
+    if (this.drainRemainingSeconds <= 0) {
+      this.reset();
+      return {
+        particles: [],
+        isDraining: false,
+        isComplete: true,
+      };
+    }
+    this.forcedFadeElapsed = 0;
+    this.forcedFadeDuration = null;
     return {
       particles: this.lastParticles,
       isDraining: true,
@@ -134,9 +157,8 @@ export class VNIParticleRuntime {
         isComplete: this.lastParticles.length === 0,
       };
     }
-    this.drainElapsed += deltaSeconds;
-    const ratio = this.drainElapsed / this.drainDuration;
-    if (ratio >= 1) {
+    const stage = this.drainStage;
+    if (!stage) {
       this.reset();
       return {
         particles: [],
@@ -144,17 +166,66 @@ export class VNIParticleRuntime {
         isComplete: true,
       };
     }
-    const alphaMultiplier = Math.max(0, 1 - ratio);
-    return {
-      particles: this.lastParticles
+    for (const entry of this.drainLayers) {
+      for (const state of entry.runtimeStates) {
+        state.elapsed += deltaSeconds;
+      }
+    }
+    this.drainRemainingSeconds = Math.max(
+      0,
+      this.drainRemainingSeconds - deltaSeconds,
+    );
+    let particles = sampleLiveParticleSpritesForRuntime(
+      this.drainLayers,
+      stage,
+    );
+    if (this.forcedFadeDuration !== null) {
+      this.forcedFadeElapsed += deltaSeconds;
+      const ratio = this.forcedFadeElapsed / this.forcedFadeDuration;
+      if (ratio >= 1) {
+        this.reset();
+        return {
+          particles: [],
+          isDraining: false,
+          isComplete: true,
+        };
+      }
+      const alphaMultiplier = Math.max(0, 1 - ratio);
+      particles = particles
         .map((particle) => ({
           ...particle,
           alpha: particle.alpha * alphaMultiplier,
         }))
-        .filter((particle) => particle.alpha > 0.002),
+        .filter((particle) => particle.alpha > 0.002);
+    }
+    if (this.drainRemainingSeconds <= 0) {
+      this.reset();
+      return {
+        particles: [],
+        isDraining: false,
+        isComplete: true,
+      };
+    }
+    this.lastParticles = particles;
+    return {
+      particles,
       isDraining: true,
       isComplete: false,
     };
+  }
+
+  fadeOutOrphans(durationSeconds: number): boolean {
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      throw new Error(
+        "VNI orphan particle fade duration must be a positive finite number.",
+      );
+    }
+    if (!this.draining) return false;
+    if (this.forcedFadeDuration === null) {
+      this.forcedFadeElapsed = 0;
+      this.forcedFadeDuration = durationSeconds;
+    }
+    return true;
   }
 
   isDraining(): boolean {
@@ -163,6 +234,43 @@ export class VNIParticleRuntime {
 
   getLiveParticleCount(): number {
     return this.lastParticles.length;
+  }
+
+  private clearDrainState(): void {
+    this.draining = false;
+    this.drainLayers = [];
+    this.drainStage = null;
+    this.drainRemainingSeconds = 0;
+    this.forcedFadeElapsed = 0;
+    this.forcedFadeDuration = null;
+  }
+
+  private prepareAuthoredParticleLayers(
+    layers: readonly VNIParticleRuntimeLayer[],
+    time: number,
+  ): VNILiveParticleAnimationLayer[] {
+    const runtimeLayers: VNILiveParticleAnimationLayer[] = [];
+    for (const entry of layers) {
+      const runtimeStates: ParticleAnimationRuntimeState[] = [];
+      for (const animation of entry.layer.animations) {
+        if (!animation.enabled || !isParticleAnimationType(animation.type)) {
+          continue;
+        }
+        if (getParticleProgress(animation, time) === null) continue;
+        runtimeStates.push({
+          animationId: animation.id,
+          elapsed: Math.max(0, time - animation.startTime),
+          loopingEmission: false,
+        });
+      }
+      if (runtimeStates.length > 0) {
+        runtimeLayers.push({
+          ...cloneRuntimeLayerBase(entry),
+          runtimeStates,
+        });
+      }
+    }
+    return runtimeLayers;
   }
 
   private prepareLiveParticleLayers(
@@ -198,6 +306,7 @@ export class VNIParticleRuntime {
         runtimeStates.push({
           animationId: animation.id,
           elapsed,
+          loopingEmission: true,
         });
       }
       if (runtimeStates.length > 0) {
@@ -286,22 +395,52 @@ function getLiveParticleElapsed(
     : Math.max(configuredElapsed, previousElapsed + Math.max(0, deltaSeconds));
 }
 
-function getMaxParticleDrainDuration(
-  layers: readonly V5GLayerConfig[],
-): number {
-  let maxDuration = 0;
-  for (const layer of layers) {
-    for (const animation of layer.animations) {
-      if (!animation.enabled || !isParticleAnimationType(animation.type)) {
-        continue;
-      }
-      maxDuration = Math.max(maxDuration, getParticleDrainDuration(animation));
-    }
-  }
-  return maxDuration;
+function cloneRuntimeLayerBase(
+  entry: VNIParticleRuntimeLayer,
+): VNIParticleRuntimeLayer {
+  return {
+    ...entry,
+    sampledLayer: {
+      ...entry.sampledLayer,
+      transform: { ...entry.sampledLayer.transform },
+    },
+    textureSize: { ...entry.textureSize },
+  };
 }
 
-function getParticleDrainDuration(animation: V5GAnimationConfig): number {
+function cloneRuntimeLayer(
+  entry: VNILiveParticleAnimationLayer,
+): VNILiveParticleAnimationLayer {
+  return {
+    ...cloneRuntimeLayerBase(entry),
+    runtimeStates: entry.runtimeStates.map((state) => ({ ...state })),
+  };
+}
+
+function getDrainRemainingSeconds(
+  layers: readonly VNILiveParticleAnimationLayer[],
+): number {
+  let remaining = 0;
+  for (const entry of layers) {
+    const animationById = new Map(
+      entry.layer.animations.map((animation) => [animation.id, animation]),
+    );
+    for (const state of entry.runtimeStates) {
+      const animation = animationById.get(state.animationId);
+      if (!animation) continue;
+      remaining = Math.max(
+        remaining,
+        getAnimationDrainRemainingSeconds(animation, state.elapsed),
+      );
+    }
+  }
+  return remaining;
+}
+
+function getAnimationDrainRemainingSeconds(
+  animation: V5GAnimationConfig,
+  elapsed: number,
+): number {
   if (animation.type === "particle_wall") {
     return getNumberParam(animation, "lifetimeMax");
   }
@@ -311,10 +450,7 @@ function getParticleDrainDuration(animation: V5GAnimationConfig): number {
   if (animation.type === "particle_twinkle") {
     return getNumberParam(animation, "twinkleDuration");
   }
-  if (animation.type === "particle_combo") {
-    return Math.max(animation.duration, 0);
-  }
-  return Math.max(animation.duration, 0);
+  return Math.max(0, animation.duration - elapsed);
 }
 
 function getNumberParam(animation: V5GAnimationConfig, key: string): number {

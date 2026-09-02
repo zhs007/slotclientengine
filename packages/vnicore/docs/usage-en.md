@@ -13,6 +13,14 @@ runtime.play();
 hostTicker.add((deltaSeconds) => runtime.update(deltaSeconds));
 ```
 
+`keepParticlesAlive` defaults to `true` for timeline, range, segmented, and
+manual-range playback. At a natural end or manual cancellation, emission stops
+immediately while emitted particles keep moving and expire according to their
+authored lifetimes. Call `runtime.clearOrphanParticles()` to fade those detached
+particles quickly, then keep calling `update()` until `needsUpdate()` is false.
+The clear operation does not affect an emitter that is still active, and
+`pause()` remains resumable.
+
 Browser preview tools use `data` and `viewer`:
 
 ```ts

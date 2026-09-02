@@ -199,6 +199,12 @@ export class VNIViewer {
     if (!this.runtime.needsUpdate()) this.cancelTicker();
   }
 
+  clearOrphanParticles(): void {
+    this.runtime.clearOrphanParticles();
+    this.syncViewerState(false);
+    if (this.runtime.needsUpdate()) this.ensureTicker();
+  }
+
   restart(): void {
     this.runtime.restart();
     this.syncViewerState(false);
@@ -310,6 +316,7 @@ export class VNIViewer {
       destroy: () => {
         session.destroy();
         this.syncViewerState(false);
+        if (this.runtime.needsUpdate()) this.ensureTicker();
       },
     };
   }

@@ -13,6 +13,12 @@ runtime.play();
 ticker.add((deltaSeconds) => runtime.update(deltaSeconds));
 ```
 
+所有播放入口的 `keepParticlesAlive` 都默认是 `true`：播放自然结束或 manual range
+取消时停止发射，但已产生粒子会继续运动并按自身生命周期消失。若场景需要立即
+收尾，调用 `runtime.clearOrphanParticles()`，并继续驱动 `update()` 直到
+`runtime.needsUpdate()` 为 `false`。该接口不影响仍在发射的 active playback；
+`pause()` 仍用于可恢复暂停。
+
 Browser viewer 使用 `data + viewer`：
 
 ```ts
