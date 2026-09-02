@@ -110,6 +110,21 @@ export function rewriteLayoutManifest(
     parseSceneLayoutManifestDocument(value),
   ) as SceneLayoutManifest;
   const nodes = manifest.nodes.map((node) => {
+    if ("uiControl" in node)
+      return {
+        ...node,
+        uiControl: {
+          ...node.uiControl,
+          off: {
+            ...node.uiControl.off,
+            path: rewriteRef(node.uiControl.off.path, mapping),
+          },
+          on: {
+            ...node.uiControl.on,
+            path: rewriteRef(node.uiControl.on.path, mapping),
+          },
+        },
+      };
     if (node.resource.kind === "image")
       return {
         ...node,

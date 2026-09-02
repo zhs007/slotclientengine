@@ -516,6 +516,11 @@ function nodeClosure(
 ): readonly string[] {
   const keys = new Set<string>();
   for (const node of nodes) {
+    if ("uiControl" in node) {
+      keys.add(node.uiControl.off.path);
+      keys.add(node.uiControl.on.path);
+      continue;
+    }
     const resource = node.resource;
     if (resource.kind === "image") keys.add(resource.path);
     else if (resource.kind === "image-string") {

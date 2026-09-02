@@ -754,6 +754,7 @@ export class LayoutPreview {
       manifest.nodes.flatMap((node) => {
         const variantId = snapshot.variantId;
         if (
+          !("resource" in node) ||
           node.resource.kind !== "spine" ||
           !("stateMachine" in node.resource) ||
           !node.placements[variantId]

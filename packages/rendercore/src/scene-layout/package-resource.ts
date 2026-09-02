@@ -127,6 +127,7 @@ export function collectSceneLayoutPackagePaths(options: {
 
   for (const path of references) expected.add(path);
   for (const node of manifest.nodes) {
+    if (!("resource" in node)) continue;
     if (node.resource.kind === "vni") {
       const project = parseRuntimeVniProject(
         requireBytes(options.files, node.resource.project),
@@ -342,6 +343,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   const objectUrls: string[] = [];
   try {
     for (const node of manifest.nodes) {
+      if (!("resource" in node)) continue;
       if (node.resource.kind !== "image-string") continue;
       if (imageStrings[node.resource.manifest]) continue;
       const nestedFiles = extractPrefixedFiles(
@@ -616,6 +618,17 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     const audioModules: Record<string, string> = {};
     const jsonDataModules: Record<string, SceneLayoutJsonData> = {};
     for (const node of manifest.nodes) {
+      if ("uiControl" in node) {
+        for (const image of [node.uiControl.off, node.uiControl.on])
+          imageModules[image.path] ??=
+            options.resolveAssetUrl?.(image.path) ??
+            createObjectUrl(
+              requireBytes(files, image.path),
+              image.path,
+              objectUrls,
+            );
+        continue;
+      }
       const resource = node.resource;
       if (resource.kind === "image-string") continue;
       if (resource.kind === "vni") {
@@ -1239,6 +1252,7 @@ export async function loadSceneLayoutPackageFromUrl(options: {
     files.set(path, await fetchBytes(fetchImpl, url));
   }
   for (const node of manifest.nodes) {
+    if (!("resource" in node)) continue;
     if (node.resource.kind === "vni") {
       const project = parseRuntimeVniProject(
         requireBytes(files, node.resource.project),

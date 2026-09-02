@@ -248,6 +248,67 @@ describe("asset-groups versioned parser", () => {
     ).toEqual([]);
   });
 
+  it("keeps both radio state images in the owning asset groups", () => {
+    const keys = ["flag-off.webp", "flag-on.webp"];
+    const manifest = {
+      version: 7,
+      kind: "scene-layout",
+      id: "radio-layout",
+      nodes: [
+        {
+          id: "splash-flag",
+          order: 1,
+          uiControl: {
+            kind: "radio",
+            off: {
+              kind: "image",
+              path: "flag-off.webp",
+              size: { width: 145, height: 50 },
+            },
+            on: {
+              kind: "image",
+              path: "flag-on.webp",
+              size: { width: 145, height: 50 },
+            },
+          },
+          placements: { landscape: { x: 0, y: 0, scale: 1 } },
+        },
+      ],
+      audio: {
+        version: 1,
+        effects: [],
+        music: [],
+        programmaticEffects: [],
+      },
+      eventAudio: {
+        version: 1,
+        ignoreLegacyAudio: true,
+        bindings: [],
+      },
+      gameModes: {
+        initialMode: "Splash",
+        modes: [{ id: "Splash", nodeStates: {} }],
+        transitions: [],
+      },
+    } as never;
+    const groups = createSceneLayoutAssetGroups({
+      manifest,
+      files: new Map(),
+      sourceZipBytes: 4,
+      output: outputFixture(keys),
+      quality: 80,
+      cwebpVersion: "test",
+      convertedImageCount: 2,
+      ...audioOptimizationFixture(),
+    });
+    expect(
+      groups.groups.find((group) => group.id === "shared")?.requiredAssets,
+    ).toEqual(keys);
+    expect(
+      groups.groups.find((group) => group.id === "mode:Splash")?.requiredAssets,
+    ).toEqual(keys);
+  });
+
   it("creates an independent runtime group for opaque JSON data", () => {
     const key = "spin-config.json";
     const manifest = {

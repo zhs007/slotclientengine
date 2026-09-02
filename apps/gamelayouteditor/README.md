@@ -1,6 +1,11 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v7 编辑器，覆盖 layout、mode/orientation、全局 Event 音乐音效、普通 image/VNI/Spine 图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v7 ZIP 会在打开事务中规范化；后续预览和导出只生成 canonical v7。
+纯前端 Scene Layout v7 编辑器，覆盖 layout、mode/orientation、全局 Event 音乐音效、图形图层、UI 控件图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v7 ZIP 会在打开事务中规范化；后续预览和导出只生成 canonical v7。
+
+图层先区分“图形图层”和“UI 控件”；当前 UI 控件 kind 为单选框 `radio`。单选框必须从 Assets 明确选择两张不同且尺寸相同的 image root，分别绑定 `off` 与 `on`，不会按文件名自动配对。它复用普通图层的唯一 id、order、scope 和横竖屏 placement，完整重建后的初始状态固定为 `off`。预览中的有效点击切换状态但不回写 authoring draft；Inspector 可分别重绑两侧图片，production closure 会同时包含两张图片。
+
+runtime 可按图层 id 调用 `getUiControl(id)`，或解析 `gamelayout:/ui-control/<id>` 的 `ui-control` endpoint，得到只暴露 `kind/getState()/setState()` 的 borrowed capability。真正进入状态后发布 `gamelayout:/ui-control/<id>/radio/state/<off|on>/entered`；初始化与 same-state set 不发事件。全局 Event 音乐音效对话框直接从 RenderCore shared catalog 的“UI 控件状态”family 选择这些 exact 地址。
+控件命中的同一次 pointer/click 会被控件消费，不会继续触发 Splash primary action 或其它 preview host click 行为。
 
 ## 中心坐标与 per-mode 可见性
 

@@ -6,6 +6,7 @@ import type {
   SceneLayoutManifestV1,
   SceneLayoutManifest,
   SceneLayoutNode,
+  SceneLayoutGraphicNode,
   SceneLayoutNodePlacement,
   SceneLayoutNodeResourceSpec,
   SceneLayoutReelGrid,
@@ -241,6 +242,11 @@ export function collectSceneLayoutAssetPaths(
     for (const binding of parsed.eventAudio.bindings)
       for (const source of binding.audio.asset.sources) paths.add(source.path);
   for (const node of parsed.nodes) {
+    if ("uiControl" in node) {
+      paths.add(node.uiControl.off.path);
+      paths.add(node.uiControl.on.path);
+      continue;
+    }
     const resource = node.resource;
     if (resource.kind === "image") paths.add(resource.path);
     else if (resource.kind === "image-string") paths.add(resource.manifest);
@@ -374,7 +380,7 @@ function parseNode(
   index: number,
   mode: SceneLayoutAdaptation["mode"],
   allowOrientationOrdinaryPlacements = false,
-): SceneLayoutNode {
+): SceneLayoutGraphicNode {
   const label = `scene layout node[${index}]`;
   const record = readRecord(value, label);
   known(record, ["id", "order", "gameMode", "resource", "placements"], label);
@@ -797,7 +803,7 @@ function parseReel(
 
 function validateReferences(
   adaptation: SceneLayoutAdaptation,
-  nodes: readonly SceneLayoutNode[],
+  nodes: readonly SceneLayoutGraphicNode[],
   nodeIds: Set<unknown>,
 ): void {
   const variants: readonly SceneLayoutVariantId[] =
@@ -950,7 +956,7 @@ function sceneLayoutStructure(manifest: SceneLayoutManifestV1): unknown {
 }
 
 function validatePathClosure(
-  nodes: readonly SceneLayoutNode[],
+  nodes: readonly SceneLayoutGraphicNode[],
   runtimeResources?: Readonly<Record<string, SceneLayoutRuntimeResourceSpec>>,
 ): void {
   const paths: string[] = [];
@@ -1100,7 +1106,7 @@ function parsePopupBindings(
 }
 
 function validatePresentationOrders(
-  nodes: readonly SceneLayoutNode[],
+  nodes: readonly SceneLayoutGraphicNode[],
   main: SceneLayoutReelGrid | undefined,
   popups: Readonly<Record<string, SceneLayoutPopupBinding>> | undefined,
 ): void {
@@ -1121,7 +1127,7 @@ function validatePresentationOrders(
 function parseGameModes(
   value: unknown,
   adaptation: SceneLayoutAdaptation,
-  nodes: readonly SceneLayoutNode[],
+  nodes: readonly SceneLayoutGraphicNode[],
   legacySymbolPackage: SceneLayoutSymbolPackageBinding | undefined,
   symbolPackages:
     | Readonly<Record<string, SceneLayoutSymbolPackageBinding>>
@@ -1275,9 +1281,9 @@ function parseGameModes(
   const stateful = nodes.filter(
     (
       node,
-    ): node is SceneLayoutNode & {
+    ): node is SceneLayoutGraphicNode & {
       readonly resource: Extract<
-        SceneLayoutNode["resource"],
+        SceneLayoutGraphicNode["resource"],
         { readonly stateMachine: unknown }
       >;
     } => node.resource.kind === "spine" && "stateMachine" in node.resource,

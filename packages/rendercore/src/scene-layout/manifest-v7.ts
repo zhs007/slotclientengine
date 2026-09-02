@@ -10,6 +10,8 @@ import type {
   SceneLayoutMainVariant,
   SceneLayoutManifestV6,
   SceneLayoutManifestV7,
+  SceneLayoutUiControlNode,
+  SceneLayoutGraphicNode,
   SceneLayoutNode,
   SceneLayoutNodePlacement,
   SceneLayoutOrientationVariantId,
@@ -17,6 +19,8 @@ import type {
 } from "./types.js";
 
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]*$/;
+const PATH_SEGMENT = /^[A-Za-z0-9._-]+$/;
+const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const ORIENTATIONS = ["landscape", "portrait"] as const;
 const ROOT_KEYS = new Set([
   "version",
@@ -78,28 +82,62 @@ export function parseSceneLayoutManifestV7(
   if (!Array.isArray(root.nodes))
     fail("scene layout manifest.nodes must be an array.");
   const scopes = new Map<string, SceneLayoutNode["scope"]>();
+  const uiControlNodes = new Map<string, SceneLayoutUiControlNode>();
+  const nodeIds: string[] = [];
+  const nodeOrders: number[] = [];
   for (const [index, raw] of root.nodes.entries()) {
     const node = record(raw, `scene layout nodes[${index}]`);
+    const hasResource = Object.hasOwn(node, "resource");
+    const hasUiControl = Object.hasOwn(node, "uiControl");
+    if (hasResource === hasUiControl)
+      fail(
+        `scene layout nodes[${index}] must declare exactly one of resource or uiControl.`,
+      );
     known(
       node,
-      new Set(["id", "order", "resource", "placements", "scope"]),
+      new Set([
+        "id",
+        "order",
+        hasResource ? "resource" : "uiControl",
+        "placements",
+        "scope",
+      ]),
       `scene layout nodes[${index}]`,
     );
     const id = identifier(node.id, `scene layout nodes[${index}].id`);
-    scopes.set(id, parseScope(node.scope, modeIds, node.placements, id));
+    const order = safeInteger(node.order, `scene layout nodes[${index}].order`);
+    nodeIds.push(id);
+    nodeOrders.push(order);
+    const scope = parseScope(node.scope, modeIds, node.placements, id);
+    scopes.set(id, scope);
+    if (hasUiControl)
+      uiControlNodes.set(id, parseUiControlNode(node, index, id, order, scope));
   }
+  unique(nodeIds, "scene layout node id");
+  if (new Set(nodeOrders).size !== nodeOrders.length)
+    fail("scene layout node order must be unique.");
 
   const validation = createV6ValidationDocument(root, main, modes);
   const parsed = parseSceneLayoutManifestV6(validation.document);
-  const nodes = parsed.nodes
-    .filter((node) => node.id !== validation.syntheticNodeId)
-    .map((node) => {
-      const scope = scopes.get(node.id);
-      return {
-        ...node,
-        ...(scope ? { scope } : {}),
-      };
-    });
+  const graphicNodes = new Map(
+    parsed.nodes
+      .filter((node) => node.id !== validation.syntheticNodeId)
+      .map((node) => {
+        const scope = scopes.get(node.id);
+        return [
+          node.id,
+          {
+            ...node,
+            ...(scope ? { scope } : {}),
+          },
+        ] as const;
+      }),
+  );
+  const nodes = (root.nodes as readonly unknown[]).map((raw) => {
+    const id = String(record(raw, "scene layout node").id);
+    return uiControlNodes.get(id) ?? graphicNodes.get(id)!;
+  });
+  validateV7PresentationOrders(nodes, main, parsed.popups);
   const draft = {
     version: 7 as const,
     kind: "scene-layout" as const,
@@ -128,6 +166,30 @@ export function parseSceneLayoutManifestV7(
     draft,
   );
   return deepFreeze({ ...draft, runtimeAllocation });
+}
+
+function validateV7PresentationOrders(
+  nodes: readonly SceneLayoutNode[],
+  main: SceneLayoutManifestV7["main"],
+  popups: SceneLayoutManifestV7["popups"],
+): void {
+  const artOrders = [
+    ...nodes.map((node) => node.order),
+    ...(main.order === undefined ? [] : [main.order]),
+  ];
+  const popupEntries = Object.entries(popups ?? {});
+  const allOrders = [
+    ...artOrders,
+    ...popupEntries.map(([, popup]) => popup.order),
+  ];
+  if (new Set(allOrders).size !== allOrders.length)
+    fail("scene layout node/reel/popup order must be unique.");
+  const maximumArtOrder = Math.max(...artOrders, Number.MIN_SAFE_INTEGER);
+  for (const [id, popup] of popupEntries)
+    if (popup.order <= maximumArtOrder)
+      fail(
+        `scene layout popup "${id}" order must be greater than every node/reel order.`,
+      );
 }
 
 export function upgradeSceneLayoutManifestV6ToV7(
@@ -507,6 +569,109 @@ function parseScope(
   return deepFreeze(parsed);
 }
 
+function parseUiControlNode(
+  node: Record<string, unknown>,
+  index: number,
+  id: string,
+  order: number,
+  scope: SceneLayoutNode["scope"],
+): SceneLayoutUiControlNode {
+  const label = `scene layout nodes[${index}]`;
+  const placementsRecord = record(node.placements, `${label}.placements`);
+  known(placementsRecord, new Set(ORIENTATIONS), `${label}.placements`);
+  const placements = Object.fromEntries(
+    Object.entries(placementsRecord).map(([orientation, value]) => [
+      orientation,
+      parseNodePlacementV7(value, `${label}.placements.${orientation}`),
+    ]),
+  );
+  if (!placements.landscape && !placements.portrait)
+    fail(`${label} must have a landscape or portrait placement.`);
+  const control = record(node.uiControl, `${label}.uiControl`);
+  if (control.kind !== "radio") fail(`${label}.uiControl.kind must be radio.`);
+  known(control, new Set(["kind", "off", "on"]), `${label}.uiControl`);
+  const off = parseUiControlImage(control.off, `${label}.uiControl.off`);
+  const on = parseUiControlImage(control.on, `${label}.uiControl.on`);
+  if (off.path === on.path)
+    fail(`${label}.uiControl off/on paths must be different.`);
+  if (off.size.width !== on.size.width || off.size.height !== on.size.height)
+    fail(`${label}.uiControl off/on sizes must be equal.`);
+  return deepFreeze({
+    id,
+    order,
+    ...(scope ? { scope } : {}),
+    placements,
+    uiControl: { kind: "radio", off, on },
+  });
+}
+
+function parseUiControlImage(value: unknown, label: string) {
+  const image = record(value, label);
+  known(image, new Set(["kind", "path", "size"]), label);
+  if (image.kind !== "image") fail(`${label}.kind must be image.`);
+  return deepFreeze({
+    kind: "image" as const,
+    path: localImagePath(image.path, `${label}.path`),
+    size: parseSize(image.size, `${label}.size`),
+  });
+}
+
+function parseNodePlacementV7(
+  value: unknown,
+  label: string,
+): SceneLayoutNodePlacement {
+  const placement = record(value, label);
+  known(placement, new Set(["x", "y", "scale", "rotation", "center"]), label);
+  const center =
+    placement.center === undefined
+      ? { x: 0.5, y: 0.5 }
+      : parseCenter(placement.center, `${label}.center`);
+  return deepFreeze({
+    x: finite(placement.x, `${label}.x`),
+    y: finite(placement.y, `${label}.y`),
+    scale: positive(placement.scale, `${label}.scale`),
+    rotation:
+      placement.rotation === undefined
+        ? 0
+        : finite(placement.rotation, `${label}.rotation`),
+    center,
+  });
+}
+
+function parseCenter(value: unknown, label: string) {
+  const center = record(value, label);
+  known(center, new Set(["x", "y"]), label);
+  const x = finite(center.x, `${label}.x`);
+  const y = finite(center.y, `${label}.y`);
+  if (x < 0 || x > 1 || y < 0 || y > 1)
+    fail(`${label} values must be between 0 and 1.`);
+  return { x, y };
+}
+
+function localImagePath(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0 || value !== value.trim())
+    fail(`${label} must be a non-empty string.`);
+  if (
+    value.includes("\\") ||
+    value.startsWith("/") ||
+    /^[A-Za-z]:/.test(value) ||
+    /^[a-z]+:/i.test(value)
+  )
+    fail(`${label} must be a relative local path.`);
+  const segments = value.split("/");
+  if (
+    segments.some(
+      (segment) =>
+        !PATH_SEGMENT.test(segment) || segment === "." || segment === "..",
+    )
+  )
+    fail(`${label} contains an invalid path segment.`);
+  const extension = value.slice(value.lastIndexOf(".")).toLowerCase();
+  if (!IMAGE_EXTENSIONS.has(extension))
+    fail(`${label} has an unsupported extension.`);
+  return value;
+}
+
 function createV6ValidationDocument(
   root: Record<string, unknown>,
   main: SceneLayoutManifestV7["main"],
@@ -515,7 +680,9 @@ function createV6ValidationDocument(
   readonly document: SceneLayoutManifestV6;
   readonly syntheticNodeId: string;
 } {
-  const rawNodes = root.nodes as readonly unknown[];
+  const rawNodes = (root.nodes as readonly unknown[]).filter((raw) =>
+    Object.hasOwn(record(raw, "scene layout node"), "resource"),
+  );
   const ids = new Set(
     rawNodes.map((raw) => String(record(raw, "scene layout node").id)),
   );
@@ -663,7 +830,9 @@ function collectLegacyBackgroundScopes(manifest: SceneLayoutManifestV6) {
   return result;
 }
 
-function legacyOrdinaryScope(node: SceneLayoutNode): SceneLayoutNode["scope"] {
+function legacyOrdinaryScope(
+  node: SceneLayoutGraphicNode,
+): SceneLayoutNode["scope"] {
   if (!node.gameMode) return undefined;
   const variants = ORIENTATIONS.filter(
     (orientation) => node.placements[orientation],
@@ -673,7 +842,7 @@ function legacyOrdinaryScope(node: SceneLayoutNode): SceneLayoutNode["scope"] {
 
 function legacyNodePlacement(
   manifest: SceneLayoutManifestV6,
-  node: SceneLayoutNode,
+  node: SceneLayoutGraphicNode,
   orientation: SceneLayoutOrientationVariantId,
   background: boolean,
 ): SceneLayoutNodePlacement | undefined {
@@ -688,7 +857,7 @@ function legacyNodePlacement(
 
 function legacyNodeContexts(
   manifest: SceneLayoutManifestV6,
-  node: SceneLayoutNode,
+  node: SceneLayoutGraphicNode,
   orientation: SceneLayoutOrientationVariantId,
   backgroundScope:
     | Record<string, SceneLayoutOrientationVariantId[]>
@@ -710,7 +879,7 @@ function legacyNodeContexts(
 
 function convertNodePlacement(
   origin: "top-left" | "center",
-  node: SceneLayoutNode,
+  node: SceneLayoutGraphicNode,
   placement: SceneLayoutNodePlacement,
   variant: LegacyVariant,
 ): SceneLayoutNodePlacement {

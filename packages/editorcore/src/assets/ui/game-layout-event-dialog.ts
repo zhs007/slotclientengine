@@ -943,6 +943,7 @@ const SPIN_LIFECYCLE_LABELS: Readonly<Record<string, string>> = Object.freeze({
 const FAMILY_LABELS: Readonly<Record<string, string>> = Object.freeze({
   variant: "画面变体",
   "node-animation": "节点动画",
+  "ui-control-state": "UI 控件状态",
   "spin-lifecycle": "Spin 生命周期",
   "symbol-state": "Symbol 状态",
   "symbols-state-batch": "批量图标状态",
@@ -960,6 +961,8 @@ const FAMILY_LABELS: Readonly<Record<string, string>> = Object.freeze({
 const FACET_LABELS: Readonly<Record<string, string>> = Object.freeze({
   event: "Event",
   node: "节点",
+  control: "控件",
+  "control-kind": "控件类型",
   animation: "动画",
   reel: "转轮",
   spin: "Spin 类型",

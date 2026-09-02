@@ -12,7 +12,8 @@
 两种模式都不修改美术源 ZIP。CDN delivery 由 RenderCore 的
 `loadSceneLayoutDeliveryFromUrl({ manifestUrl, urlPrefix })` 直接加载，不要求 game app 维护逐文件 import 表；manifest
 随游戏项目发布，URL prefix 只指向 hashed payload CDN，因此 JS、manifest 与资产可以位于不同 origin 或路径。
-CLI 可 strict 读取并结构化改写 Scene Layout v1–v6；输入是 v6 时保持其方向 placement 与 allocation v2。
+CLI 可 strict 读取并结构化改写 Scene Layout v1–v7；latest v7 保持方向 placement 与 runtime allocation。
+UI control radio 的 off/on 图片都会进入同一 typed owner closure、asset group 与 WebP reference rewrite，不按文件名重新配对。
 
 ## 前置条件
 

@@ -8,6 +8,8 @@ import {
   type SceneLayoutGameModeV7,
   type SceneLayoutEventAudioV1,
   type SceneLayoutNode,
+  type SceneLayoutGraphicNode,
+  type SceneLayoutUiControlSpec,
   type SceneLayoutRuntimeResourceSpec,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/data";
@@ -84,24 +86,40 @@ export type EditorVniPlaybackDraft = {
   loop: boolean;
 };
 
-export interface EditorNodeDraft {
+interface EditorNodeDraftBase {
   id: string;
   order: number;
   /** Missing means every game mode; entries select exact mode/orientation contexts. */
   scope?: Readonly<Record<string, readonly ("landscape" | "portrait")[]>>;
+  placements: Partial<Record<SceneLayoutVariantId, EditorNodePlacement>>;
+  /** Editor-only cache for temporarily hidden orientation placements. */
+  hiddenPlacements?: Partial<Record<SceneLayoutVariantId, EditorNodePlacement>>;
+}
+
+export interface EditorGraphicNodeDraft extends EditorNodeDraftBase {
+  readonly layerType?: "graphic";
   resourceId: string;
   playback?: EditorSpinePlaybackDraft | EditorVniPlaybackDraft;
   imageString?: {
     text: string;
     anchor: { x: number; y: number };
   };
-  placements: Partial<Record<SceneLayoutVariantId, EditorNodePlacement>>;
-  /**
-   * Editor-only cache for temporarily hidden orientation placements.
-   * Export intentionally serializes only `placements`.
-   */
-  hiddenPlacements?: Partial<Record<SceneLayoutVariantId, EditorNodePlacement>>;
+  uiControl?: never;
 }
+
+export interface EditorUiControlNodeDraft extends EditorNodeDraftBase {
+  readonly layerType: "ui-control";
+  readonly uiControl: {
+    readonly kind: "radio";
+    offResourceId: string;
+    onResourceId: string;
+  };
+  resourceId?: never;
+  playback?: never;
+  imageString?: never;
+}
+
+export type EditorNodeDraft = EditorGraphicNodeDraft | EditorUiControlNodeDraft;
 
 export interface EditorNodePlacement {
   x: number;
@@ -331,8 +349,8 @@ export function applySymbolPackageCellSize(
 
 export function resolveEditorNodeResource(
   project: Pick<EditorProject, "resources" | "assets">,
-  node: EditorNodeDraft,
-): SceneLayoutNode["resource"] {
+  node: EditorGraphicNodeDraft,
+): SceneLayoutGraphicNode["resource"] {
   const resource = project.resources.get(node.resourceId);
   if (!resource) {
     throw new Error(`节点 ${node.id} 引用未知资源：${node.resourceId}`);
@@ -400,6 +418,48 @@ export function resolveEditorNodeResource(
   };
 }
 
+export function resolveEditorUiControl(
+  project: Pick<EditorProject, "resources" | "assets">,
+  node: EditorUiControlNodeDraft,
+): SceneLayoutUiControlSpec {
+  const resolve = (resourceId: string, state: "off" | "on") => {
+    const resource = project.resources.get(resourceId);
+    if (!resource)
+      throw new Error(
+        `控件 ${node.id} 的 ${state} 引用未知资源：${resourceId}`,
+      );
+    if (resource.kind !== "image")
+      throw new Error(`控件 ${node.id} 的 ${state} 必须绑定图片资源。`);
+    if (!project.assets.has(resource.path))
+      throw new Error(
+        `控件 ${node.id} 的 ${state} 缺少 bytes：${resource.path}`,
+      );
+    return { kind: "image" as const, path: resource.path, size: resource.size };
+  };
+  const off = resolve(node.uiControl.offResourceId, "off");
+  const on = resolve(node.uiControl.onResourceId, "on");
+  if (off.path === on.path)
+    throw new Error(`控件 ${node.id} 的 off/on 必须是两张不同图片。`);
+  if (off.size.width !== on.size.width || off.size.height !== on.size.height)
+    throw new Error(`控件 ${node.id} 的 off/on 图片尺寸必须相同。`);
+  return { kind: "radio", off, on };
+}
+
+function editorNodeToManifest(
+  project: EditorProject,
+  node: EditorNodeDraft,
+): SceneLayoutNode {
+  const common = {
+    id: node.id,
+    order: node.order,
+    placements: structuredClone(node.placements),
+    ...(node.scope ? { scope: structuredClone(node.scope) } : {}),
+  };
+  return node.layerType === "ui-control"
+    ? { ...common, uiControl: resolveEditorUiControl(project, node) }
+    : { ...common, resource: resolveEditorNodeResource(project, node) };
+}
+
 export function editorProjectToPreviewManifest(
   project: EditorProject,
   preferredVariant: SceneLayoutVariantId,
@@ -464,13 +524,7 @@ export function editorProjectToManifest(
       },
       gap: { x: project.reel.gapX, y: project.reel.gapY },
     },
-    nodes: project.nodes.map((node) => ({
-      id: node.id,
-      order: node.order,
-      resource: resolveEditorNodeResource(project, node),
-      placements: structuredClone(node.placements),
-      ...(node.scope ? { scope: structuredClone(node.scope) } : {}),
-    })),
+    nodes: project.nodes.map((node) => editorNodeToManifest(project, node)),
     ...(() => {
       const bindings = new Map<string, EditorModeSymbolBinding>();
       for (const mode of project.gameModes.modes) {
@@ -671,18 +725,7 @@ export function editorProjectToManifest(
   const latestDraft = {
     ...base,
     version: 7 as const,
-    nodes: project.nodes.map((node) => ({
-      id: node.id,
-      order: node.order,
-      resource: resolveEditorNodeResource(project, node),
-      placements: structuredClone(node.placements),
-      ...(base.nodes.find((candidate) => candidate.id === node.id)?.scope
-        ? {
-            scope: base.nodes.find((candidate) => candidate.id === node.id)!
-              .scope,
-          }
-        : {}),
-    })),
+    nodes: project.nodes.map((node) => editorNodeToManifest(project, node)),
     audio: emptyLegacyAudioCatalog(),
     eventAudio: canonicalEditorEventAudio(project),
     gameModes: base.gameModes,
@@ -749,7 +792,9 @@ export function manifestToEditorProject(
   if (
     latest.nodes.some(
       (node) =>
-        node.resource.kind === "spine" && "stateMachine" in node.resource,
+        "resource" in node &&
+        node.resource.kind === "spine" &&
+        "stateMachine" in node.resource,
     ) ||
     latest.gameModes.modes.some(
       (mode) => Object.keys(mode.nodeStates).length > 0,
@@ -833,6 +878,22 @@ export function manifestToEditorProject(
     project.runtimeResourceBindings.set(key, resourceId);
   }
   project.nodes = latest.nodes.map((node) => {
+    if ("uiControl" in node) {
+      const offResourceId = registerResource(
+        manifestResourceToEditorResource(node.uiControl.off, assets),
+      );
+      const onResourceId = registerResource(
+        manifestResourceToEditorResource(node.uiControl.on, assets),
+      );
+      return {
+        id: node.id,
+        order: node.order,
+        ...(node.scope ? { scope: structuredClone(node.scope) } : {}),
+        layerType: "ui-control" as const,
+        uiControl: { kind: "radio" as const, offResourceId, onResourceId },
+        placements: structuredClone(node.placements),
+      };
+    }
     const resourceDraft = manifestResourceToEditorResource(
       node.resource,
       assets,
@@ -842,6 +903,7 @@ export function manifestToEditorProject(
       id: node.id,
       order: node.order,
       ...(node.scope ? { scope: structuredClone(node.scope) } : {}),
+      layerType: "graphic" as const,
       resourceId,
       ...(node.resource.kind === "spine"
         ? {
@@ -1280,7 +1342,7 @@ function orientationVariant(
 }
 
 function manifestResourceToEditorResource(
-  resource: SceneLayoutNode["resource"],
+  resource: SceneLayoutGraphicNode["resource"],
   assets: ReadonlyMap<string, Uint8Array>,
 ): EditorLayoutResourceDraft {
   if (resource.kind === "image") {

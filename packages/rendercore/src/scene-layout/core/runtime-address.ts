@@ -26,6 +26,7 @@ import type {
   SceneLayoutPackageResource,
   SceneLayoutPopupStringInput,
   SceneLayoutRenderObject,
+  SceneLayoutUiControl,
 } from "../types.js";
 import {
   formatGameLayoutRuntimeAddress,
@@ -62,6 +63,9 @@ export interface GameLayoutStructuralEndpoint extends EndpointBase<
 }
 export interface GameLayoutRenderObjectEndpoint extends EndpointBase<"render-object"> {
   get(): SceneLayoutRenderObject;
+}
+export interface GameLayoutUiControlEndpoint extends EndpointBase<"ui-control"> {
+  get(): SceneLayoutUiControl;
 }
 export interface GameLayoutRenderObjectInstanceEndpoint extends EndpointBase<"render-object-instance"> {
   get(): RenderObject;
@@ -103,6 +107,7 @@ export interface GameLayoutEventEndpoint extends EndpointBase<"event"> {}
 export type GameLayoutRuntimeEndpoint =
   | GameLayoutStructuralEndpoint
   | GameLayoutRenderObjectEndpoint
+  | GameLayoutUiControlEndpoint
   | GameLayoutRenderObjectInstanceEndpoint
   | GameLayoutRenderLayerEndpoint
   | GameLayoutReelEndpoint
@@ -139,6 +144,7 @@ export interface GameLayoutRuntimeMount {
 }
 interface RuntimeBridge {
   getRenderObject(id: string): SceneLayoutRenderObject | null;
+  getUiControl?(id: string): SceneLayoutUiControl | null;
   getRenderLayer(ref: string): RenderObjectLayer;
   getArea(id: string): import("../../reel/index.js").PresentableSymbolArea;
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
@@ -426,6 +432,31 @@ export function createGameLayoutRuntimeAddresses(
       }),
     );
   for (const node of manifest.nodes) {
+    if ("uiControl" in node) {
+      const owner = ["ui-control", node.id];
+      add(
+        owner,
+        "ui-control",
+        null,
+        "borrowed",
+        (descriptor) =>
+          Object.freeze({
+            kind: "ui-control",
+            descriptor,
+            get: () => {
+              bridge.assertReady();
+              const value = bridge.getUiControl?.(node.id) ?? null;
+              if (!value)
+                throw new SceneLayoutError(
+                  `Authored UI control is unavailable: ${descriptor.address}.`,
+                );
+              return value;
+            },
+          }),
+        { controlKind: node.uiControl.kind },
+      );
+      continue;
+    }
     const owner = ["node", node.id];
     add(
       owner,

@@ -143,6 +143,27 @@ export async function validateLayoutAssets(
   collectSceneLayoutPackagePaths({ manifest, files: assets });
   if (options.decodeImage) {
     for (const node of manifest.nodes) {
+      if ("uiControl" in node) {
+        for (const image of [node.uiControl.off, node.uiControl.on]) {
+          const bytes = assets.get(image.path)!;
+          const url = URL.createObjectURL(
+            new Blob([bytes as BlobPart], { type: mimeType(image.path) }),
+          );
+          try {
+            const decoded = await options.decodeImage(url);
+            if (
+              decoded.width !== image.size.width ||
+              decoded.height !== image.size.height
+            )
+              throw new Error(
+                `图片尺寸漂移 ${image.path}：声明 ${image.size.width}x${image.size.height}，实际 ${decoded.width}x${decoded.height}。`,
+              );
+          } finally {
+            URL.revokeObjectURL(url);
+          }
+        }
+        continue;
+      }
       if (node.resource.kind !== "image") continue;
       const bytes = assets.get(node.resource.path)!;
       const url = URL.createObjectURL(

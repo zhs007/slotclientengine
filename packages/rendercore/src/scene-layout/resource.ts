@@ -93,6 +93,17 @@ export function createSceneLayoutResource(
   const runtimeResources: Record<string, SceneLayoutRuntimeResource> = {};
 
   for (const node of manifest.nodes) {
+    if ("uiControl" in node) {
+      for (const image of [node.uiControl.off, node.uiControl.on]) {
+        imagePaths.add(image.path);
+        imageUrls[image.path] = requireString(
+          imageModules,
+          image.path,
+          "scene layout UI control image",
+        );
+      }
+      continue;
+    }
     if (node.resource.kind === "image") {
       imagePaths.add(node.resource.path);
       imageUrls[node.resource.path] = requireString(
@@ -520,6 +531,11 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       | "json-data"
     >();
     for (const node of manifest.nodes) {
+      if ("uiControl" in node) {
+        resourceByPath.set(node.uiControl.off.path, "image");
+        resourceByPath.set(node.uiControl.on.path, "image");
+        continue;
+      }
       const resource = node.resource;
       if (resource.kind === "image") {
         resourceByPath.set(resource.path, "image");
@@ -569,6 +585,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         resourceByPath.set(path, "texture");
     }
     for (const node of manifest.nodes) {
+      if (!("resource" in node)) continue;
       if (node.resource.kind !== "image-string") continue;
       if (imageStringResources[node.resource.manifest]) continue;
       const dependencyUrl = resolveContainedAssetUrl(
@@ -596,6 +613,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         });
     }
     for (const node of manifest.nodes) {
+      if (!("resource" in node)) continue;
       if (node.resource.kind !== "vni") continue;
       if (vniResources[node.resource.project]) continue;
       const projectUrl = resolveContainedAssetUrl(
@@ -719,10 +737,15 @@ export async function loadSceneLayoutResourceFromUrl(options: {
           blob,
           path,
         );
-        const imageSpec = manifest.nodes.find(
-          (node) =>
-            node.resource.kind === "image" && node.resource.path === path,
-        )?.resource;
+        const imageSpec = manifest.nodes.flatMap((node) => {
+          if ("uiControl" in node)
+            return [node.uiControl.off, node.uiControl.on].filter(
+              (image) => image.path === path,
+            );
+          return node.resource.kind === "image" && node.resource.path === path
+            ? [node.resource]
+            : [];
+        })[0];
         if (
           imageSpec?.kind === "image" &&
           (decoded.width !== imageSpec.size.width ||

@@ -50,11 +50,13 @@ import {
 } from "../model/editor-store.js";
 import {
   addLayerFromResource,
+  addRadioControlLayer,
   bindRuntimeResource,
   deleteLayoutResource,
   getLayoutResourceReferences,
   moveLayer,
   rebindLayerResource,
+  rebindRadioControlResource,
   removeLayer,
   renameNode,
   replaceImageResource,
@@ -654,7 +656,9 @@ export class GameLayoutEditorApp {
           const popupId = this.#selectedPopupId;
           const variant = input.dataset.popupPlacement as SceneLayoutVariantId;
           const field = input.dataset.popupPlacementField as
-            "x" | "y" | "scale";
+            | "x"
+            | "y"
+            | "scale";
           if (!popupId) {
             this.#store.setExternalError(
               new Error("尚未选择 popup dependency。"),
@@ -705,7 +709,8 @@ export class GameLayoutEditorApp {
       "change",
       (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          "standard" | "grid-cell";
+          | "standard"
+          | "grid-cell";
         this.runTransaction((draft) => {
           const mode = draft.gameModes.modes.find(
             (candidate) => candidate.id === this.#selectedGameMode,
@@ -1744,7 +1749,9 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLSelectElement>("[data-transition-kind]")
       ?.addEventListener("change", (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          "none" | "spine" | "video";
+          | "none"
+          | "spine"
+          | "video";
         this.runTransaction((draft) => {
           const transition = draft.gameModes.transitions.find(
             (candidate) =>
@@ -1802,7 +1809,9 @@ export class GameLayoutEditorApp {
           const variant = input.dataset
             .transitionPopupPlacement as SceneLayoutVariantId;
           const field = input.dataset.transitionPopupPlacementField as
-            "x" | "y" | "scale";
+            | "x"
+            | "y"
+            | "scale";
           this.runTransaction((draft) => {
             const transition = draft.gameModes.transitions.find(
               (candidate) =>
@@ -1946,7 +1955,11 @@ export class GameLayoutEditorApp {
     );
     status?.addEventListener("change", () => {
       this.#session.resourceStatus = status.value as
-        "all" | "referenced" | "runtime" | "unused" | "error";
+        | "all"
+        | "referenced"
+        | "runtime"
+        | "unused"
+        | "error";
       this.renderWorkspace(this.#store.getSnapshot());
     });
     panel
@@ -2029,6 +2042,14 @@ export class GameLayoutEditorApp {
         ),
       );
     panel
+      .querySelector("[data-open-add-radio]")
+      ?.addEventListener("click", (event) =>
+        this.openPicker(
+          { kind: "add-radio" },
+          event.currentTarget as HTMLElement,
+        ),
+      );
+    panel
       .querySelectorAll<HTMLButtonElement>("[data-outline-key]")
       .forEach((button) =>
         button.addEventListener("click", () =>
@@ -2069,6 +2090,28 @@ export class GameLayoutEditorApp {
             button,
           ),
         ),
+      );
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-rebind-radio]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          const nodeId = button.dataset.layerNodeId!;
+          const state = button.dataset.rebindRadio as "off" | "on";
+          const node = this.#store
+            .getSnapshot()
+            .project.nodes.find((candidate) => candidate.id === nodeId);
+          const preferred =
+            node?.layerType === "ui-control"
+              ? state === "off"
+                ? node.uiControl.offResourceId
+                : node.uiControl.onResourceId
+              : "";
+          this.openPicker(
+            { kind: "rebind-radio", nodeId, state },
+            button,
+            preferred,
+          );
+        }),
       );
     panel
       .querySelectorAll<HTMLButtonElement>("[data-move-layer]")
@@ -2348,7 +2391,10 @@ export class GameLayoutEditorApp {
       preferredResourceId,
     );
     const selected = this.#session.picker.selectedResourceId;
-    if (selected && context.kind === "add-layer") {
+    if (
+      selected &&
+      (context.kind === "add-layer" || context.kind === "add-radio")
+    ) {
       this.#session.picker.nodeId = suggestNodeId(
         this.#store.getSnapshot().project,
         selected,
@@ -2375,16 +2421,38 @@ export class GameLayoutEditorApp {
     const selected = project.resources.get(state.selectedResourceId);
     const contextLabel =
       state.context.kind === "add-layer"
-        ? "添加图层"
-        : `重绑图层 ${state.context.nodeId}`;
+        ? "添加图形图层"
+        : state.context.kind === "add-radio"
+          ? "添加 UI 控件 / 单选框"
+          : state.context.kind === "rebind-radio"
+            ? `重绑单选框 ${state.context.nodeId} / ${state.context.state}`
+            : `重绑图层 ${state.context.nodeId}`;
     const placementHint =
       state.context.kind === "add-layer" && selected?.kind === "spine"
         ? "普通 Spine 以骨架原点放在当前画布中心，不需要填写骨架大小；scale 为 1。"
-        : state.context.kind === "add-layer"
+        : state.context.kind === "add-layer" ||
+            state.context.kind === "add-radio"
           ? "初始 placement 为 { x: 0, y: 0, scale: 1 }。不会按文件名或唯一候选自动绑定。"
           : "重绑资源会保留已有 placement，并尽可能保留兼容的播放配置。";
-    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${state.type === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "vni" ? "VNI" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form"><div class="picker-resource-preview" data-picker-preview aria-live="polite"></div>${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 filename-key resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : ""}${
-      state.context.kind === "add-layer"
+    const candidateMarkup = candidates
+      .map((candidate) =>
+        state.context.kind === "add-radio"
+          ? `<div class="picker-radio-candidate"><span><strong>${escapeHtml(candidate.resourceId)}</strong><small>${escapeHtml(candidate.summary)}</small></span><button type="button" data-picker-radio-slot="off" data-resource-id="${escapeHtml(candidate.resourceId)}" aria-pressed="${candidate.resourceId === state.selectedResourceId}">设为 off</button><button type="button" data-picker-radio-slot="on" data-resource-id="${escapeHtml(candidate.resourceId)}" aria-pressed="${candidate.resourceId === state.secondaryResourceId}">设为 on</button></div>`
+          : `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "vni" ? "VNI" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`,
+      )
+      .join("");
+    const selectionMarkup =
+      state.context.kind === "add-radio"
+        ? `<fieldset><legend>单选框图片</legend><p><strong>off</strong> ${escapeHtml(state.selectedResourceId || "未选择")}</p><p><strong>on</strong> ${escapeHtml(state.secondaryResourceId || "未选择")}</p></fieldset>`
+        : selected
+          ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>`
+          : "<p>请选择一个 filename-key resource。</p>";
+    const canConfirm =
+      state.context.kind === "add-radio"
+        ? Boolean(state.selectedResourceId && state.secondaryResourceId)
+        : Boolean(selected);
+    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type ${state.context.kind === "add-radio" || state.context.kind === "rebind-radio" ? "disabled" : ""}><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${state.type === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidateMarkup || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form"><div class="picker-resource-preview" data-picker-preview aria-live="polite"></div>${selectionMarkup}${state.context.kind === "add-layer" || state.context.kind === "add-radio" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : ""}${
+      state.context.kind === "add-layer" || state.context.kind === "add-radio"
         ? ordinaryLayerVariantIds
             .map(
               (variant) =>
@@ -2392,7 +2460,7 @@ export class GameLayoutEditorApp {
             )
             .join("")
         : ""
-    }${selected?.kind === "spine" ? `<label>default animation<select data-picker-animation><option value="">必须明确选择</option>${selected.animationNames.map((name) => `<option value="${escapeHtml(name)}" ${state.defaultAnimation === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>` : ""}<p class="hint">${escapeHtml(placementHint)}</p></section></div><footer><button type="button" data-picker-cancel>取消</button><button type="button" class="primary" data-picker-confirm ${selected ? "" : "disabled"}>确认</button></footer></div>`;
+    }${selected?.kind === "spine" ? `<label>default animation<select data-picker-animation><option value="">必须明确选择</option>${selected.animationNames.map((name) => `<option value="${escapeHtml(name)}" ${state.defaultAnimation === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>` : ""}<p class="hint">${escapeHtml(placementHint)}</p></section></div><footer><button type="button" data-picker-cancel>取消</button><button type="button" class="primary" data-picker-confirm ${canConfirm ? "" : "disabled"}>确认</button></footer></div>`;
     if (!dialog.open) {
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
@@ -2495,6 +2563,21 @@ export class GameLayoutEditorApp {
         });
       });
     dialog
+      .querySelectorAll<HTMLButtonElement>("[data-picker-radio-slot]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          const resourceId = button.dataset.resourceId!;
+          if (button.dataset.pickerRadioSlot === "off") {
+            state.selectedResourceId = resourceId;
+            if (!state.nodeId)
+              state.nodeId = suggestNodeId(project, resourceId);
+          } else {
+            state.secondaryResourceId = resourceId;
+          }
+          this.renderPicker(project);
+        }),
+      );
+    dialog
       .querySelector<HTMLInputElement>("[data-picker-node-id]")
       ?.addEventListener("input", (event) => {
         state.nodeId = (event.currentTarget as HTMLInputElement).value;
@@ -2504,7 +2587,8 @@ export class GameLayoutEditorApp {
       .forEach((input) =>
         input.addEventListener("change", () => {
           const variant = input.dataset.pickerVariant as
-            "landscape" | "portrait";
+            | "landscape"
+            | "portrait";
           state.variants = input.checked
             ? [...new Set([...state.variants, variant])]
             : state.variants.filter((item) => item !== variant);
@@ -2567,6 +2651,27 @@ export class GameLayoutEditorApp {
         );
         return;
       }
+      if (state.context.kind === "add-radio") {
+        const on = project.resources.get(state.secondaryResourceId);
+        if (!on) throw new Error("请选择单选框 on 图片。");
+        let nodeId = state.nodeId;
+        this.#store.transact((draft) => {
+          const node = addRadioControlLayer({
+            project: draft,
+            offResourceId: resource.id,
+            onResourceId: on.id,
+            nodeId,
+            variants: state.variants,
+          });
+          nodeId = node.id;
+        });
+        this.#session.activeTab = "layout";
+        this.#session.selection = { kind: "layer", nodeId };
+        this.closePicker(false);
+        this.renderWorkspace(this.#store.getSnapshot());
+        this.showFeedback(`已添加 UI 控件 / 单选框 ${nodeId}。`);
+        return;
+      }
       if (state.context.kind === "rebind-layer") {
         const context = state.context;
         this.#store.transact((draft) =>
@@ -2587,6 +2692,23 @@ export class GameLayoutEditorApp {
         this.closePicker(false);
         this.renderWorkspace(this.#store.getSnapshot());
         this.showFeedback(`图层 ${context.nodeId} 已重绑到 ${resource.id}。`);
+        return;
+      }
+      if (state.context.kind === "rebind-radio") {
+        const context = state.context;
+        this.#store.transact((draft) =>
+          rebindRadioControlResource({
+            project: draft,
+            nodeId: context.nodeId,
+            state: context.state,
+            resourceId: resource.id,
+          }),
+        );
+        this.closePicker(false);
+        this.renderWorkspace(this.#store.getSnapshot());
+        this.showFeedback(
+          `单选框 ${context.nodeId} 的 ${context.state} 已重绑到 ${resource.id}。`,
+        );
         return;
       }
     } catch (error) {

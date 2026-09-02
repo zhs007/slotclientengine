@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
 import { parsePopupManifest } from "@slotclientengine/rendercore/popup/editor";
 import { parseSymbolPackageManifest } from "@slotclientengine/rendercore/symbol/data";
+import type { SceneLayoutNode } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   exportLayoutZip,
   materializeLayoutOwnedAssets,
@@ -23,6 +24,11 @@ import {
   manifestToEditorProject,
 } from "../src/model/editor-project.js";
 import { addGameMode } from "../src/model/game-mode-commands.js";
+
+function graphicResource(node: SceneLayoutNode) {
+  if (!("resource" in node)) throw new Error("expected graphic node");
+  return node.resource;
+}
 import { popupFiles } from "./popup-fixture.js";
 
 const decodeImage = async () => ({ width: 1, height: 1 });
@@ -416,7 +422,7 @@ describe("layout zip IO", () => {
       "u5927-u5956-bg-2.png",
       "u5927-u5956-bg.png",
     ]);
-    expect(imported.manifest.nodes.map((node) => node.resource)).toEqual([
+    expect(imported.manifest.nodes.map(graphicResource)).toEqual([
       expect.objectContaining({ path: "u5927-u5956-bg.png" }),
       expect.objectContaining({ path: "u5927-u5956-bg-2.png" }),
     ]);
@@ -844,8 +850,8 @@ describe("layout zip IO", () => {
         ["legacy/unused.png", texture],
       ]),
     });
-    const first = materialized.manifest.nodes[0]!.resource;
-    const second = materialized.manifest.nodes[1]!.resource;
+    const first = graphicResource(materialized.manifest.nodes[0]!);
+    const second = graphicResource(materialized.manifest.nodes[1]!);
     expect(first.kind).toBe("spine");
     expect(second).toEqual(first);
     if (first.kind !== "spine") throw new Error("expected Spine resource");
@@ -903,7 +909,7 @@ describe("layout zip IO", () => {
         ],
       ]),
     });
-    const resource = materialized.manifest.nodes[0]!.resource;
+    const resource = graphicResource(materialized.manifest.nodes[0]!);
     if (resource.kind !== "spine") throw new Error("expected Spine resource");
     const pages = Object.keys(resource.textures);
     const paths = Object.values(resource.textures);
@@ -1335,7 +1341,7 @@ describe("layout zip IO", () => {
       id: imageManifest.id,
     });
     expect(imported.manifest).not.toHaveProperty("adaptation");
-    const importedImage = imported.manifest.nodes[0]!.resource;
+    const importedImage = graphicResource(imported.manifest.nodes[0]!);
     expect(importedImage.kind).toBe("image");
     if (importedImage.kind !== "image") throw new Error("expected image");
     expect(importedImage.path).toBe("bg.png");
@@ -1516,9 +1522,12 @@ describe("layout zip IO", () => {
       decodeImage,
     });
     const imported = await importLayoutZip(exported.bytes, { decodeImage });
-    const importedVni = imported.manifest.nodes.find(
+    const importedVniNode = imported.manifest.nodes.find(
       ({ id }) => id === "vni-fx",
-    )?.resource;
+    );
+    const importedVni = importedVniNode
+      ? graphicResource(importedVniNode)
+      : undefined;
     expect(importedVni).toMatchObject({ kind: "vni", loop: false });
     if (importedVni?.kind !== "vni")
       throw new Error("round-trip VNI node missing");

@@ -38,6 +38,8 @@ import {
   ordinaryLayerVariantIds,
   cloneEditorProject,
   type EditorNodeDraft,
+  type EditorGraphicNodeDraft,
+  type EditorUiControlNodeDraft,
   type EditorNodePlacement,
   type EditorProject,
   type EditorSpineGameModeTransitionDraft,
@@ -290,7 +292,7 @@ export async function replaceImageStringResource(options: {
   if (current.kind !== "image-string")
     throw new Error("资源类型必须保持为 image-string。");
   for (const node of options.project.nodes.filter(
-    (node) => node.resourceId === current.id,
+    (node) => node.layerType !== "ui-control" && node.resourceId === current.id,
   )) {
     validateImageStringText(node.imageString?.text ?? "", imported.manifest);
   }
@@ -530,18 +532,22 @@ export function getLayoutResourceReferences(
   project: EditorProject,
   resourceId: string,
 ): readonly EditorResourceReference[] {
-  const nodes = project.nodes
-    .filter((node) => node.resourceId === resourceId)
-    .map((node) => {
-      const variants = activeVariantIds(project).filter((variant) =>
+  const nodes: EditorResourceReference[] = [];
+  for (const node of project.nodes) {
+    const variants = Object.freeze(
+      activeVariantIds(project).filter((variant) =>
         Boolean(node.placements[variant]),
-      );
-      return Object.freeze({
-        nodeId: node.id,
-        role: "layer" as const,
-        variants: Object.freeze(variants),
-      });
-    });
+      ),
+    );
+    if (node.layerType === "ui-control") {
+      if (node.uiControl.offResourceId === resourceId)
+        nodes.push({ nodeId: node.id, role: "ui-control-off", variants });
+      if (node.uiControl.onResourceId === resourceId)
+        nodes.push({ nodeId: node.id, role: "ui-control-on", variants });
+    } else if (node.resourceId === resourceId) {
+      nodes.push({ nodeId: node.id, role: "layer", variants });
+    }
+  }
   const transitions = project.gameModes.transitions
     .filter(
       (transition) =>
@@ -660,7 +666,7 @@ export function addLayerFromResource(options: {
   readonly variants: readonly SceneLayoutVariantId[];
   readonly defaultAnimation?: string;
   readonly loop?: boolean;
-}): EditorNodeDraft {
+}): EditorGraphicNodeDraft {
   const resource = requireResource(options.project, options.resourceId);
   if (resource.kind === "video" || resource.kind === "audio")
     throw new Error(`${resource.kind} 资源不能创建普通图层。`);
@@ -670,9 +676,10 @@ export function addLayerFromResource(options: {
     resource,
     options.defaultAnimation,
   );
-  const node: EditorNodeDraft = {
+  const node: EditorGraphicNodeDraft = {
     id: options.nodeId,
     order: nextOrder(options.project),
+    layerType: "graphic",
     resourceId: resource.id,
     ...(resource.kind === "spine"
       ? {
@@ -703,6 +710,72 @@ export function addLayerFromResource(options: {
   return node;
 }
 
+export function addRadioControlLayer(options: {
+  readonly project: EditorProject;
+  readonly offResourceId: string;
+  readonly onResourceId: string;
+  readonly nodeId: string;
+  readonly variants: readonly SceneLayoutVariantId[];
+}): EditorUiControlNodeDraft {
+  const off = requireResource(options.project, options.offResourceId);
+  const on = requireResource(options.project, options.onResourceId);
+  if (off.kind !== "image" || on.kind !== "image")
+    throw new Error("单选框 off/on 必须绑定图片资源。");
+  if (off.path === on.path)
+    throw new Error("单选框 off/on 必须是两张不同图片。");
+  if (off.size.width !== on.size.width || off.size.height !== on.size.height)
+    throw new Error("单选框 off/on 图片尺寸必须相同。");
+  assertNodeIdAvailable(options.project, options.nodeId);
+  assertLayerVariantsAllowed(options.variants);
+  const node: EditorUiControlNodeDraft = {
+    id: options.nodeId,
+    order: nextOrder(options.project),
+    layerType: "ui-control",
+    uiControl: {
+      kind: "radio",
+      offResourceId: off.id,
+      onResourceId: on.id,
+    },
+    placements: Object.fromEntries(
+      options.variants.map((variant) => [
+        variant,
+        createDefaultNodePlacement(),
+      ]),
+    ),
+  };
+  options.project.nodes.push(node);
+  return node;
+}
+
+export function rebindRadioControlResource(options: {
+  readonly project: EditorProject;
+  readonly nodeId: string;
+  readonly state: "off" | "on";
+  readonly resourceId: string;
+}): void {
+  const node = requireLayer(options.project, options.nodeId);
+  if (node.layerType !== "ui-control")
+    throw new Error(`图层 ${options.nodeId} 不是 UI 控件。`);
+  const resource = requireResource(options.project, options.resourceId);
+  if (resource.kind !== "image")
+    throw new Error("单选框状态必须绑定图片资源。");
+  const otherId =
+    options.state === "off"
+      ? node.uiControl.onResourceId
+      : node.uiControl.offResourceId;
+  const other = requireResource(options.project, otherId);
+  if (other.kind !== "image") throw new Error("单选框另一状态不是图片资源。");
+  if (resource.path === other.path)
+    throw new Error("单选框 off/on 必须是两张不同图片。");
+  if (
+    resource.size.width !== other.size.width ||
+    resource.size.height !== other.size.height
+  )
+    throw new Error("单选框 off/on 图片尺寸必须相同。");
+  if (options.state === "off") node.uiControl.offResourceId = resource.id;
+  else node.uiControl.onResourceId = resource.id;
+}
+
 export function rebindLayerResource(options: {
   readonly project: EditorProject;
   readonly nodeId: string;
@@ -711,6 +784,8 @@ export function rebindLayerResource(options: {
   readonly loop?: boolean;
 }): void {
   const node = requireLayer(options.project, options.nodeId);
+  if (node.layerType === "ui-control")
+    throw new Error(`UI 控件 ${options.nodeId} 不能重绑为普通图形资源。`);
   const previousResource = requireResource(options.project, node.resourceId);
   const previousPlayback = node.playback;
   const previousImageString = node.imageString;
@@ -813,6 +888,8 @@ export function setNodeDefaultAnimation(
 ): void {
   const node = project.nodes.find((item) => item.id === nodeId);
   if (!node) throw new Error(`未知节点：${nodeId}`);
+  if (node.layerType === "ui-control")
+    throw new Error(`节点 ${nodeId} 不是动画图层。`);
   const resource = requireResource(project, node.resourceId);
   const value = validateAnimation(resource, animation);
   if (!value) throw new Error("图片节点没有 animation。");
@@ -831,6 +908,8 @@ export function setNodeSpinePlayback(
 ): void {
   const node = project.nodes.find((item) => item.id === nodeId);
   if (!node) throw new Error(`未知节点：${nodeId}`);
+  if (node.layerType === "ui-control")
+    throw new Error(`节点 ${nodeId} 不是 Spine。`);
   const resource = requireResource(project, node.resourceId);
   if (resource.kind !== "spine") throw new Error(`节点 ${nodeId} 不是 Spine。`);
   validateEditorSpinePlayback(playback, resource.animationNames, nodeId);
@@ -845,6 +924,8 @@ export function setNodePlaybackLoop(
 ): void {
   const node = project.nodes.find((item) => item.id === nodeId);
   if (!node) throw new Error(`未知节点：${nodeId}`);
+  if (node.layerType === "ui-control")
+    throw new Error(`节点 ${nodeId} 不是动画资源。`);
   const resource = requireResource(project, node.resourceId);
   if (resource.kind !== "spine" && resource.kind !== "vni")
     throw new Error(`节点 ${nodeId} 不是动画资源。`);
@@ -1656,6 +1737,36 @@ function commitResourceReplacement(
           .join(", ")}。`,
       );
   }
+  if (replacement.kind === "image") {
+    for (const reference of references) {
+      if (
+        reference.role !== "ui-control-off" &&
+        reference.role !== "ui-control-on"
+      )
+        continue;
+      const node = project.nodes.find(
+        (candidate) => candidate.id === reference.nodeId,
+      );
+      if (!node || node.layerType !== "ui-control")
+        throw new Error(
+          `单选框图片引用失效：${reference.nodeId} / ${reference.role}。`,
+        );
+      const otherId =
+        reference.role === "ui-control-off"
+          ? node.uiControl.onResourceId
+          : node.uiControl.offResourceId;
+      const other = requireResource(project, otherId);
+      if (other.kind !== "image")
+        throw new Error(`单选框 ${node.id} 的另一状态不是图片资源。`);
+      if (replacement.path === other.path)
+        throw new Error(`单选框 ${node.id} 的 off/on 必须是两张不同图片。`);
+      if (
+        replacement.size.width !== other.size.width ||
+        replacement.size.height !== other.size.height
+      )
+        throw new Error(`单选框 ${node.id} 的 off/on 图片尺寸必须相同。`);
+    }
+  }
   for (const [path, bytes] of prepared.assets)
     project.assets.set(path, bytes.slice());
   project.resources.set(current.id, prepared.resource);
@@ -1841,7 +1952,8 @@ export function describeResource(resource: EditorLayoutResource): string {
 
 function requireImageStringNode(project: EditorProject, nodeId: string) {
   const node = project.nodes.find((item) => item.id === nodeId);
-  if (!node?.imageString) throw new Error(`节点 ${nodeId} 不是 image-string。`);
+  if (!node || node.layerType === "ui-control" || !node.imageString)
+    throw new Error(`节点 ${nodeId} 不是 image-string。`);
   const resource = requireResource(project, node.resourceId);
   if (resource.kind !== "image-string")
     throw new Error(`节点 ${nodeId} 的资源不是 image-string。`);

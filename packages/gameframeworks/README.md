@@ -10,6 +10,7 @@ Scene Layout 的 program-only JSON 数据也由 facade 暴露类型。游戏在�
 
 facade re-export `gamelayout:/` runtime address formatter、parser、resolver 与 endpoint/event 类型。
 程序接入见 [`docs/gamelayout-runtime-addresses.md`](../../docs/gamelayout-runtime-addresses.md)。
+authored UI 控件可直接用 `runtime.getUiControl(id)` 或 `ui-control` endpoint 取得；facade 同时导出 radio capability/state 类型，不要求游戏依赖 RenderCore 或接触 Pixi display tree。
 
 facade 同时 re-export RenderCore 的 `RenderObject.motion` 合同与 manual-clock runtime factory。受 Scene Layout、
 reel presentation layer 或 exact Spine slot 管理的 owned object 可用 `animate()` 同时缓动位置、透明度、x/y 缩放和

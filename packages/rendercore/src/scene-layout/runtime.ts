@@ -4,6 +4,7 @@ import {
   Container,
   Graphics,
   Sprite,
+  type FederatedPointerEvent,
   type Texture,
 } from "pixi.js";
 import { VNIRuntime } from "@slotclientengine/vnicore/core";
@@ -28,6 +29,7 @@ import type {
   AttachRelativeOptions,
   ResolvedSceneLayoutMainGrid,
   SceneLayoutNode,
+  SceneLayoutGraphicNode,
   SceneLayoutManifest,
   SceneLayoutManifestLatest,
   SceneLayoutNodePlacement,
@@ -41,6 +43,9 @@ import type {
   SceneLayoutPointSelector,
   SceneLayoutRenderLayerRef,
   SceneLayoutRenderObject,
+  SceneLayoutRadioState,
+  SceneLayoutUiControl,
+  SceneLayoutUiControlStateSource,
   SceneLayoutRenderObjectMotion,
   SceneLayoutRenderObjectMotionOptions,
   SceneLayoutRenderObjectMotionTarget,
@@ -84,11 +89,11 @@ export interface CreateSceneLayoutRuntimeOptions {
   readonly loadTexture?: (url: string) => Promise<Texture>;
   readonly unloadTexture?: (url: string) => Promise<void>;
   readonly createSpinePlayer?: (options: {
-    readonly node: SceneLayoutNode;
+    readonly node: SceneLayoutGraphicNode;
     readonly resource: SceneLayoutResource["spineResources"][string];
   }) => RendercoreSpinePlayer;
   readonly createVniPlayer?: (options: {
-    readonly node: SceneLayoutNode;
+    readonly node: SceneLayoutGraphicNode;
     readonly parent: Container;
     readonly resource: SceneLayoutResource["vniResources"][string];
   }) => SceneLayoutVniPlayer;
@@ -96,6 +101,18 @@ export interface CreateSceneLayoutRuntimeOptions {
   readonly observeSpinePlayback?: (
     event: SceneLayoutSpinePlaybackEvent,
   ) => void;
+  /** @internal Package runtime event bridge. */
+  readonly observeUiControlState?: (
+    event: SceneLayoutUiControlStateEvent,
+  ) => void;
+}
+
+export interface SceneLayoutUiControlStateEvent {
+  readonly controlId: string;
+  readonly controlKind: "radio";
+  readonly previousState: SceneLayoutRadioState;
+  readonly state: SceneLayoutRadioState;
+  readonly source: SceneLayoutUiControlStateSource;
 }
 
 export type SceneLayoutSpinePlaybackOutcome =
@@ -142,6 +159,8 @@ interface RuntimeNode {
   imageString: RenderImageString | null;
   imageSprite: Sprite | null;
   texture: Texture | null;
+  uiControlTextures: Readonly<Record<SceneLayoutRadioState, Texture>> | null;
+  uiControlState: SceneLayoutRadioState | null;
   programPlayback: NodeProgramPlayback | null;
   programMotion: RenderObjectMotion | null;
   programMotionAttachment: RenderObjectMotionAttachment | null;
@@ -207,6 +226,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #observeSpinePlayback?: (
     event: SceneLayoutSpinePlaybackEvent,
   ) => void;
+  readonly #observeUiControlState?: (
+    event: SceneLayoutUiControlStateEvent,
+  ) => void;
   readonly #initialNodeIds: readonly string[] | null;
   readonly #nodes: readonly RuntimeNode[];
   readonly #nodesById: ReadonlyMap<string, RuntimeNode>;
@@ -225,6 +247,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #authoredNodeActive = new Map<string, boolean>();
   readonly #programNodeVisible = new Map<string, boolean>();
   readonly #renderObjects = new Map<string, SceneLayoutRenderObject>();
+  readonly #uiControls = new Map<string, SceneLayoutUiControl>();
   readonly #nodeChildLayers = new Map<
     string,
     Map<
@@ -280,6 +303,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         });
       });
     this.#observeSpinePlayback = options.observeSpinePlayback;
+    this.#observeUiControlState = options.observeUiControlState;
     this.#initialNodeIds = options.initialNodeIds
       ? Object.freeze([...options.initialNodeIds])
       : null;
@@ -311,6 +335,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         imageString: null,
         imageSprite: null,
         texture: null,
+        uiControlTextures: null,
+        uiControlState: null,
         programPlayback: null,
         programMotion: null,
         programMotionAttachment: null,
@@ -486,7 +512,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         applyVniOrigin(
           node.vniPlayer,
           this.#resource.vniResources[
-            node.spec.resource.kind === "vni" ? node.spec.resource.project : ""
+            "resource" in node.spec && node.spec.resource.kind === "vni"
+              ? node.spec.resource.project
+              : ""
           ],
           "center",
         );
@@ -625,6 +653,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   getRenderObject(nodeId: string): SceneLayoutRenderObject | null {
     this.assertReady();
     const node = this.requireNode(nodeId);
+    if (!("resource" in node.spec)) return null;
     const cached = this.#renderObjects.get(nodeId);
     if (cached) return cached;
     const common = {
@@ -692,6 +721,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
               const current = this.requireNode(nodeId);
               if (
                 !current.player ||
+                !("resource" in current.spec) ||
                 current.spec.resource.kind !== "spine" ||
                 !("defaultAnimation" in current.spec.resource)
               )
@@ -726,6 +756,25 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     return object;
   }
 
+  getUiControl(nodeId: string): SceneLayoutUiControl | null {
+    this.assertReady();
+    const node = this.requireNode(nodeId);
+    if (!("uiControl" in node.spec)) return null;
+    const cached = this.#uiControls.get(nodeId);
+    if (cached) return cached;
+    const control: SceneLayoutUiControl = Object.freeze({
+      kind: "radio",
+      getState: () => {
+        this.assertReady();
+        return this.requireUiControlState(nodeId);
+      },
+      setState: (state: SceneLayoutRadioState) =>
+        this.setUiControlState(nodeId, state, "programmatic"),
+    });
+    this.#uiControls.set(nodeId, control);
+    return control;
+  }
+
   private getNodeChildLayer(
     nodeId: string,
     ref: RenderObjectChildLayerRef,
@@ -758,7 +807,11 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     view.sortableChildren = true;
     let detach: () => void;
     if (ref.kind === "spine-slot") {
-      if (node.spec.resource.kind !== "spine" || !node.player)
+      if (
+        !("resource" in node.spec) ||
+        node.spec.resource.kind !== "spine" ||
+        !node.player
+      )
         throw new SceneLayoutError(
           `Scene layout node "${nodeId}" does not expose Spine slot child layers.`,
         );
@@ -770,7 +823,11 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       });
       detach = () => player.removeSlotObject(view);
     } else {
-      if (node.spec.resource.kind !== "vni" || !node.vniPlayer)
+      if (
+        !("resource" in node.spec) ||
+        node.spec.resource.kind !== "vni" ||
+        !node.vniPlayer
+      )
         throw new SceneLayoutError(
           `Scene layout node "${nodeId}" does not expose VNI text-layer child layers.`,
         );
@@ -850,7 +907,11 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.assertReady();
     return Object.freeze(
       this.#nodes
-        .filter((node) => node.spec.resource.kind === "image-string")
+        .filter(
+          (node) =>
+            "resource" in node.spec &&
+            node.spec.resource.kind === "image-string",
+        )
         .map((node) => node.spec.id),
     );
   }
@@ -910,10 +971,47 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.#resource.destroy();
     this.#snapshot = null;
     this.#renderObjects.clear();
+    this.#uiControls.clear();
     this.#initialized = false;
   }
 
   private async initNode(node: RuntimeNode): Promise<void> {
+    if ("uiControl" in node.spec) {
+      const control = node.spec.uiControl;
+      const offUrl = this.#resource.imageUrls[control.off.path];
+      const onUrl = this.#resource.imageUrls[control.on.path];
+      if (!offUrl || !onUrl)
+        throw new SceneLayoutError(
+          `Scene layout UI control "${node.spec.id}" image URL is missing.`,
+        );
+      const [off, on] = await Promise.all([
+        this.loadTextureOnce(offUrl),
+        this.loadTextureOnce(onUrl),
+      ]);
+      this.assertAlive();
+      assertTextureSize(off, control.off, node.spec.id, "off");
+      assertTextureSize(on, control.on, node.spec.id, "on");
+      node.uiControlTextures = Object.freeze({ off, on });
+      node.uiControlState = "off";
+      node.texture = off;
+      const sprite = new Sprite(off);
+      sprite.anchor.set(0.5);
+      sprite.label = `scene-layout-ui-control:${node.spec.id}`;
+      sprite.eventMode = "static";
+      sprite.cursor = "pointer";
+      sprite.on("pointertap", (event: FederatedPointerEvent) => {
+        consumeUiControlPointerEvent(event);
+        const current = this.requireUiControlState(node.spec.id);
+        this.setUiControlState(
+          node.spec.id,
+          current === "off" ? "on" : "off",
+          "pointer",
+        );
+      });
+      node.imageSprite = sprite;
+      node.named.addChild(sprite);
+      return;
+    }
     if (node.spec.resource.kind === "image") {
       const url = this.#resource.imageUrls[node.spec.resource.path];
       if (!url) {
@@ -1093,6 +1191,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     node.imageSprite?.destroy({ texture: false });
     node.imageSprite = null;
     node.texture = null;
+    node.uiControlTextures = null;
+    node.uiControlState = null;
     node.named.removeChildren();
     node.prepared = false;
   }
@@ -1158,6 +1258,50 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       );
     }
     return node.stateController;
+  }
+
+  private requireUiControlState(id: string): SceneLayoutRadioState {
+    const node = this.requireNode(id);
+    if (!("uiControl" in node.spec) || node.uiControlState === null)
+      throw new SceneLayoutError(
+        `Scene layout node "${id}" is not a prepared UI control.`,
+      );
+    return node.uiControlState;
+  }
+
+  private setUiControlState(
+    id: string,
+    state: SceneLayoutRadioState,
+    source: SceneLayoutUiControlStateSource,
+  ): void {
+    this.assertReady();
+    if (state !== "off" && state !== "on")
+      throw new SceneLayoutError(
+        `Scene layout radio control "${id}" has unknown state "${String(state)}".`,
+      );
+    const node = this.requireNode(id);
+    if (
+      !("uiControl" in node.spec) ||
+      !node.uiControlTextures ||
+      !node.imageSprite
+    )
+      throw new SceneLayoutError(
+        `Scene layout node "${id}" is not a prepared UI control.`,
+      );
+    const previousState = this.requireUiControlState(id);
+    if (previousState === state) return;
+    node.imageSprite.texture = node.uiControlTextures[state];
+    node.texture = node.uiControlTextures[state];
+    node.uiControlState = state;
+    this.#observeUiControlState?.(
+      Object.freeze({
+        controlId: id,
+        controlKind: "radio",
+        previousState,
+        state,
+        source,
+      }),
+    );
   }
 
   private playNodeAnimation(
@@ -1606,6 +1750,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   private requireProgramSpineNode(nodeId: string): RuntimeNode {
     const node = this.requireNode(nodeId);
     if (
+      !("resource" in node.spec) ||
       node.spec.resource.kind !== "spine" ||
       "stateMachine" in node.spec.resource ||
       !node.player
@@ -1724,6 +1869,47 @@ function assertFiniteSceneLayoutPoint(
     throw new SceneLayoutError(`${label} must contain finite coordinates.`);
 }
 
+function assertTextureSize(
+  texture: Texture,
+  spec: Readonly<{
+    path: string;
+    size: Readonly<{ width: number; height: number }>;
+  }>,
+  controlId: string,
+  state: SceneLayoutRadioState,
+): void {
+  if (!texture?.source)
+    throw new SceneLayoutError(
+      `Scene layout UI control "${controlId}" ${state} image failed to load a valid Pixi texture.`,
+    );
+  if (texture.width !== spec.size.width || texture.height !== spec.size.height)
+    throw new SceneLayoutError(
+      `Scene layout UI control "${controlId}" ${state} image "${spec.path}" size mismatch: expected ${spec.size.width}x${spec.size.height}, actual ${texture.width}x${texture.height}.`,
+    );
+}
+
+function consumeUiControlPointerEvent(event: FederatedPointerEvent): void {
+  event.preventDefault();
+  event.stopPropagation();
+  const nativeEvent = event.nativeEvent as Event | undefined;
+  nativeEvent?.preventDefault();
+  nativeEvent?.stopImmediatePropagation();
+  const target = nativeEvent?.target;
+  if (!(target instanceof EventTarget)) return;
+  const suppressClick = (clickEvent: Event) => {
+    clickEvent.preventDefault();
+    clickEvent.stopImmediatePropagation();
+  };
+  target.addEventListener("click", suppressClick, {
+    capture: true,
+    once: true,
+  });
+  globalThis.setTimeout(
+    () => target.removeEventListener("click", suppressClick, true),
+    0,
+  );
+}
+
 function applyNodePlacementTransform(
   node: RuntimeNode,
   resource: SceneLayoutResource,
@@ -1769,7 +1955,8 @@ function resolveNodePlacementPivot(
   const rotation = placement.rotation ?? 0;
   if (rotation === 0) return { x: 0, y: 0 };
   const center = placement.center ?? { x: 0.5, y: 0.5 };
-  const resource = node.spec.resource;
+  const resource =
+    "resource" in node.spec ? node.spec.resource : node.spec.uiControl.off;
   if (resource.kind === "image") {
     return {
       x: (center.x - 0.5) * resource.size.width,
