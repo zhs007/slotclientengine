@@ -952,7 +952,8 @@ export class RenderGridCellReelSet
       throw error;
     }
     for (const { cell, occurrence } of detached) {
-      cell.reel.releaseDetachedOccurrence(occurrence);
+      cell.reel.placeVisibleOccurrence(occurrence);
+      cell.occupied = true;
     }
   }
 
