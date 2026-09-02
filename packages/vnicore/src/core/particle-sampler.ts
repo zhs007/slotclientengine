@@ -25,6 +25,7 @@ export interface ParticleLayerSampleState {
 export interface ParticleSpriteSample {
   layerId: string;
   animationId: string;
+  particleId: string;
   offsetX: number;
   offsetY: number;
   scale: number;
@@ -36,6 +37,8 @@ export interface ParticleSpriteSample {
 export interface ParticleAnimationRuntimeState {
   animationId: string;
   elapsed: number;
+  emissionElapsedLimit?: number;
+  loopingEmission?: boolean;
 }
 
 const MAX_BURST_PARTICLE_SPRITES = 320;
@@ -149,6 +152,10 @@ export function sampleParticleSpritesForLayerRuntime(
     }
     const runtimeState = stateByAnimationId.get(animation.id);
     if (!runtimeState || runtimeState.elapsed <= 0) continue;
+    const emissionElapsedLimit = Math.min(
+      runtimeState.elapsed,
+      runtimeState.emissionElapsedLimit ?? runtimeState.elapsed,
+    );
 
     const particleOpacity =
       animation.type === "particle_combo"
@@ -170,16 +177,26 @@ export function sampleParticleSpritesForLayerRuntime(
           particleLayer,
           textureSize,
           runtimeState.elapsed,
+          emissionElapsedLimit,
         ),
       );
     } else if (animation.type === "particle_twinkle") {
       sprites.push(
-        ...sampleParticleTwinkleLive(
-          animation,
-          particleLayer,
-          textureSize,
-          runtimeState.elapsed,
-        ),
+        ...(runtimeState.loopingEmission
+          ? sampleParticleTwinkleLive(
+              animation,
+              particleLayer,
+              textureSize,
+              runtimeState.elapsed,
+              emissionElapsedLimit,
+            )
+          : sampleParticleTwinkle(
+              animation,
+              particleLayer,
+              textureSize,
+              runtimeState.elapsed,
+              emissionElapsedLimit,
+            )),
       );
     } else if (animation.type === "particle_wall") {
       sprites.push(
@@ -188,13 +205,20 @@ export function sampleParticleSpritesForLayerRuntime(
           particleLayer,
           textureSize,
           runtimeState.elapsed,
+          emissionElapsedLimit,
         ),
       );
     } else if (animation.type === "particle_combo") {
       const progress = getRuntimeProgress(animation, runtimeState.elapsed);
       if (progress === null) continue;
       sprites.push(
-        ...sampleParticleCombo(animation, particleLayer, textureSize, progress),
+        ...sampleParticleCombo(
+          animation,
+          particleLayer,
+          textureSize,
+          progress,
+          emissionElapsedLimit / Math.max(animation.duration, 0.0001),
+        ),
       );
     }
   }
@@ -319,6 +343,7 @@ function sampleParticleBurst(
       sprites.push({
         layerId: sampledLayer.layerId,
         animationId: animation.id,
+        particleId: `${animation.id}:${index}`,
         offsetX: roundTo(offsetX, 4),
         offsetY: roundTo(offsetY, 4),
         scale: roundTo(scale, 4),
@@ -349,6 +374,7 @@ function sampleParticleStreamFromElapsed(
   sampledLayer: ParticleLayerSampleState,
   textureSize: TextureSize,
   elapsed: number,
+  emissionElapsedLimit = elapsed,
 ): ParticleSpriteSample[] {
   const spawnRate = clampParticleNumber(
     getNumberParam(animation, "spawnRate"),
@@ -413,7 +439,9 @@ function sampleParticleStreamFromElapsed(
   const spinSpeed = getNumberParam(animation, "spinSpeed");
   const textureEdge = getTextureLongestEdge(textureSize);
   const baseTextureScale = size / textureEdge;
-  const totalSpawnCount = Math.floor(Math.max(0, elapsed) * spawnRate);
+  const totalSpawnCount = Math.floor(
+    Math.max(0, emissionElapsedLimit) * spawnRate,
+  );
   const liveWindowCount = Math.ceil(spawnRate * lifetime) + 2;
   const firstIndex = Math.max(0, totalSpawnCount - liveWindowCount);
   const sprites: ParticleSpriteSample[] = [];
@@ -453,6 +481,7 @@ function sampleParticleStreamFromElapsed(
       sprites.push({
         layerId: sampledLayer.layerId,
         animationId: animation.id,
+        particleId: `${animation.id}:${index}`,
         offsetX: roundTo(startOffsetX + Math.cos(angle) * travel, 4),
         offsetY: roundTo(
           startOffsetY +
@@ -496,6 +525,7 @@ function sampleParticleTwinkle(
   sampledLayer: ParticleLayerSampleState,
   textureSize: TextureSize,
   elapsed: number,
+  emissionElapsedLimit = elapsed,
 ): ParticleSpriteSample[] {
   const params = getParticleTwinkleParams(animation, textureSize);
   const sprites: ParticleSpriteSample[] = [];
@@ -503,7 +533,7 @@ function sampleParticleTwinkle(
 
   for (let batchIndex = 0; spawnedCount < params.count; batchIndex += 1) {
     const spawnTime = batchIndex * params.spawnInterval;
-    if (spawnTime > elapsed) break;
+    if (spawnTime > emissionElapsedLimit) break;
     const batchRandom = seededRandom(animation.seed, batchIndex, 11);
     const batchCount = Math.min(
       params.count - spawnedCount,
@@ -533,6 +563,7 @@ function sampleParticleTwinkleLive(
   sampledLayer: ParticleLayerSampleState,
   textureSize: TextureSize,
   elapsed: number,
+  emissionElapsedLimit = elapsed,
 ): ParticleSpriteSample[] {
   const params = getParticleTwinkleParams(animation, textureSize);
   const batches = getParticleTwinkleBatches(animation, params);
@@ -546,7 +577,10 @@ function sampleParticleTwinkleLive(
     0,
     Math.floor((elapsed - params.twinkleDuration) / cycleDuration),
   );
-  const lastCycleIndex = Math.max(0, Math.floor(elapsed / cycleDuration));
+  const lastCycleIndex = Math.max(
+    0,
+    Math.floor(emissionElapsedLimit / cycleDuration),
+  );
   const sprites: ParticleSpriteSample[] = [];
 
   for (
@@ -558,6 +592,7 @@ function sampleParticleTwinkleLive(
     const cycleParticleOffset = cycleIndex * params.count;
     for (const batch of batches) {
       const spawnTime = cycleStartTime + batch.spawnTime;
+      if (spawnTime > emissionElapsedLimit) continue;
       const localAgeSeconds = elapsed - spawnTime;
       if (localAgeSeconds < 0 || localAgeSeconds > params.twinkleDuration) {
         continue;
@@ -706,6 +741,7 @@ function appendParticleTwinkleBatchSprites(options: {
     sprites.push({
       layerId: sampledLayer.layerId,
       animationId: animation.id,
+      particleId: `${animation.id}:${particleIndex}`,
       offsetX: roundTo(Math.cos(angle) * distance, 4),
       offsetY: roundTo(Math.sin(angle) * distance, 4),
       scale: roundTo(
@@ -738,6 +774,7 @@ function sampleParticleWallFromElapsed(
   sampledLayer: ParticleLayerSampleState,
   textureSize: TextureSize,
   elapsed: number,
+  emissionElapsedLimit = elapsed,
 ): ParticleSpriteSample[] {
   const emitterWidth = clampParticleNumber(
     getNumberParam(animation, "emitterWidth"),
@@ -808,7 +845,7 @@ function sampleParticleWallFromElapsed(
   const dirY = Math.sin(dirRad);
   const perpX = -dirY;
   const perpY = dirX;
-  const totalSpawnCount = Math.floor(elapsed * spawnRate);
+  const totalSpawnCount = Math.floor(emissionElapsedLimit * spawnRate);
   const sprites: ParticleSpriteSample[] = [];
 
   for (let index = 0; index < totalSpawnCount; index += 1) {
@@ -819,7 +856,9 @@ function sampleParticleWallFromElapsed(
     const randomE = seededRandom(animation.seed, index, 105);
     const lifetime = lifetimeMin + randomA * (lifetimeMax - lifetimeMin);
     const spawnTime =
-      totalSpawnCount <= 1 ? 0 : (index / (totalSpawnCount - 1)) * elapsed;
+      totalSpawnCount <= 1
+        ? 0
+        : (index / (totalSpawnCount - 1)) * emissionElapsedLimit;
     const localAge = (elapsed - spawnTime) / Math.max(lifetime, 0.0001);
     if (localAge < 0 || localAge > 1) continue;
 
@@ -845,6 +884,7 @@ function sampleParticleWallFromElapsed(
     sprites.push({
       layerId: sampledLayer.layerId,
       animationId: animation.id,
+      particleId: `${animation.id}:${index}`,
       offsetX: roundTo(perpX * widthOffset + flyDirX * distance, 4),
       offsetY: roundTo(
         perpY * widthOffset +
@@ -870,6 +910,7 @@ function sampleParticleCombo(
   sampledLayer: ParticleLayerSampleState,
   textureSize: TextureSize,
   progress: number,
+  emissionProgressLimit = progress,
 ): ParticleSpriteSample[] {
   const count = Math.round(
     clampParticleNumber(getNumberParam(animation, "count"), 1, 300),
@@ -958,6 +999,7 @@ function sampleParticleCombo(
   for (let index = 0; index < count; index += 1) {
     const stagger =
       count <= 1 ? 0 : (index / Math.max(1, count - 1)) * staggerRatio;
+    if (stagger > emissionProgressLimit) continue;
     for (let trailIndex = trailCount; trailIndex >= 0; trailIndex -= 1) {
       const trailProgress = progress - trailIndex * trailSpacing;
       const localProgress = (trailProgress - stagger) / effectiveTravelWindow;
@@ -988,6 +1030,7 @@ function sampleParticleCombo(
       sprites.push({
         layerId: sampledLayer.layerId,
         animationId: animation.id,
+        particleId: `${animation.id}:${index}`,
         offsetX: roundTo(point.x, 4),
         offsetY: roundTo(point.y, 4),
         scale: roundTo(Math.max(0.01, baseTextureScale * point.scale), 4),

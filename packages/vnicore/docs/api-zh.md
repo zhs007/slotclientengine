@@ -20,7 +20,14 @@ interface VNIRuntimeOptions {
 }
 ```
 
-稳定方法包括 `init()`、`play()`、`pause()`、`restart()`、`seek()`、`playRange()`、`requestSegmentedPlaybackEnd()`、`update(deltaSeconds)`、marker/complete listener、manual playback、group slot/text replacement、`getDisplayObject()`、标量播放状态查询和 `destroy()`。
+稳定方法包括 `init()`、`play()`、`pause()`、`restart()`、`seek()`、`playRange()`、`requestSegmentedPlaybackEnd()`、`clearOrphanParticles()`、`update(deltaSeconds)`、marker/complete listener、manual playback、group slot/text replacement、`getDisplayObject()`、标量播放状态查询和 `destroy()`。
+
+timeline、range、segmented 和 manual range 的 options 都接受
+`keepParticlesAlive?: boolean`，默认 `true`。播放终止时 emitter 立即停止；默认保留
+已发射粒子并等待它们按 authored lifetime 消失后再完成自然播放。显式传 `false`
+会在终止边界立即移除本次粒子。`clearOrphanParticles()` 是幂等操作，只加速淡出
+已经停止发射的无主粒子，不停止 active emitter；Core 宿主必须继续调用
+`update(deltaSeconds)` 直到 `needsUpdate()` 返回 `false`。
 
 Core 不启动 RAF。每个 game/runtime 宿主必须从自己的 ticker 调用 `update(deltaSeconds)`。`deltaSeconds` 必须是正有限数；未知或冲突状态显式失败。
 

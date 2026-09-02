@@ -6,7 +6,11 @@ export type VNIPlaybackPoint =
   | { unit: "time"; at: number }
   | { unit: "frame"; at: number; fps: number };
 
-export interface VNIPlayRangeOptions {
+export interface VNIPlaybackParticleOptions {
+  keepParticlesAlive?: boolean;
+}
+
+export interface VNIPlayRangeOptions extends VNIPlaybackParticleOptions {
   range: VNIPlaybackRange;
   loop?: boolean;
 }
@@ -19,7 +23,8 @@ export interface VNIPlaybackSeedOptions {
   ignoreAuthoredSeed?: boolean;
 }
 
-export interface VNITimelinePlayOptions extends VNIPlaybackSeedOptions {
+export interface VNITimelinePlayOptions
+  extends VNIPlaybackSeedOptions, VNIPlaybackParticleOptions {
   mode?: "timeline";
 }
 
@@ -28,11 +33,11 @@ export interface VNIRangePlayOptions
   mode: "range";
 }
 
-export interface VNISegmentedPlaybackOptions extends VNIPlaybackSeedOptions {
+export interface VNISegmentedPlaybackOptions
+  extends VNIPlaybackSeedOptions, VNIPlaybackParticleOptions {
   mode: "segmented";
   loopStart: VNIPlaybackPoint;
   loopEnd: VNIPlaybackPoint;
-  keepParticlesAlive?: boolean;
 }
 
 export type VNIPlayOptions =
@@ -280,8 +285,18 @@ export function normalizeSegmentedPlaybackOptions(
     loopStartTime,
     loopEndTime,
     duration,
-    keepParticlesAlive: options.keepParticlesAlive ?? true,
+    keepParticlesAlive: normalizeKeepParticlesAlive(options),
   };
+}
+
+export function normalizeKeepParticlesAlive(
+  options: VNIPlaybackParticleOptions,
+): boolean {
+  const value = options.keepParticlesAlive;
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error("VNI play keepParticlesAlive must be a boolean.");
+  }
+  return value ?? true;
 }
 
 export function normalizeIgnoreAuthoredSeed(

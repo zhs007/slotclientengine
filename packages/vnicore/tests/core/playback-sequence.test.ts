@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   VNISegmentedPlaybackSequence,
   normalizeIgnoreAuthoredSeed,
+  normalizeKeepParticlesAlive,
   normalizePlaybackRange,
   normalizeSegmentedPlaybackOptions,
 } from "../../src/core/playback-sequence";
@@ -18,6 +19,19 @@ describe("playback-sequence", () => {
     expect(() =>
       normalizeIgnoreAuthoredSeed({ ignoreAuthoredSeed: "true" } as never),
     ).toThrow("ignoreAuthoredSeed must be a boolean");
+  });
+
+  it("normalizes keepParticlesAlive for every playback option", () => {
+    expect(normalizeKeepParticlesAlive({})).toBe(true);
+    expect(normalizeKeepParticlesAlive({ keepParticlesAlive: true })).toBe(
+      true,
+    );
+    expect(normalizeKeepParticlesAlive({ keepParticlesAlive: false })).toBe(
+      false,
+    );
+    expect(() =>
+      normalizeKeepParticlesAlive({ keepParticlesAlive: "true" } as never),
+    ).toThrow("keepParticlesAlive must be a boolean");
   });
 
   it("normalizes segmented playback and defaults keepParticlesAlive to true", () => {

@@ -34,6 +34,7 @@ export type {
   VNIPlayOptions,
   VNIPlaybackCompleteContext,
   VNIPlaybackEventOptions,
+  VNIPlaybackParticleOptions,
   VNIPlaybackRange,
   VNIPlaybackState,
   VNIPlayRangeOptions,

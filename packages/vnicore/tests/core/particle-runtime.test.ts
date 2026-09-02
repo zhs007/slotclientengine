@@ -124,7 +124,7 @@ describe("particle-runtime", () => {
     expect(particles[0].y).toBeTypeOf("number");
   });
 
-  it("keeps emitted particles during drain and completes after lifetime", () => {
+  it("stops spawning, advances emitted particles, and completes after lifetime", () => {
     const layer = imageLayer(particleWall());
     const runtime = new VNIParticleRuntime([layer]);
     const live = runtime.emit([runtimeLayer(layer)], stage, 1);
@@ -136,14 +136,51 @@ describe("particle-runtime", () => {
     expect(firstDrain.isDraining).toBe(true);
     expect(firstDrain.particles).toHaveLength(live.particles.length);
 
-    const fading = runtime.advanceDrain(0.5);
-    expect(fading.isDraining).toBe(true);
-    expect(fading.particles[0].alpha).toBeLessThan(live.particles[0].alpha);
+    const draining = runtime.advanceDrain(0.25);
+    expect(draining.isDraining).toBe(true);
+    const emittedIds = new Set(live.particles.map((particle) => particle.particleId));
+    expect(
+      draining.particles.every((particle) => emittedIds.has(particle.particleId)),
+    ).toBe(true);
+    expect(draining.particles).not.toEqual(live.particles);
+    expect(
+      draining.particles.some((particle) => {
+        const previous = live.particles.find(
+          (candidate) => candidate.particleId === particle.particleId,
+        );
+        return previous &&
+          (previous.x !== particle.x || previous.y !== particle.y);
+      }),
+    ).toBe(true);
 
-    const complete = runtime.advanceDrain(0.5);
+    const complete = runtime.advanceDrain(0.75);
     expect(complete.isComplete).toBe(true);
     expect(complete.particles).toHaveLength(0);
     expect(runtime.getLiveParticleCount()).toBe(0);
+  });
+
+  it("quickly fades orphan particles without removing them synchronously", () => {
+    const layer = imageLayer(particleWall());
+    const runtime = new VNIParticleRuntime([layer]);
+    const live = runtime.emit([runtimeLayer(layer)], stage, 1);
+    runtime.beginDrain();
+
+    expect(runtime.fadeOutOrphans(0.1)).toBe(true);
+    expect(runtime.getLiveParticleCount()).toBe(live.particles.length);
+
+    const fading = runtime.advanceDrain(0.05);
+    expect(fading.isDraining).toBe(true);
+    expect(fading.particles.length).toBeGreaterThan(0);
+    expect(Math.max(...fading.particles.map((particle) => particle.alpha))).toBeLessThan(
+      Math.max(...live.particles.map((particle) => particle.alpha)),
+    );
+
+    expect(runtime.advanceDrain(0.05)).toMatchObject({
+      particles: [],
+      isDraining: false,
+      isComplete: true,
+    });
+    expect(runtime.fadeOutOrphans(0.1)).toBe(false);
   });
 
   it("continues wall emission from a held active emitter config", () => {

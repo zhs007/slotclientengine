@@ -549,6 +549,38 @@ function createMovingParticleProject(): V5GProjectConfig {
   return project;
 }
 
+function createDrainableParticleProject(): V5GProjectConfig {
+  const project = createProject();
+  project.layers[0].animations = [
+    {
+      id: "wall",
+      type: "particle_wall",
+      startTime: 0,
+      duration: 2,
+      enabled: true,
+      seed: 41,
+      params: {
+        emitterWidth: 100,
+        direction: 270,
+        spreadAngle: 15,
+        speed: 80,
+        lifetimeMin: 0.5,
+        lifetimeMax: 1,
+        spawnRate: 20,
+        size: 24,
+        gravity: 0,
+        startScaleMin: 0.6,
+        startScaleMax: 1,
+        endScaleMin: 0.3,
+        endScaleMax: 0.8,
+        fadeOut: true,
+      },
+    },
+  ];
+  project.layers[1].animations = [];
+  return project;
+}
+
 function createRenderEffectProject(): V5GProjectConfig {
   const project = createProject();
   project.layers[0].animations = [
@@ -1308,6 +1340,49 @@ describe("VNIRuntime", () => {
     });
     session.destroy();
     player.destroy();
+  });
+
+  it("applies particle lifetime policy to manual completion and cancellation", async () => {
+    const immediatePlayer = await createInitializedPlayer();
+    const immediateSession = immediatePlayer.createManualPlaybackSession();
+    const immediate = immediateSession.playRange({
+      range: { unit: "time", start: 0, end: 0.6 },
+      keepParticlesAlive: false,
+    });
+    expect(immediatePlayer.getPlaybackState().keepParticlesAlive).toBe(false);
+    immediatePlayer.update(0.6);
+    await expect(immediate.completed).resolves.toEqual({ reason: "complete" });
+    expect(immediatePlayer.getPlaybackState()).toMatchObject({
+      phase: "complete",
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    immediateSession.destroy();
+    immediatePlayer.destroy();
+
+    const drainingPlayer = await createInitializedPlayer();
+    const drainingSession = drainingPlayer.createManualPlaybackSession();
+    const cancelled = drainingSession.playRange({
+      range: { unit: "time", start: 0, end: 1 },
+    });
+    drainingPlayer.update(0.5);
+    drainingSession.destroy();
+    await expect(cancelled.completed).rejects.toMatchObject({
+      name: "VNIPlaybackCancelledError",
+    });
+    expect(drainingPlayer.getPlaybackState()).toMatchObject({
+      phase: "idle",
+      isPlaying: false,
+      isDrainingParticles: true,
+    });
+    drainingPlayer.clearOrphanParticles();
+    drainingPlayer.update(0.1);
+    expect(drainingPlayer.getPlaybackState()).toMatchObject({
+      phase: "idle",
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    drainingPlayer.destroy();
   });
 
   it.each([0, 1.5, 4.5, 10])(
@@ -3117,6 +3192,114 @@ describe("VNIRuntime", () => {
     expect(player.getTime()).toBe(0.6);
   });
 
+  it("can remove emitted particles immediately when keepParticlesAlive is false", async () => {
+    const player = await createInitializedPlayer();
+    const completed = vi.fn();
+    player.onPlaybackComplete(completed);
+
+    player.playRange({
+      range: { unit: "time", start: 0, end: 0.6 },
+      loop: false,
+      keepParticlesAlive: false,
+    });
+    player.update(0.6);
+
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "range",
+      phase: "complete",
+      keepParticlesAlive: false,
+      isPlaying: false,
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    expect(completed).toHaveBeenCalledOnce();
+  });
+
+  it("uses the default particle lifetime policy for full timeline playback", async () => {
+    const player = await createInitializedPlayer({
+      project: createDrainableParticleProject(),
+    });
+    const completed = vi.fn();
+    player.onPlaybackComplete(completed);
+
+    player.setLoop(false);
+    player.play({ mode: "timeline" });
+    player.update(2);
+
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "timeline",
+      phase: "particle-draining",
+      keepParticlesAlive: true,
+      isPlaying: false,
+      isDrainingParticles: true,
+    });
+    expect(completed).not.toHaveBeenCalled();
+    player.update(1);
+    expect(player.getPlaybackState()).toMatchObject({
+      phase: "complete",
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    expect(completed).toHaveBeenCalledOnce();
+  });
+
+  it("quickly fades orphan particles without affecting an active emitter", async () => {
+    const player = await createInitializedPlayer();
+    const completed = vi.fn();
+    player.onPlaybackComplete(completed);
+
+    player.playRange({
+      range: { unit: "time", start: 0, end: 0.6 },
+      loop: false,
+    });
+    player.update(0.3);
+    const activeParticleCount = player.getPlaybackState().liveParticleCount;
+    expect(activeParticleCount).toBeGreaterThan(0);
+
+    player.clearOrphanParticles();
+    expect(player.getPlaybackState()).toMatchObject({
+      isPlaying: true,
+      isDrainingParticles: false,
+      liveParticleCount: activeParticleCount,
+    });
+
+    player.update(0.3);
+    const orphanParticleCount = player.getPlaybackState().liveParticleCount;
+    expect(orphanParticleCount).toBeGreaterThan(0);
+    expect(player.getPlaybackState().isDrainingParticles).toBe(true);
+
+    player.clearOrphanParticles();
+    expect(player.getPlaybackState().liveParticleCount).toBe(
+      orphanParticleCount,
+    );
+    player.update(0.05);
+    expect(player.getPlaybackState()).toMatchObject({
+      phase: "particle-draining",
+      isDrainingParticles: true,
+    });
+    expect(player.getPlaybackState().liveParticleCount).toBeGreaterThan(0);
+    player.update(0.05);
+
+    expect(player.getPlaybackState()).toMatchObject({
+      phase: "complete",
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    expect(completed).toHaveBeenCalledOnce();
+  });
+
+  it("rejects non-boolean particle lifetime control", async () => {
+    const player = await createInitializedPlayer();
+
+    expect(() =>
+      player.play({
+        mode: "timeline",
+        keepParticlesAlive: "yes",
+      } as unknown as Parameters<VNIRuntime["play"]>[0]),
+    ).toThrow("keepParticlesAlive must be a boolean");
+    expect(player.isPlaying()).toBe(false);
+  });
+
   it("supports host-driven playback without starting RAF", async () => {
     const requestAnimationFrame = vi.fn(() => 1);
     vi.stubGlobal("window", { devicePixelRatio: 1 });
@@ -3148,6 +3331,50 @@ describe("VNIRuntime", () => {
     expect(events).toEqual([]);
     player.update(1.6);
     expect(events).toEqual(["complete"]);
+  });
+
+  it("restarts the viewer ticker when clearing a paused orphan drain", async () => {
+    const requestAnimationFrame = vi.fn(() => 1);
+    const cancelAnimationFrame = vi.fn();
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrame);
+    pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+    const viewer = new VNIViewer({
+      parent: createMockPixiContainer(),
+      projectId: "viewer-orphan-clear",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project: createDrainableParticleProject(),
+      assetUrls: {
+        "assets/a.png": "/a.png",
+        "assets/b.png": "/b.png",
+      },
+    });
+    await viewer.init();
+    viewer.playRange({
+      range: { unit: "time", start: 0, end: 0.6 },
+      loop: false,
+    });
+    viewer.update(0.6);
+    viewer.pause();
+    expect(viewer.getPlaybackState().isDrainingParticles).toBe(true);
+
+    requestAnimationFrame.mockClear();
+    viewer.clearOrphanParticles();
+
+    expect(requestAnimationFrame).toHaveBeenCalledOnce();
+    viewer.update(0.1);
+    expect(viewer.getPlaybackState()).toMatchObject({
+      phase: "complete",
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    viewer.destroy();
   });
 
   it("skips zero-duration RAF ticks without weakening host delta validation", async () => {
@@ -3308,7 +3535,7 @@ describe("VNIRuntime", () => {
       loop: false,
     });
     player.update(1);
-    expect(completed).toEqual([1]);
+    expect(completed).toEqual([1, 2]);
     player.update(1.6);
     expect(completed).toEqual([1, 2]);
   });
@@ -3457,7 +3684,9 @@ describe("VNIRuntime", () => {
   });
 
   it("supports segmented hold playback, user-requested ending, and particle drain", async () => {
-    const player = await createInitializedPlayer();
+    const player = await createInitializedPlayer({
+      project: createDrainableParticleProject(),
+    });
     const completed: string[] = [];
     player.onPlaybackComplete((event) =>
       completed.push(`${event.currentTime}:${event.loopIndex}`),
@@ -3568,6 +3797,33 @@ describe("VNIRuntime", () => {
       isDrainingParticles: false,
     });
     expect(player.getTime()).toBe(0.2);
+  });
+
+  it("skips the terminal particle drain for segmented playback when disabled", async () => {
+    const player = await createInitializedPlayer({
+      project: createDrainableParticleProject(),
+    });
+    const completed = vi.fn();
+    player.onPlaybackComplete(completed);
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+      keepParticlesAlive: false,
+    });
+    player.update(0.5);
+    player.requestSegmentedPlaybackEnd();
+    player.update(1.5);
+
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "segmented",
+      phase: "complete",
+      keepParticlesAlive: false,
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    expect(completed).toHaveBeenCalledOnce();
   });
 
   it("keeps moving live particle emitters from snapping back when segmented loops wrap", async () => {

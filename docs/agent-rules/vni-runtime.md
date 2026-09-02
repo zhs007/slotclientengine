@@ -20,6 +20,9 @@
 - basic tracks 先于 preset/particle stack；首尾帧与 editor 采用相同采样语义。
 - viewer/game runtime 不复制 pointsJson、轨迹、位移、角度、visibility、slice、停止规划、效果公式或 private Pixi display tree 操作。
 - editor preview 可接受的逐帧对象创建不得进入 runtime hot path；runtime 使用缓存和池化。
+- playback 终止时的 emitter detach、已发射粒子的 authored lifetime 推进、无主粒子
+  快速淡出和 visual completion 均由 core 拥有；Viewer 只转发 public API 并驱动
+  ticker，app 不复制粒子收尾状态机。
 - runtime target variant 不得修改 authored template。`particle_combo` 首版只按
   `layerId + animationId` 修改 layer-local target，并从 authored target/duration
   计算名义速度；fixed duration 必须显式配置。

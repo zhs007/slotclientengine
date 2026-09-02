@@ -26,9 +26,17 @@ await runtime.init();
 runtime.playRange({
   range: { unit: "time", start: 0, end: 1 },
   loop: false,
+  keepParticlesAlive: true,
 });
 hostTicker.add((deltaSeconds) => runtime.update(deltaSeconds));
 ```
+
+`keepParticlesAlive` 对 timeline、range、segmented 和 manual range 都有效，默认
+为 `true`。非循环播放自然结束或 manual range 被取消后，emitter 会立即停止，
+已发射粒子继续由 `update(deltaSeconds)` 推进并按各自生命周期消失。需要提前清场
+时调用 `clearOrphanParticles()`；它只让已经脱离 emitter 的粒子快速淡出，不影响
+仍在播放的 emitter。自然结束的 complete 事件会等粒子收尾完成，manual cancel
+不会伪造 complete。`pause()` 仍是可恢复的暂停，不是 stop。
 
 Core 对未知 schema、animation、asset、mask、路径、texture size 和 lifecycle 状态显式失败。`stage.backgroundColor` 仅是数据元信息，runtime 始终透明。Loaded clone 只共享只读 texture；project、transport、particle、listener 和 display tree 均独立。
 

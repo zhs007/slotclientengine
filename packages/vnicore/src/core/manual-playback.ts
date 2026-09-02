@@ -6,8 +6,10 @@ import {
   type VNICardCarousel3DMotionSample,
 } from "./card-carousel-3d.js";
 import {
+  normalizeKeepParticlesAlive,
   normalizePlaybackPoint,
   normalizePlaybackRange,
+  type VNIPlaybackParticleOptions,
   type VNIPlaybackPoint,
   type VNIPlaybackRange,
 } from "./playback-sequence.js";
@@ -45,7 +47,7 @@ export interface VNITimelineHoldHandle {
   release(): void;
 }
 
-export interface VNIManualPlayRangeOptions {
+export interface VNIManualPlayRangeOptions extends VNIPlaybackParticleOptions {
   readonly range: VNIPlaybackRange;
   readonly preserveRuntimeAnimationState?: boolean;
 }
@@ -170,12 +172,18 @@ export interface VNIManualPlaybackHost {
   getManualProjectTexture(assetId: string): PIXI.Texture;
   renderManualFrame(time: number): void;
   triggerManualRangeEvents(previousTime: number, currentTime: number): void;
+  setManualParticlePolicy(keepParticlesAlive: boolean): void;
   completeManualRange(
     startTime: number,
     endTime: number,
+    keepParticlesAlive: boolean,
     completed: () => void,
   ): void;
-  cancelManualRangeCompletion(): void;
+  cancelManualRange(
+    startTime: number,
+    currentTime: number,
+    keepParticlesAlive: boolean,
+  ): void;
   setManualClockActive(active: boolean): void;
   detachManualSession(session: VNIManualPlaybackSessionImpl): void;
 }
@@ -189,6 +197,7 @@ interface DeferredOperation extends VNIPlaybackOperation {
 interface ActiveRange {
   readonly startTime: number;
   readonly endTime: number;
+  readonly keepParticlesAlive: boolean;
   currentTime: number;
   awaitingCompletion: boolean;
   readonly operation: DeferredOperation;
@@ -237,15 +246,22 @@ export class VNIManualPlaybackSessionImpl implements VNIManualPlaybackSession {
       options.range,
       this.host.getManualDuration(),
     );
+    const keepParticlesAlive = normalizeKeepParticlesAlive(options);
+    this.host.setManualParticlePolicy(keepParticlesAlive);
     const operation = createDeferredOperation(() => {
       if (this.activeRange?.operation === operation) {
-        this.host.cancelManualRangeCompletion();
+        this.host.cancelManualRange(
+          this.activeRange.startTime,
+          this.activeRange.currentTime,
+          this.activeRange.keepParticlesAlive,
+        );
         this.activeRange = null;
         this.updateClock();
       }
     });
     this.activeRange = {
       ...range,
+      keepParticlesAlive,
       currentTime: range.startTime,
       awaitingCompletion: false,
       operation,
@@ -431,22 +447,27 @@ export class VNIManualPlaybackSessionImpl implements VNIManualPlaybackSession {
       }
       if (range.currentTime >= range.endTime) {
         range.awaitingCompletion = true;
-        this.host.completeManualRange(range.startTime, range.endTime, () => {
-          if (
-            this.destroyed ||
-            this.activeRange !== range ||
-            !range.operation.isPending()
-          ) {
-            return;
-          }
-          this.activeRange = null;
-          this.completed = true;
-          for (const controller of this.controllers.values()) {
-            controller.onRangeComplete(this.currentTime);
-          }
-          range.operation.resolve();
-          this.updateClock();
-        });
+        this.host.completeManualRange(
+          range.startTime,
+          range.endTime,
+          range.keepParticlesAlive,
+          () => {
+            if (
+              this.destroyed ||
+              this.activeRange !== range ||
+              !range.operation.isPending()
+            ) {
+              return;
+            }
+            this.activeRange = null;
+            this.completed = true;
+            for (const controller of this.controllers.values()) {
+              controller.onRangeComplete(this.currentTime);
+            }
+            range.operation.resolve();
+            this.updateClock();
+          },
+        );
       }
     } else if (this.holdTime !== null) {
       this.currentTime = this.holdTime;

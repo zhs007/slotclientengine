@@ -12,6 +12,7 @@ export {
   type VNIPlaybackEventContext,
   type VNIPlaybackEventOptions,
   type VNIPlaybackMode,
+  type VNIPlaybackParticleOptions,
   type VNIPlaybackPoint,
   type VNIPlaybackRange,
   type VNIPlaybackState,
