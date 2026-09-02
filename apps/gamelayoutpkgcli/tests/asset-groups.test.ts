@@ -309,6 +309,69 @@ describe("asset-groups versioned parser", () => {
     ).toEqual(keys);
   });
 
+  it("keeps track and thumb in the step-slider owning asset groups", () => {
+    const keys = ["fastplay-bar.webp", "fastplay-tag.webp"];
+    const manifest = {
+      version: 7,
+      kind: "scene-layout",
+      id: "slider-layout",
+      nodes: [
+        {
+          id: "fast-play",
+          order: 1,
+          uiControl: {
+            kind: "step-slider",
+            track: {
+              kind: "image",
+              path: keys[0],
+              size: { width: 336, height: 50 },
+            },
+            thumb: {
+              kind: "image",
+              path: keys[1],
+              size: { width: 46, height: 46 },
+            },
+            steps: 3,
+            snapDurationSeconds: 0.12,
+          },
+          placements: { landscape: { x: 0, y: 0, scale: 1 } },
+        },
+      ],
+      audio: {
+        version: 1,
+        effects: [],
+        music: [],
+        programmaticEffects: [],
+      },
+      eventAudio: {
+        version: 1,
+        ignoreLegacyAudio: true,
+        bindings: [],
+      },
+      gameModes: {
+        initialMode: "Splash",
+        modes: [{ id: "Splash", nodeStates: {} }],
+        transitions: [],
+      },
+    } as never;
+    const groups = createSceneLayoutAssetGroups({
+      manifest,
+      files: new Map(),
+      sourceZipBytes: 4,
+      output: outputFixture(keys),
+      quality: 80,
+      cwebpVersion: "test",
+      convertedImageCount: 2,
+      ...audioOptimizationFixture(),
+    });
+    expect(
+      groups.groups.find((group) => group.id === "shared")?.requiredAssets,
+    ).toEqual(keys);
+    expect(
+      groups.groups.find((group) => group.id === "mode:Splash")?.requiredAssets,
+    ).toEqual(keys);
+  });
+
   it("creates an independent runtime group for opaque JSON data", () => {
     const key = "spin-config.json";
     const manifest = {

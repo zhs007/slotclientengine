@@ -127,11 +127,12 @@ describe("Scene Layout radio UI control", () => {
     expect(runtime.getRenderObject("splash-flag")).toBeNull();
     const control = runtime.getUiControl("splash-flag");
     expect(control?.kind).toBe("radio");
+    if (control?.kind !== "radio") throw new Error("wrong control");
     expect(control?.getState()).toBe("off");
-    control?.setState("off");
+    control.setState("off");
     expect(events).toEqual([]);
-    control?.setState("on");
-    expect(control?.getState()).toBe("on");
+    control.setState("on");
+    expect(control.getState()).toBe("on");
     expect(events).toEqual([
       expect.objectContaining({
         controlId: "splash-flag",

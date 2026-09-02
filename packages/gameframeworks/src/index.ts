@@ -79,6 +79,7 @@ export type {
   SceneLayoutRenderObjectPropertyAnimation,
   SceneLayoutRadioControl,
   SceneLayoutRadioState,
+  SceneLayoutStepSliderControl,
   SceneLayoutUiControl,
   SceneLayoutSpineLoopRenderObject,
   SceneLayoutSpineAnimationPlayOptions,

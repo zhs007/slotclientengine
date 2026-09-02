@@ -386,9 +386,8 @@ async function flattenLayoutClosure(
     const directory = mapped
       ? ""
       : sourcePath.slice(0, sourcePath.lastIndexOf("/"));
-    const rewrittenProject = rewriteVNIProjectAssetPaths(
-      project,
-      (path) => mapping.get(mapped ? path : `${directory}/${path}`)!,
+    const rewrittenProject = rewriteVNIProjectAssetPaths(project, (path) =>
+      mapping.get(mapped ? path : `${directory}/${path}`)!,
     );
     virtual.set(
       mapping.get(sourcePath)!,
@@ -407,9 +406,8 @@ async function flattenLayoutClosure(
     const directory = mapped
       ? ""
       : sourcePath.slice(0, sourcePath.lastIndexOf("/"));
-    const rewrittenProject = rewriteVNIProjectAssetPaths(
-      project,
-      (path) => mapping.get(mapped ? path : `${directory}/${path}`)!,
+    const rewrittenProject = rewriteVNIProjectAssetPaths(project, (path) =>
+      mapping.get(mapped ? path : `${directory}/${path}`)!,
     );
     virtual.set(
       mapping.get(sourcePath)!,
@@ -709,11 +707,30 @@ function rewriteLayoutManifestFilenameKeys(
     if ("uiControl" in node)
       return {
         ...node,
-        uiControl: {
-          ...node.uiControl,
-          off: { ...node.uiControl.off, path: key(node.uiControl.off.path) },
-          on: { ...node.uiControl.on, path: key(node.uiControl.on.path) },
-        },
+        uiControl:
+          node.uiControl.kind === "radio"
+            ? {
+                ...node.uiControl,
+                off: {
+                  ...node.uiControl.off,
+                  path: key(node.uiControl.off.path),
+                },
+                on: {
+                  ...node.uiControl.on,
+                  path: key(node.uiControl.on.path),
+                },
+              }
+            : {
+                ...node.uiControl,
+                track: {
+                  ...node.uiControl.track,
+                  path: key(node.uiControl.track.path),
+                },
+                thumb: {
+                  ...node.uiControl.thumb,
+                  path: key(node.uiControl.thumb.path),
+                },
+              },
       };
     const resource = node.resource;
     if (resource.kind === "image")

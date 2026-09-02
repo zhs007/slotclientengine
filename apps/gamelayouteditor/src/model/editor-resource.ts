@@ -91,6 +91,8 @@ export interface EditorResourceReference {
     | "layer"
     | "ui-control-off"
     | "ui-control-on"
+    | "ui-control-track"
+    | "ui-control-thumb"
     | "scene-transition"
     | "event-audio";
   readonly variants: readonly SceneLayoutVariantId[];

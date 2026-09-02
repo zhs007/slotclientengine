@@ -8,6 +8,7 @@ import {
   type SceneLayoutPackageResource,
   type SceneLayoutResource,
 } from "@slotclientengine/rendercore/scene-layout/editor";
+import { collectSceneLayoutUiControlImages } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   assertCanonicalPackagePath,
   extractBoundedZip as extractSharedBoundedZip,
@@ -144,7 +145,7 @@ export async function validateLayoutAssets(
   if (options.decodeImage) {
     for (const node of manifest.nodes) {
       if ("uiControl" in node) {
-        for (const image of [node.uiControl.off, node.uiControl.on]) {
+        for (const image of collectSceneLayoutUiControlImages(node.uiControl)) {
           const bytes = assets.get(image.path)!;
           const url = URL.createObjectURL(
             new Blob([bytes as BlobPart], { type: mimeType(image.path) }),

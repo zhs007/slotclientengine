@@ -76,8 +76,7 @@ export interface SceneLayoutSpineStateMachineResourceSpec {
 }
 
 export type SceneLayoutSpineResourceSpec =
-  | SceneLayoutSpineLoopResourceSpec
-  | SceneLayoutSpineStateMachineResourceSpec;
+  SceneLayoutSpineLoopResourceSpec | SceneLayoutSpineStateMachineResourceSpec;
 
 export interface SceneLayoutImageStringResourceSpec {
   readonly kind: "image-string";
@@ -165,8 +164,17 @@ export interface SceneLayoutRadioControlSpec {
   readonly on: SceneLayoutImageResourceSpec;
 }
 
+export interface SceneLayoutStepSliderControlSpec {
+  readonly kind: "step-slider";
+  readonly track: SceneLayoutImageResourceSpec;
+  readonly thumb: SceneLayoutImageResourceSpec;
+  readonly steps: number;
+  readonly snapDurationSeconds: number;
+}
+
 /** Extensible authored UI-control union. */
-export type SceneLayoutUiControlSpec = SceneLayoutRadioControlSpec;
+export type SceneLayoutUiControlSpec =
+  SceneLayoutRadioControlSpec | SceneLayoutStepSliderControlSpec;
 
 export interface SceneLayoutUiControlNode extends SceneLayoutNodeBase {
   readonly uiControl: SceneLayoutUiControlSpec;
@@ -292,8 +300,7 @@ export interface OrientationFocusSceneLayoutAdaptation {
 }
 
 export type SceneLayoutAdaptation =
-  | MaximizedFocusSceneLayoutAdaptation
-  | OrientationFocusSceneLayoutAdaptation;
+  MaximizedFocusSceneLayoutAdaptation | OrientationFocusSceneLayoutAdaptation;
 
 export type SceneLayoutModeAdaptation =
   | Omit<MaximizedFocusSceneLayoutAdaptation, "backgroundNode">
@@ -540,8 +547,7 @@ export type SceneLayoutManifestLegacyModern = Exclude<
   SceneLayoutManifestV7
 >;
 export type SceneLayoutManifest =
-  | SceneLayoutManifestV1
-  | SceneLayoutManifestModern;
+  SceneLayoutManifestV1 | SceneLayoutManifestModern;
 export type SceneLayoutManifestLatest = SceneLayoutManifestV7;
 
 export type SceneLayoutRuntimeResource =
@@ -698,8 +704,7 @@ interface SceneLayoutRenderObjectBase {
 
 export type SceneLayoutRenderObjectMotionAxis = "x" | "y" | "both";
 export type SceneLayoutRenderObjectMotionSelfAlignment =
-  | RenderAlignment
-  | "origin";
+  RenderAlignment | "origin";
 
 export interface SceneLayoutRenderObjectMotionTarget {
   readonly anchor: import("../presentation/index.js").RenderAnchor;
@@ -814,8 +819,16 @@ export interface SceneLayoutRadioControl {
   setState(state: SceneLayoutRadioState): void;
 }
 
+export interface SceneLayoutStepSliderControl {
+  readonly kind: "step-slider";
+  readonly steps: number;
+  getState(): number;
+  setState(state: number): Promise<void>;
+}
+
 /** Stable borrowed capability for an authored UI-control layer. */
-export type SceneLayoutUiControl = SceneLayoutRadioControl;
+export type SceneLayoutUiControl =
+  SceneLayoutRadioControl | SceneLayoutStepSliderControl;
 
 export interface ResolvedSceneLayoutReelGrid {
   readonly id: string;
@@ -964,11 +977,7 @@ export interface SceneLayoutGameModeSnapshot {
   readonly targetMode: string | null;
   readonly phase: "stable" | "transitioning";
   readonly transitionPhase:
-    | "popup"
-    | "awaiting-video-start"
-    | "before-switch"
-    | "after-switch"
-    | null;
+    "popup" | "awaiting-video-start" | "before-switch" | "after-switch" | null;
   readonly transition: { readonly from: string; readonly to: string } | null;
   readonly preparedTargetMode: string | null;
   readonly transitionKind: "none" | "spine" | "video" | null;
@@ -1049,8 +1058,7 @@ export interface SceneLayoutPopupSession {
   readonly type: SceneLayoutPopupBinding["type"];
   /** Canonical live identity when the request supplied instanceId. */
   readonly instanceAddress:
-    | import("./data/runtime-address.js").GameLayoutRuntimeAddress
-    | null;
+    import("./data/runtime-address.js").GameLayoutRuntimeAddress | null;
   /** Current scheduler-owned lifecycle state for this exact request. */
   readonly state: SceneLayoutPopupSessionState;
   /** Resolves after this queued request becomes active and reaches its first stable presentation. */
@@ -1377,8 +1385,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   closePopup(options?: SceneLayoutPopupCloseOptions): Promise<void>;
   /** Allocation-free query for the one active Popup owner address. */
   getActivePopupAddress():
-    | import("./data/runtime-address.js").GameLayoutRuntimeAddress
-    | null;
+    import("./data/runtime-address.js").GameLayoutRuntimeAddress | null;
   /** Returns a borrowed package-owned layer. Callers must not destroy it. */
   getLayer(id: SceneLayoutLayerId): Container;
   /** Returns the manifest-declared mode ids in their stable declaration order. */
@@ -1443,8 +1450,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   dismissActiveAwardCelebrationImmediately(): void;
   /** Returns the active mode popup phase without constructing a diagnostic snapshot. */
   getActiveAwardCelebrationPhase():
-    | import("../popup/core/types.js").AwardCelebrationPhase
-    | null;
+    import("../popup/core/types.js").AwardCelebrationPhase | null;
 }
 
 export type SceneLayoutMainReelSymbolStatePlaybackRequest =

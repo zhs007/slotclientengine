@@ -21,6 +21,8 @@ const mapping = new Map([
   ["alpha.png", "alpha.webp"],
   ["flag-off.png", "flag-off.webp"],
   ["flag-on.png", "flag-on.webp"],
+  ["fastplay-bar.png", "fastplay-bar.webp"],
+  ["fastplay-tag.png", "fastplay-tag.webp"],
   ["digit.png", "digit.webp"],
   ["symbol.png", "symbol.webp"],
   ["symbol-disabled.png", "symbol-disabled.webp"],
@@ -272,6 +274,51 @@ describe("typed asset reference rewriting", () => {
         on: { path: "flag-on.webp" },
       },
     });
+  });
+
+  it("rewrites both step-slider image references", () => {
+    const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
+    const draft = {
+      ...latest,
+      nodes: [
+        ...latest.nodes,
+        {
+          id: "fast-play",
+          order: 3,
+          uiControl: {
+            kind: "step-slider" as const,
+            track: {
+              kind: "image" as const,
+              path: "fastplay-bar.png",
+              size: { width: 336, height: 50 },
+            },
+            thumb: {
+              kind: "image" as const,
+              path: "fastplay-tag.png",
+              size: { width: 46, height: 46 },
+            },
+            steps: 3,
+            snapDurationSeconds: 0.12,
+          },
+          placements: {
+            landscape: { x: 0, y: 0, scale: 1 },
+            portrait: { x: 0, y: 0, scale: 1 },
+          },
+        },
+      ],
+    };
+    const manifest = {
+      ...draft,
+      runtimeAllocation: createSceneLayoutRuntimeAllocation(draft),
+    };
+    expect(rewriteLayoutManifest(manifest, mapping).nodes.at(-1)).toMatchObject(
+      {
+        uiControl: {
+          track: { path: "fastplay-bar.webp" },
+          thumb: { path: "fastplay-tag.webp" },
+        },
+      },
+    );
   });
 
   it("rewrites an opaque JSON data filename without rewriting its bytes", () => {

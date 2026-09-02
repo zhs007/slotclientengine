@@ -120,17 +120,30 @@ export function rewriteLayoutManifest(
     if ("uiControl" in node)
       return {
         ...node,
-        uiControl: {
-          ...node.uiControl,
-          off: {
-            ...node.uiControl.off,
-            path: rewriteRef(node.uiControl.off.path, mapping),
-          },
-          on: {
-            ...node.uiControl.on,
-            path: rewriteRef(node.uiControl.on.path, mapping),
-          },
-        },
+        uiControl:
+          node.uiControl.kind === "radio"
+            ? {
+                ...node.uiControl,
+                off: {
+                  ...node.uiControl.off,
+                  path: rewriteRef(node.uiControl.off.path, mapping),
+                },
+                on: {
+                  ...node.uiControl.on,
+                  path: rewriteRef(node.uiControl.on.path, mapping),
+                },
+              }
+            : {
+                ...node.uiControl,
+                track: {
+                  ...node.uiControl.track,
+                  path: rewriteRef(node.uiControl.track.path, mapping),
+                },
+                thumb: {
+                  ...node.uiControl.thumb,
+                  path: rewriteRef(node.uiControl.thumb.path, mapping),
+                },
+              },
       };
     if (node.resource.kind === "image")
       return {

@@ -13,7 +13,7 @@
 `loadSceneLayoutDeliveryFromUrl({ manifestUrl, urlPrefix })` 直接加载，不要求 game app 维护逐文件 import 表；manifest
 随游戏项目发布，URL prefix 只指向 hashed payload CDN，因此 JS、manifest 与资产可以位于不同 origin 或路径。
 CLI 可 strict 读取并结构化改写 Scene Layout v1–v7；latest v7 保持方向 placement 与 runtime allocation。
-UI control radio 的 off/on 图片都会进入同一 typed owner closure、asset group 与 WebP reference rewrite，不按文件名重新配对。
+UI control radio 的 off/on 与 step-slider 的 track/thumb 都会进入各自 typed owner closure、asset group 与 WebP reference rewrite，不按文件名重新配对。
 
 ## 前置条件
 

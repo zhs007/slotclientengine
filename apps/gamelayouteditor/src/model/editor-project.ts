@@ -109,15 +109,25 @@ export interface EditorGraphicNodeDraft extends EditorNodeDraftBase {
 
 export interface EditorUiControlNodeDraft extends EditorNodeDraftBase {
   readonly layerType: "ui-control";
-  readonly uiControl: {
-    readonly kind: "radio";
-    offResourceId: string;
-    onResourceId: string;
-  };
+  readonly uiControl: EditorUiControlDraft;
   resourceId?: never;
   playback?: never;
   imageString?: never;
 }
+
+export type EditorUiControlDraft =
+  | {
+      readonly kind: "radio";
+      offResourceId: string;
+      onResourceId: string;
+    }
+  | {
+      readonly kind: "step-slider";
+      trackResourceId: string;
+      thumbResourceId: string;
+      steps: number;
+      snapDurationSeconds: number;
+    };
 
 export type EditorNodeDraft = EditorGraphicNodeDraft | EditorUiControlNodeDraft;
 
@@ -422,27 +432,47 @@ export function resolveEditorUiControl(
   project: Pick<EditorProject, "resources" | "assets">,
   node: EditorUiControlNodeDraft,
 ): SceneLayoutUiControlSpec {
-  const resolve = (resourceId: string, state: "off" | "on") => {
+  const resolve = (resourceId: string, role: string) => {
     const resource = project.resources.get(resourceId);
     if (!resource)
-      throw new Error(
-        `控件 ${node.id} 的 ${state} 引用未知资源：${resourceId}`,
-      );
+      throw new Error(`控件 ${node.id} 的 ${role} 引用未知资源：${resourceId}`);
     if (resource.kind !== "image")
-      throw new Error(`控件 ${node.id} 的 ${state} 必须绑定图片资源。`);
+      throw new Error(`控件 ${node.id} 的 ${role} 必须绑定图片资源。`);
     if (!project.assets.has(resource.path))
       throw new Error(
-        `控件 ${node.id} 的 ${state} 缺少 bytes：${resource.path}`,
+        `控件 ${node.id} 的 ${role} 缺少 bytes：${resource.path}`,
       );
     return { kind: "image" as const, path: resource.path, size: resource.size };
   };
-  const off = resolve(node.uiControl.offResourceId, "off");
-  const on = resolve(node.uiControl.onResourceId, "on");
-  if (off.path === on.path)
-    throw new Error(`控件 ${node.id} 的 off/on 必须是两张不同图片。`);
-  if (off.size.width !== on.size.width || off.size.height !== on.size.height)
-    throw new Error(`控件 ${node.id} 的 off/on 图片尺寸必须相同。`);
-  return { kind: "radio", off, on };
+  if (node.uiControl.kind === "radio") {
+    const off = resolve(node.uiControl.offResourceId, "off");
+    const on = resolve(node.uiControl.onResourceId, "on");
+    if (off.path === on.path)
+      throw new Error(`控件 ${node.id} 的 off/on 必须是两张不同图片。`);
+    if (off.size.width !== on.size.width || off.size.height !== on.size.height)
+      throw new Error(`控件 ${node.id} 的 off/on 图片尺寸必须相同。`);
+    return { kind: "radio", off, on };
+  }
+  const track = resolve(node.uiControl.trackResourceId, "track");
+  const thumb = resolve(node.uiControl.thumbResourceId, "thumb");
+  if (track.path === thumb.path)
+    throw new Error(`控件 ${node.id} 的 track/thumb 必须是两张不同图片。`);
+  if (track.size.width <= thumb.size.width)
+    throw new Error(`控件 ${node.id} 的 track 宽度必须大于 thumb 宽度。`);
+  if (!Number.isSafeInteger(node.uiControl.steps) || node.uiControl.steps < 2)
+    throw new Error(`控件 ${node.id} 的档位数必须是至少 2 的安全整数。`);
+  if (
+    !Number.isFinite(node.uiControl.snapDurationSeconds) ||
+    node.uiControl.snapDurationSeconds <= 0
+  )
+    throw new Error(`控件 ${node.id} 的吸附时长必须是正有限数。`);
+  return {
+    kind: "step-slider",
+    track,
+    thumb,
+    steps: node.uiControl.steps,
+    snapDurationSeconds: node.uiControl.snapDurationSeconds,
+  };
 }
 
 function editorNodeToManifest(
@@ -879,18 +909,34 @@ export function manifestToEditorProject(
   }
   project.nodes = latest.nodes.map((node) => {
     if ("uiControl" in node) {
-      const offResourceId = registerResource(
-        manifestResourceToEditorResource(node.uiControl.off, assets),
-      );
-      const onResourceId = registerResource(
-        manifestResourceToEditorResource(node.uiControl.on, assets),
-      );
+      const uiControl =
+        node.uiControl.kind === "radio"
+          ? {
+              kind: "radio" as const,
+              offResourceId: registerResource(
+                manifestResourceToEditorResource(node.uiControl.off, assets),
+              ),
+              onResourceId: registerResource(
+                manifestResourceToEditorResource(node.uiControl.on, assets),
+              ),
+            }
+          : {
+              kind: "step-slider" as const,
+              trackResourceId: registerResource(
+                manifestResourceToEditorResource(node.uiControl.track, assets),
+              ),
+              thumbResourceId: registerResource(
+                manifestResourceToEditorResource(node.uiControl.thumb, assets),
+              ),
+              steps: node.uiControl.steps,
+              snapDurationSeconds: node.uiControl.snapDurationSeconds,
+            };
       return {
         id: node.id,
         order: node.order,
         ...(node.scope ? { scope: structuredClone(node.scope) } : {}),
         layerType: "ui-control" as const,
-        uiControl: { kind: "radio" as const, offResourceId, onResourceId },
+        uiControl,
         placements: structuredClone(node.placements),
       };
     }

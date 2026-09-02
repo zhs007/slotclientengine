@@ -120,18 +120,32 @@ export function compileGameLayoutRuntimeEventCatalog(
   for (const node of source.manifest.nodes) {
     if ("uiControl" in node) {
       const owner = ["ui-control", node.id];
-      for (const state of ["off", "on"] as const)
+      const states =
+        node.uiControl.kind === "radio"
+          ? (["off", "on"] as const)
+          : Array.from({ length: node.uiControl.steps }, (_, state) =>
+              String(state),
+            );
+      for (const state of states)
         add({
-          segments: [...owner, "radio", "state", state, "entered"],
+          segments: [...owner, node.uiControl.kind, "state", state, "entered"],
           owner,
           family: "ui-control-state",
           facets: [
             ["control", node.id],
-            ["control-kind", "radio"],
+            ["control-kind", node.uiControl.kind],
             ["state", state],
             ["edge", "entered"],
           ],
-          detail: { controlId: node.id, controlKind: "radio", state },
+          detail: {
+            controlId: node.id,
+            controlKind: node.uiControl.kind,
+            state:
+              node.uiControl.kind === "step-slider" ? Number(state) : state,
+            ...(node.uiControl.kind === "step-slider"
+              ? { steps: node.uiControl.steps }
+              : {}),
+          },
         });
       continue;
     }

@@ -907,6 +907,20 @@ function facetValueLabel(
   key: string,
   value: string,
 ): string {
+  if (entry.family === "ui-control-state") {
+    const controlKind = entry.facets.find(
+      (facet) => facet.key === "control-kind",
+    )?.value;
+    if (key === "control-kind" && value === "step-slider")
+      return "多档选择框（step-slider）";
+    if (
+      key === "state" &&
+      controlKind === "step-slider" &&
+      /^(0|[1-9]\d*)$/u.test(value)
+    )
+      return `档位 ${Number(value) + 1}（state ${value}）`;
+    return value;
+  }
   if (entry.family !== "spin-lifecycle") return value;
   if (key === "spin") return SPIN_LABELS[value] ?? value;
   if (key === "lifecycle") return SPIN_LIFECYCLE_LABELS[value] ?? value;

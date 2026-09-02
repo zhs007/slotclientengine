@@ -37,9 +37,11 @@ import {
   createDefaultNodePlacement,
   ordinaryLayerVariantIds,
   cloneEditorProject,
+  editorProjectToManifest,
   type EditorNodeDraft,
   type EditorGraphicNodeDraft,
   type EditorUiControlNodeDraft,
+  type EditorUiControlDraft,
   type EditorNodePlacement,
   type EditorProject,
   type EditorSpineGameModeTransitionDraft,
@@ -167,9 +169,8 @@ export async function importVniBundle(options: {
   for (const asset of sourceProject.assets)
     mapping.set(asset.path, basenameFromSourcePath(asset.path));
   assertNoEditorAssetKeyAliases([...mapping.values()]);
-  const flatProject = rewriteVNIProjectAssetPaths(
-    sourceProject,
-    (path) => mapping.get(path)!,
+  const flatProject = rewriteVNIProjectAssetPaths(sourceProject, (path) =>
+    mapping.get(path)!,
   );
   const projectPath = basenameFromSourcePath(entry.path);
   assertNoEditorAssetKeyAliases([projectPath, ...mapping.values()]);
@@ -540,10 +541,17 @@ export function getLayoutResourceReferences(
       ),
     );
     if (node.layerType === "ui-control") {
-      if (node.uiControl.offResourceId === resourceId)
-        nodes.push({ nodeId: node.id, role: "ui-control-off", variants });
-      if (node.uiControl.onResourceId === resourceId)
-        nodes.push({ nodeId: node.id, role: "ui-control-on", variants });
+      if (node.uiControl.kind === "radio") {
+        if (node.uiControl.offResourceId === resourceId)
+          nodes.push({ nodeId: node.id, role: "ui-control-off", variants });
+        if (node.uiControl.onResourceId === resourceId)
+          nodes.push({ nodeId: node.id, role: "ui-control-on", variants });
+      } else {
+        if (node.uiControl.trackResourceId === resourceId)
+          nodes.push({ nodeId: node.id, role: "ui-control-track", variants });
+        if (node.uiControl.thumbResourceId === resourceId)
+          nodes.push({ nodeId: node.id, role: "ui-control-thumb", variants });
+      }
     } else if (node.resourceId === resourceId) {
       nodes.push({ nodeId: node.id, role: "layer", variants });
     }
@@ -716,7 +724,9 @@ export function addRadioControlLayer(options: {
   readonly onResourceId: string;
   readonly nodeId: string;
   readonly variants: readonly SceneLayoutVariantId[];
-}): EditorUiControlNodeDraft {
+}): EditorUiControlNodeDraft & {
+  readonly uiControl: Extract<EditorUiControlDraft, { kind: "radio" }>;
+} {
   const off = requireResource(options.project, options.offResourceId);
   const on = requireResource(options.project, options.onResourceId);
   if (off.kind !== "image" || on.kind !== "image")
@@ -727,7 +737,9 @@ export function addRadioControlLayer(options: {
     throw new Error("单选框 off/on 图片尺寸必须相同。");
   assertNodeIdAvailable(options.project, options.nodeId);
   assertLayerVariantsAllowed(options.variants);
-  const node: EditorUiControlNodeDraft = {
+  const node: EditorUiControlNodeDraft & {
+    readonly uiControl: Extract<EditorUiControlDraft, { kind: "radio" }>;
+  } = {
     id: options.nodeId,
     order: nextOrder(options.project),
     layerType: "ui-control",
@@ -754,8 +766,8 @@ export function rebindRadioControlResource(options: {
   readonly resourceId: string;
 }): void {
   const node = requireLayer(options.project, options.nodeId);
-  if (node.layerType !== "ui-control")
-    throw new Error(`图层 ${options.nodeId} 不是 UI 控件。`);
+  if (node.layerType !== "ui-control" || node.uiControl.kind !== "radio")
+    throw new Error(`图层 ${options.nodeId} 不是单选框 UI 控件。`);
   const resource = requireResource(options.project, options.resourceId);
   if (resource.kind !== "image")
     throw new Error("单选框状态必须绑定图片资源。");
@@ -774,6 +786,130 @@ export function rebindRadioControlResource(options: {
     throw new Error("单选框 off/on 图片尺寸必须相同。");
   if (options.state === "off") node.uiControl.offResourceId = resource.id;
   else node.uiControl.onResourceId = resource.id;
+}
+
+export function addStepSliderControlLayer(options: {
+  readonly project: EditorProject;
+  readonly trackResourceId: string;
+  readonly thumbResourceId: string;
+  readonly nodeId: string;
+  readonly variants: readonly SceneLayoutVariantId[];
+  readonly steps?: number;
+  readonly snapDurationSeconds?: number;
+}): EditorUiControlNodeDraft & {
+  readonly uiControl: Extract<EditorUiControlDraft, { kind: "step-slider" }>;
+} {
+  const track = requireResource(options.project, options.trackResourceId);
+  const thumb = requireResource(options.project, options.thumbResourceId);
+  assertStepSliderEditorContract(
+    track,
+    thumb,
+    options.steps ?? 3,
+    options.snapDurationSeconds ?? 0.12,
+  );
+  assertNodeIdAvailable(options.project, options.nodeId);
+  assertLayerVariantsAllowed(options.variants);
+  const node = {
+    id: options.nodeId,
+    order: nextOrder(options.project),
+    layerType: "ui-control" as const,
+    uiControl: {
+      kind: "step-slider" as const,
+      trackResourceId: track.id,
+      thumbResourceId: thumb.id,
+      steps: options.steps ?? 3,
+      snapDurationSeconds: options.snapDurationSeconds ?? 0.12,
+    },
+    placements: Object.fromEntries(
+      options.variants.map((variant) => [
+        variant,
+        createDefaultNodePlacement(),
+      ]),
+    ),
+  };
+  options.project.nodes.push(node);
+  return node;
+}
+
+export function rebindStepSliderControlResource(options: {
+  readonly project: EditorProject;
+  readonly nodeId: string;
+  readonly role: "track" | "thumb";
+  readonly resourceId: string;
+}): void {
+  const node = requireLayer(options.project, options.nodeId);
+  if (node.layerType !== "ui-control" || node.uiControl.kind !== "step-slider")
+    throw new Error(`图层 ${options.nodeId} 不是多档选择框 UI 控件。`);
+  const replacement = requireResource(options.project, options.resourceId);
+  const other = requireResource(
+    options.project,
+    options.role === "track"
+      ? node.uiControl.thumbResourceId
+      : node.uiControl.trackResourceId,
+  );
+  assertStepSliderEditorContract(
+    options.role === "track" ? replacement : other,
+    options.role === "thumb" ? replacement : other,
+    node.uiControl.steps,
+    node.uiControl.snapDurationSeconds,
+  );
+  if (options.role === "track") node.uiControl.trackResourceId = replacement.id;
+  else node.uiControl.thumbResourceId = replacement.id;
+}
+
+export function configureStepSliderControl(options: {
+  readonly project: EditorProject;
+  readonly nodeId: string;
+  readonly steps: number;
+  readonly snapDurationSeconds: number;
+}): void {
+  const node = requireLayer(options.project, options.nodeId);
+  if (node.layerType !== "ui-control" || node.uiControl.kind !== "step-slider")
+    throw new Error(`图层 ${options.nodeId} 不是多档选择框 UI 控件。`);
+  const track = requireResource(
+    options.project,
+    node.uiControl.trackResourceId,
+  );
+  const thumb = requireResource(
+    options.project,
+    node.uiControl.thumbResourceId,
+  );
+  assertStepSliderEditorContract(
+    track,
+    thumb,
+    options.steps,
+    options.snapDurationSeconds,
+  );
+  const candidate = cloneEditorProject(options.project);
+  const candidateNode = requireLayer(candidate, options.nodeId);
+  if (
+    candidateNode.layerType !== "ui-control" ||
+    candidateNode.uiControl.kind !== "step-slider"
+  )
+    throw new Error(`图层 ${options.nodeId} 不是多档选择框 UI 控件。`);
+  candidateNode.uiControl.steps = options.steps;
+  candidateNode.uiControl.snapDurationSeconds = options.snapDurationSeconds;
+  editorProjectToManifest(candidate);
+  node.uiControl.steps = options.steps;
+  node.uiControl.snapDurationSeconds = options.snapDurationSeconds;
+}
+
+function assertStepSliderEditorContract(
+  track: EditorLayoutResource,
+  thumb: EditorLayoutResource,
+  steps: number,
+  snapDurationSeconds: number,
+): asserts track is Extract<EditorLayoutResource, { kind: "image" }> {
+  if (track.kind !== "image" || thumb.kind !== "image")
+    throw new Error("多档选择框 track/thumb 必须绑定图片资源。");
+  if (track.path === thumb.path)
+    throw new Error("多档选择框 track/thumb 必须是两张不同图片。");
+  if (track.size.width <= thumb.size.width)
+    throw new Error("多档选择框 track 宽度必须大于 thumb 宽度。");
+  if (!Number.isSafeInteger(steps) || steps < 2)
+    throw new Error("多档选择框档位数必须是至少 2 的安全整数。");
+  if (!Number.isFinite(snapDurationSeconds) || snapDurationSeconds <= 0)
+    throw new Error("多档选择框吸附时长必须是正有限数。");
 }
 
 export function rebindLayerResource(options: {
@@ -1670,9 +1806,8 @@ function commitResourceReplacement(
   if (replacement.kind === "spine") {
     const invalid = references
       .filter((reference) => reference.role !== "scene-transition")
-      .map(
-        (reference) =>
-          project.nodes.find((node) => node.id === reference.nodeId)!,
+      .map((reference) =>
+        project.nodes.find((node) => node.id === reference.nodeId)!,
       )
       .filter(
         (node) =>
@@ -1739,32 +1874,42 @@ function commitResourceReplacement(
   }
   if (replacement.kind === "image") {
     for (const reference of references) {
-      if (
-        reference.role !== "ui-control-off" &&
-        reference.role !== "ui-control-on"
-      )
-        continue;
+      if (!reference.role.startsWith("ui-control-")) continue;
       const node = project.nodes.find(
         (candidate) => candidate.id === reference.nodeId,
       );
       if (!node || node.layerType !== "ui-control")
         throw new Error(
-          `单选框图片引用失效：${reference.nodeId} / ${reference.role}。`,
+          `UI 控件图片引用失效：${reference.nodeId} / ${reference.role}。`,
         );
+      if (node.uiControl.kind === "radio") {
+        const otherId =
+          reference.role === "ui-control-off"
+            ? node.uiControl.onResourceId
+            : node.uiControl.offResourceId;
+        const other = requireResource(project, otherId);
+        if (other.kind !== "image")
+          throw new Error(`单选框 ${node.id} 的另一状态不是图片资源。`);
+        if (replacement.path === other.path)
+          throw new Error(`单选框 ${node.id} 的 off/on 必须是两张不同图片。`);
+        if (
+          replacement.size.width !== other.size.width ||
+          replacement.size.height !== other.size.height
+        )
+          throw new Error(`单选框 ${node.id} 的 off/on 图片尺寸必须相同。`);
+        continue;
+      }
       const otherId =
-        reference.role === "ui-control-off"
-          ? node.uiControl.onResourceId
-          : node.uiControl.offResourceId;
+        reference.role === "ui-control-track"
+          ? node.uiControl.thumbResourceId
+          : node.uiControl.trackResourceId;
       const other = requireResource(project, otherId);
-      if (other.kind !== "image")
-        throw new Error(`单选框 ${node.id} 的另一状态不是图片资源。`);
-      if (replacement.path === other.path)
-        throw new Error(`单选框 ${node.id} 的 off/on 必须是两张不同图片。`);
-      if (
-        replacement.size.width !== other.size.width ||
-        replacement.size.height !== other.size.height
-      )
-        throw new Error(`单选框 ${node.id} 的 off/on 图片尺寸必须相同。`);
+      assertStepSliderEditorContract(
+        reference.role === "ui-control-track" ? replacement : other,
+        reference.role === "ui-control-thumb" ? replacement : other,
+        node.uiControl.steps,
+        node.uiControl.snapDurationSeconds,
+      );
     }
   }
   for (const [path, bytes] of prepared.assets)

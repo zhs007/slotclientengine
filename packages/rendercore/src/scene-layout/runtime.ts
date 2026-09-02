@@ -44,6 +44,7 @@ import type {
   SceneLayoutRenderLayerRef,
   SceneLayoutRenderObject,
   SceneLayoutRadioState,
+  SceneLayoutStepSliderControlSpec,
   SceneLayoutUiControl,
   SceneLayoutUiControlStateSource,
   SceneLayoutRenderObjectMotion,
@@ -54,6 +55,13 @@ import type {
   SceneLayoutSpineSlotObjectAttachment,
   SceneLayoutSpineSlotObjectBinding,
 } from "./types.js";
+import {
+  assertStepSliderState,
+  clampStepSliderPosition,
+  resolveNearestStepSliderState,
+  resolveSceneLayoutUiControlSize,
+  resolveStepSliderPosition,
+} from "./ui-control.js";
 import type { RenderObjectChildLayerRef } from "../presentation/render-object.js";
 import {
   createRenderObjectLayer,
@@ -107,21 +115,24 @@ export interface CreateSceneLayoutRuntimeOptions {
   ) => void;
 }
 
-export interface SceneLayoutUiControlStateEvent {
-  readonly controlId: string;
-  readonly controlKind: "radio";
-  readonly previousState: SceneLayoutRadioState;
-  readonly state: SceneLayoutRadioState;
-  readonly source: SceneLayoutUiControlStateSource;
-}
+export type SceneLayoutUiControlStateEvent =
+  | Readonly<{
+      controlId: string;
+      controlKind: "radio";
+      previousState: SceneLayoutRadioState;
+      state: SceneLayoutRadioState;
+      source: SceneLayoutUiControlStateSource;
+    }>
+  | Readonly<{
+      controlId: string;
+      controlKind: "step-slider";
+      previousState: number;
+      state: number;
+      source: SceneLayoutUiControlStateSource;
+    }>;
 
 export type SceneLayoutSpinePlaybackOutcome =
-  | "completed"
-  | "stopped"
-  | "superseded"
-  | "aborted"
-  | "failed"
-  | "destroyed";
+  "completed" | "stopped" | "superseded" | "aborted" | "failed" | "destroyed";
 
 export interface SceneLayoutSpinePlaybackEvent {
   readonly nodeId: string;
@@ -159,8 +170,7 @@ interface RuntimeNode {
   imageString: RenderImageString | null;
   imageSprite: Sprite | null;
   texture: Texture | null;
-  uiControlTextures: Readonly<Record<SceneLayoutRadioState, Texture>> | null;
-  uiControlState: SceneLayoutRadioState | null;
+  uiControl: RuntimeUiControl | null;
   programPlayback: NodeProgramPlayback | null;
   programMotion: RenderObjectMotion | null;
   programMotionAttachment: RenderObjectMotionAttachment | null;
@@ -173,6 +183,37 @@ interface RuntimeNode {
   motionState: RenderObjectMotionState;
   slotObjectAttachment: ActiveNodeSlotObjectAttachment | null;
 }
+
+interface RuntimeRadioControl {
+  readonly kind: "radio";
+  readonly textures: Readonly<Record<SceneLayoutRadioState, Texture>>;
+  readonly sprite: Sprite;
+  state: SceneLayoutRadioState;
+}
+
+interface StepSliderSnap {
+  readonly fromX: number;
+  readonly targetX: number;
+  readonly targetState: number;
+  readonly source: SceneLayoutUiControlStateSource | null;
+  readonly durationSeconds: number;
+  elapsedSeconds: number;
+  readonly resolve?: () => void;
+  readonly reject?: (error: Error) => void;
+}
+
+interface RuntimeStepSliderControl {
+  readonly kind: "step-slider";
+  readonly spec: SceneLayoutStepSliderControlSpec;
+  readonly view: Container;
+  readonly trackSprite: Sprite;
+  readonly thumbSprite: Sprite;
+  state: number;
+  pointerId: number | null;
+  snap: StepSliderSnap | null;
+}
+
+type RuntimeUiControl = RuntimeRadioControl | RuntimeStepSliderControl;
 
 interface NodeProgramPlayback {
   readonly animation: string;
@@ -335,8 +376,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         imageString: null,
         imageSprite: null,
         texture: null,
-        uiControlTextures: null,
-        uiControlState: null,
+        uiControl: null,
         programPlayback: null,
         programMotion: null,
         programMotionAttachment: null,
@@ -462,6 +502,11 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         modeActive &&
         this.#authoredNodeActive.get(node.spec.id) !== false &&
         this.#programNodeVisible.get(node.spec.id) !== false;
+      if ((!placement || !active) && node.slot.renderable)
+        this.cancelStepSliderInteraction(
+          node,
+          `Scene layout step-slider control "${node.spec.id}" was hidden.`,
+        );
       node.slot.visible = Boolean(placement) && active;
       node.slot.renderable = Boolean(placement) && active;
       if (placement && node.prepared) {
@@ -503,6 +548,11 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         })
       : null;
     this.resetAllNodeMotions("Scene layout geometry was replaced.");
+    for (const node of this.#nodes)
+      this.cancelStepSliderInteraction(
+        node,
+        `Scene layout step-slider control "${node.spec.id}" geometry was replaced.`,
+      );
     this.#manifest = manifest;
     for (const [index, spec] of manifest.nodes.entries())
       this.container.setChildIndex(this.requireNode(spec.id).slot, index);
@@ -547,6 +597,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     }
     this.#renderObjectMotionRuntime.update(deltaSeconds);
     for (const node of this.#nodes) {
+      this.updateStepSlider(node, deltaSeconds);
       if (node.player && node.slot.renderable) {
         const result = node.player.update(deltaSeconds);
         node.stateController?.updateCompleted(result.completed);
@@ -762,15 +813,27 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     if (!("uiControl" in node.spec)) return null;
     const cached = this.#uiControls.get(nodeId);
     if (cached) return cached;
-    const control: SceneLayoutUiControl = Object.freeze({
-      kind: "radio",
-      getState: () => {
-        this.assertReady();
-        return this.requireUiControlState(nodeId);
-      },
-      setState: (state: SceneLayoutRadioState) =>
-        this.setUiControlState(nodeId, state, "programmatic"),
-    });
+    const control: SceneLayoutUiControl =
+      node.spec.uiControl.kind === "radio"
+        ? Object.freeze({
+            kind: "radio" as const,
+            getState: () => {
+              this.assertReady();
+              return this.requireRadioControl(nodeId).state;
+            },
+            setState: (state: SceneLayoutRadioState) => {
+              this.setRadioControlState(nodeId, state, "programmatic");
+            },
+          })
+        : Object.freeze({
+            kind: "step-slider" as const,
+            steps: node.spec.uiControl.steps,
+            getState: () => {
+              this.assertReady();
+              return this.requireStepSliderControl(nodeId).state;
+            },
+            setState: (state: number) => this.setStepSliderState(nodeId, state),
+          });
     this.#uiControls.set(nodeId, control);
     return control;
   }
@@ -978,38 +1041,48 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   private async initNode(node: RuntimeNode): Promise<void> {
     if ("uiControl" in node.spec) {
       const control = node.spec.uiControl;
-      const offUrl = this.#resource.imageUrls[control.off.path];
-      const onUrl = this.#resource.imageUrls[control.on.path];
-      if (!offUrl || !onUrl)
-        throw new SceneLayoutError(
-          `Scene layout UI control "${node.spec.id}" image URL is missing.`,
-        );
-      const [off, on] = await Promise.all([
-        this.loadTextureOnce(offUrl),
-        this.loadTextureOnce(onUrl),
-      ]);
-      this.assertAlive();
-      assertTextureSize(off, control.off, node.spec.id, "off");
-      assertTextureSize(on, control.on, node.spec.id, "on");
-      node.uiControlTextures = Object.freeze({ off, on });
-      node.uiControlState = "off";
-      node.texture = off;
-      const sprite = new Sprite(off);
-      sprite.anchor.set(0.5);
-      sprite.label = `scene-layout-ui-control:${node.spec.id}`;
-      sprite.eventMode = "static";
-      sprite.cursor = "pointer";
-      sprite.on("pointertap", (event: FederatedPointerEvent) => {
-        consumeUiControlPointerEvent(event);
-        const current = this.requireUiControlState(node.spec.id);
-        this.setUiControlState(
-          node.spec.id,
-          current === "off" ? "on" : "off",
-          "pointer",
-        );
-      });
-      node.imageSprite = sprite;
-      node.named.addChild(sprite);
+      if (control.kind === "radio") {
+        const offUrl = this.#resource.imageUrls[control.off.path];
+        const onUrl = this.#resource.imageUrls[control.on.path];
+        if (!offUrl || !onUrl)
+          throw new SceneLayoutError(
+            `Scene layout UI control "${node.spec.id}" image URL is missing.`,
+          );
+        const textures = await settleAllInOrder([
+          this.loadTextureOnce(offUrl),
+          this.loadTextureOnce(onUrl),
+        ]);
+        const off = textures[0]!;
+        const on = textures[1]!;
+        this.assertAlive();
+        assertTextureSize(off, control.off, node.spec.id, "off");
+        assertTextureSize(on, control.on, node.spec.id, "on");
+        node.texture = off;
+        const sprite = new Sprite(off);
+        sprite.anchor.set(0.5);
+        sprite.label = `scene-layout-ui-control:${node.spec.id}`;
+        sprite.eventMode = "static";
+        sprite.cursor = "pointer";
+        sprite.on("pointertap", (event: FederatedPointerEvent) => {
+          consumeUiControlPointerEvent(event, true);
+          const runtimeControl = this.requireRadioControl(node.spec.id);
+          this.setRadioControlState(
+            node.spec.id,
+            runtimeControl.state === "off" ? "on" : "off",
+            "pointer",
+          );
+        });
+        node.imageSprite = sprite;
+        node.uiControl = {
+          kind: "radio",
+          textures: Object.freeze({ off, on }),
+          sprite,
+          state: "off",
+        };
+        node.named.addChild(sprite);
+        return;
+      }
+      await this.initStepSlider(node, control);
       return;
     }
     if (node.spec.resource.kind === "image") {
@@ -1111,6 +1184,177 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     node.named.addChild(player.view);
   }
 
+  private async initStepSlider(
+    node: RuntimeNode,
+    spec: SceneLayoutStepSliderControlSpec,
+  ): Promise<void> {
+    const trackUrl = this.#resource.imageUrls[spec.track.path];
+    const thumbUrl = this.#resource.imageUrls[spec.thumb.path];
+    if (!trackUrl || !thumbUrl)
+      throw new SceneLayoutError(
+        `Scene layout step-slider control "${node.spec.id}" image URL is missing.`,
+      );
+    const textures = await settleAllInOrder([
+      this.loadTextureOnce(trackUrl),
+      this.loadTextureOnce(thumbUrl),
+    ]);
+    const trackTexture = textures[0]!;
+    const thumbTexture = textures[1]!;
+    this.assertAlive();
+    assertTextureSize(trackTexture, spec.track, node.spec.id, "track");
+    assertTextureSize(thumbTexture, spec.thumb, node.spec.id, "thumb");
+    const view = new Container();
+    view.label = `scene-layout-ui-control:${node.spec.id}`;
+    view.eventMode = "static";
+    view.cursor = "pointer";
+    const trackSprite = new Sprite(trackTexture);
+    trackSprite.anchor.set(0.5);
+    trackSprite.label = `scene-layout-step-slider-track:${node.spec.id}`;
+    trackSprite.eventMode = "none";
+    const thumbSprite = new Sprite(thumbTexture);
+    thumbSprite.anchor.set(0.5);
+    thumbSprite.label = `scene-layout-step-slider-thumb:${node.spec.id}`;
+    thumbSprite.eventMode = "none";
+    thumbSprite.x = resolveStepSliderPosition(spec, 0);
+    view.addChild(trackSprite, thumbSprite);
+    const control: RuntimeStepSliderControl = {
+      kind: "step-slider",
+      spec,
+      view,
+      trackSprite,
+      thumbSprite,
+      state: 0,
+      pointerId: null,
+      snap: null,
+    };
+    node.uiControl = control;
+    const onPointerDown = (event: FederatedPointerEvent) => {
+      consumeUiControlPointerEvent(event, false);
+      this.rejectStepSliderSnap(
+        control,
+        `Scene layout step-slider control "${node.spec.id}" state change was superseded by pointer input.`,
+      );
+      if (control.pointerId !== null && control.pointerId !== event.pointerId)
+        return;
+      control.pointerId = event.pointerId;
+      control.thumbSprite.x = clampStepSliderPosition(
+        spec,
+        event.getLocalPosition(view).x,
+      );
+    };
+    const onPointerMove = (event: FederatedPointerEvent) => {
+      if (control.pointerId !== event.pointerId) return;
+      consumeUiControlPointerEvent(event, false);
+      control.thumbSprite.x = clampStepSliderPosition(
+        spec,
+        event.getLocalPosition(view).x,
+      );
+    };
+    const onPointerUp = (event: FederatedPointerEvent) => {
+      if (control.pointerId !== event.pointerId) return;
+      consumeUiControlPointerEvent(event, true);
+      control.pointerId = null;
+      const state = resolveNearestStepSliderState(spec, control.thumbSprite.x);
+      this.startStepSliderSnap(node, state, "pointer");
+    };
+    const onPointerCancel = (event: FederatedPointerEvent) => {
+      if (control.pointerId !== event.pointerId) return;
+      consumeUiControlPointerEvent(event, true);
+      control.pointerId = null;
+      this.startStepSliderSnap(node, control.state, null);
+    };
+    view.on("pointerdown", onPointerDown);
+    view.on("globalpointermove", onPointerMove);
+    view.on("pointerup", onPointerUp);
+    view.on("pointerupoutside", onPointerUp);
+    view.on("pointercancel", onPointerCancel);
+    node.named.addChild(view);
+  }
+
+  private startStepSliderSnap(
+    node: RuntimeNode,
+    targetState: number,
+    source: SceneLayoutUiControlStateSource | null,
+    resolve?: () => void,
+    reject?: (error: Error) => void,
+  ): void {
+    const control = this.requireStepSliderControl(node.spec.id);
+    const targetX = resolveStepSliderPosition(control.spec, targetState);
+    control.snap = {
+      fromX: control.thumbSprite.x,
+      targetX,
+      targetState,
+      source,
+      durationSeconds: control.spec.snapDurationSeconds,
+      elapsedSeconds: 0,
+      ...(resolve ? { resolve } : {}),
+      ...(reject ? { reject } : {}),
+    };
+    if (control.thumbSprite.x === targetX)
+      this.completeStepSliderSnap(node, control, control.snap);
+  }
+
+  private updateStepSlider(node: RuntimeNode, deltaSeconds: number): void {
+    const control = node.uiControl;
+    if (control?.kind !== "step-slider" || !control.snap) return;
+    const snap = control.snap;
+    snap.elapsedSeconds = Math.min(
+      snap.durationSeconds,
+      snap.elapsedSeconds + deltaSeconds,
+    );
+    const progress = snap.elapsedSeconds / snap.durationSeconds;
+    const eased = 1 - Math.pow(1 - progress, 3);
+    control.thumbSprite.x = snap.fromX + (snap.targetX - snap.fromX) * eased;
+    if (progress === 1) this.completeStepSliderSnap(node, control, snap);
+  }
+
+  private completeStepSliderSnap(
+    node: RuntimeNode,
+    control: RuntimeStepSliderControl,
+    snap: StepSliderSnap,
+  ): void {
+    if (control.snap !== snap) return;
+    control.thumbSprite.x = snap.targetX;
+    control.snap = null;
+    const previousState = control.state;
+    control.state = snap.targetState;
+    if (snap.source && previousState !== snap.targetState)
+      this.#observeUiControlState?.(
+        Object.freeze({
+          controlId: node.spec.id,
+          controlKind: "step-slider",
+          previousState,
+          state: snap.targetState,
+          source: snap.source,
+        }),
+      );
+    snap.resolve?.();
+  }
+
+  private rejectStepSliderSnap(
+    control: RuntimeStepSliderControl,
+    message: string,
+  ): void {
+    const snap = control.snap;
+    if (!snap) return;
+    control.snap = null;
+    snap.reject?.(new SceneLayoutError(message));
+  }
+
+  private cancelStepSliderInteraction(
+    node: RuntimeNode,
+    message: string,
+  ): void {
+    const control = node.uiControl;
+    if (control?.kind !== "step-slider") return;
+    control.pointerId = null;
+    this.rejectStepSliderSnap(control, message);
+    control.thumbSprite.x = resolveStepSliderPosition(
+      control.spec,
+      control.state,
+    );
+  }
+
   private async prepareNodesInternal(
     nodeIds: readonly string[],
   ): Promise<void> {
@@ -1188,11 +1432,17 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     node.vniPlayer = null;
     node.imageString?.destroy();
     node.imageString = null;
+    const sliderView =
+      node.uiControl?.kind === "step-slider" ? node.uiControl.view : null;
     node.imageSprite?.destroy({ texture: false });
     node.imageSprite = null;
     node.texture = null;
-    node.uiControlTextures = null;
-    node.uiControlState = null;
+    this.cancelStepSliderInteraction(
+      node,
+      `Scene layout step-slider control "${node.spec.id}" was destroyed.`,
+    );
+    sliderView?.destroy({ children: true, texture: false });
+    node.uiControl = null;
     node.named.removeChildren();
     node.prepared = false;
   }
@@ -1260,16 +1510,16 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     return node.stateController;
   }
 
-  private requireUiControlState(id: string): SceneLayoutRadioState {
+  private requireRadioControl(id: string): RuntimeRadioControl {
     const node = this.requireNode(id);
-    if (!("uiControl" in node.spec) || node.uiControlState === null)
+    if (node.uiControl?.kind !== "radio")
       throw new SceneLayoutError(
-        `Scene layout node "${id}" is not a prepared UI control.`,
+        `Scene layout node "${id}" is not a prepared radio control.`,
       );
-    return node.uiControlState;
+    return node.uiControl;
   }
 
-  private setUiControlState(
+  private setRadioControlState(
     id: string,
     state: SceneLayoutRadioState,
     source: SceneLayoutUiControlStateSource,
@@ -1280,19 +1530,12 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         `Scene layout radio control "${id}" has unknown state "${String(state)}".`,
       );
     const node = this.requireNode(id);
-    if (
-      !("uiControl" in node.spec) ||
-      !node.uiControlTextures ||
-      !node.imageSprite
-    )
-      throw new SceneLayoutError(
-        `Scene layout node "${id}" is not a prepared UI control.`,
-      );
-    const previousState = this.requireUiControlState(id);
+    const control = this.requireRadioControl(id);
+    const previousState = control.state;
     if (previousState === state) return;
-    node.imageSprite.texture = node.uiControlTextures[state];
-    node.texture = node.uiControlTextures[state];
-    node.uiControlState = state;
+    control.sprite.texture = control.textures[state];
+    node.texture = control.textures[state];
+    control.state = state;
     this.#observeUiControlState?.(
       Object.freeze({
         controlId: id,
@@ -1302,6 +1545,37 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         source,
       }),
     );
+  }
+
+  private requireStepSliderControl(id: string): RuntimeStepSliderControl {
+    const node = this.requireNode(id);
+    if (node.uiControl?.kind !== "step-slider")
+      throw new SceneLayoutError(
+        `Scene layout node "${id}" is not a prepared step-slider control.`,
+      );
+    return node.uiControl;
+  }
+
+  private setStepSliderState(id: string, state: number): Promise<void> {
+    this.assertReady();
+    const node = this.requireNode(id);
+    const control = this.requireStepSliderControl(id);
+    try {
+      assertStepSliderState(control.spec, state);
+    } catch (error) {
+      return Promise.reject(asSceneLayoutError(error));
+    }
+    control.pointerId = null;
+    this.rejectStepSliderSnap(
+      control,
+      `Scene layout step-slider control "${id}" state change was superseded.`,
+    );
+    const targetX = resolveStepSliderPosition(control.spec, state);
+    if (control.state === state && control.thumbSprite.x === targetX)
+      return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      this.startStepSliderSnap(node, state, "programmatic", resolve, reject);
+    });
   }
 
   private playNodeAnimation(
@@ -1771,6 +2045,11 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       node.prepared &&
       this.#authoredNodeActive.get(node.spec.id) !== false &&
       this.#programNodeVisible.get(node.spec.id) !== false;
+    if (!visible && node.slot.renderable)
+      this.cancelStepSliderInteraction(
+        node,
+        `Scene layout step-slider control "${node.spec.id}" was hidden.`,
+      );
     node.slot.visible = visible;
     node.slot.renderable = visible;
   }
@@ -1876,38 +2155,46 @@ function assertTextureSize(
     size: Readonly<{ width: number; height: number }>;
   }>,
   controlId: string,
-  state: SceneLayoutRadioState,
+  role: string,
 ): void {
   if (!texture?.source)
     throw new SceneLayoutError(
-      `Scene layout UI control "${controlId}" ${state} image failed to load a valid Pixi texture.`,
+      `Scene layout UI control "${controlId}" ${role} image failed to load a valid Pixi texture.`,
     );
   if (texture.width !== spec.size.width || texture.height !== spec.size.height)
     throw new SceneLayoutError(
-      `Scene layout UI control "${controlId}" ${state} image "${spec.path}" size mismatch: expected ${spec.size.width}x${spec.size.height}, actual ${texture.width}x${texture.height}.`,
+      `Scene layout UI control "${controlId}" ${role} image "${spec.path}" size mismatch: expected ${spec.size.width}x${spec.size.height}, actual ${texture.width}x${texture.height}.`,
     );
 }
 
-function consumeUiControlPointerEvent(event: FederatedPointerEvent): void {
+function consumeUiControlPointerEvent(
+  event: FederatedPointerEvent,
+  suppressNativeClick: boolean,
+): void {
   event.preventDefault();
   event.stopPropagation();
   const nativeEvent = event.nativeEvent as Event | undefined;
   nativeEvent?.preventDefault();
   nativeEvent?.stopImmediatePropagation();
+  if (!suppressNativeClick) return;
   const target = nativeEvent?.target;
   if (!(target instanceof EventTarget)) return;
+  const suppression = new AbortController();
   const suppressClick = (clickEvent: Event) => {
     clickEvent.preventDefault();
     clickEvent.stopImmediatePropagation();
+    suppression.abort();
   };
   target.addEventListener("click", suppressClick, {
     capture: true,
     once: true,
+    signal: suppression.signal,
   });
-  globalThis.setTimeout(
-    () => target.removeEventListener("click", suppressClick, true),
-    0,
-  );
+  target.addEventListener("pointerdown", () => suppression.abort(), {
+    capture: true,
+    once: true,
+    signal: suppression.signal,
+  });
 }
 
 function applyNodePlacementTransform(
@@ -1955,8 +2242,14 @@ function resolveNodePlacementPivot(
   const rotation = placement.rotation ?? 0;
   if (rotation === 0) return { x: 0, y: 0 };
   const center = placement.center ?? { x: 0.5, y: 0.5 };
-  const resource =
-    "resource" in node.spec ? node.spec.resource : node.spec.uiControl.off;
+  if ("uiControl" in node.spec) {
+    const size = resolveSceneLayoutUiControlSize(node.spec.uiControl);
+    return {
+      x: (center.x - 0.5) * size.width,
+      y: (center.y - 0.5) * size.height,
+    };
+  }
+  const resource = node.spec.resource;
   if (resource.kind === "image") {
     return {
       x: (center.x - 0.5) * resource.size.width,
@@ -2057,12 +2350,13 @@ async function unloadSceneLayoutTexture(url: string): Promise<void> {
   await Assets.unload(url);
 }
 
-async function settleAllInOrder(promises: readonly Promise<void>[]) {
+async function settleAllInOrder<T>(promises: readonly Promise<T>[]) {
   const results = await Promise.allSettled(promises);
   const failure = results.find(
     (result): result is PromiseRejectedResult => result.status === "rejected",
   );
   if (failure) throw failure.reason;
+  return results.map((result) => (result as PromiseFulfilledResult<T>).value);
 }
 
 function assertAttachable(object: Container): void {

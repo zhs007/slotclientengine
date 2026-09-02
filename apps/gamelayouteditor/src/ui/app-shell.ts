@@ -51,12 +51,15 @@ import {
 import {
   addLayerFromResource,
   addRadioControlLayer,
+  addStepSliderControlLayer,
   bindRuntimeResource,
+  configureStepSliderControl,
   deleteLayoutResource,
   getLayoutResourceReferences,
   moveLayer,
   rebindLayerResource,
   rebindRadioControlResource,
+  rebindStepSliderControlResource,
   removeLayer,
   renameNode,
   replaceImageResource,
@@ -656,9 +659,7 @@ export class GameLayoutEditorApp {
           const popupId = this.#selectedPopupId;
           const variant = input.dataset.popupPlacement as SceneLayoutVariantId;
           const field = input.dataset.popupPlacementField as
-            | "x"
-            | "y"
-            | "scale";
+            "x" | "y" | "scale";
           if (!popupId) {
             this.#store.setExternalError(
               new Error("尚未选择 popup dependency。"),
@@ -709,8 +710,7 @@ export class GameLayoutEditorApp {
       "change",
       (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          | "standard"
-          | "grid-cell";
+          "standard" | "grid-cell";
         this.runTransaction((draft) => {
           const mode = draft.gameModes.modes.find(
             (candidate) => candidate.id === this.#selectedGameMode,
@@ -1749,9 +1749,7 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLSelectElement>("[data-transition-kind]")
       ?.addEventListener("change", (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          | "none"
-          | "spine"
-          | "video";
+          "none" | "spine" | "video";
         this.runTransaction((draft) => {
           const transition = draft.gameModes.transitions.find(
             (candidate) =>
@@ -1809,9 +1807,7 @@ export class GameLayoutEditorApp {
           const variant = input.dataset
             .transitionPopupPlacement as SceneLayoutVariantId;
           const field = input.dataset.transitionPopupPlacementField as
-            | "x"
-            | "y"
-            | "scale";
+            "x" | "y" | "scale";
           this.runTransaction((draft) => {
             const transition = draft.gameModes.transitions.find(
               (candidate) =>
@@ -1955,11 +1951,7 @@ export class GameLayoutEditorApp {
     );
     status?.addEventListener("change", () => {
       this.#session.resourceStatus = status.value as
-        | "all"
-        | "referenced"
-        | "runtime"
-        | "unused"
-        | "error";
+        "all" | "referenced" | "runtime" | "unused" | "error";
       this.renderWorkspace(this.#store.getSnapshot());
     });
     panel
@@ -2050,6 +2042,14 @@ export class GameLayoutEditorApp {
         ),
       );
     panel
+      .querySelector("[data-open-add-step-slider]")
+      ?.addEventListener("click", (event) =>
+        this.openPicker(
+          { kind: "add-step-slider" },
+          event.currentTarget as HTMLElement,
+        ),
+      );
+    panel
       .querySelectorAll<HTMLButtonElement>("[data-outline-key]")
       .forEach((button) =>
         button.addEventListener("click", () =>
@@ -2101,13 +2101,36 @@ export class GameLayoutEditorApp {
             .getSnapshot()
             .project.nodes.find((candidate) => candidate.id === nodeId);
           const preferred =
-            node?.layerType === "ui-control"
+            node?.layerType === "ui-control" && node.uiControl.kind === "radio"
               ? state === "off"
                 ? node.uiControl.offResourceId
                 : node.uiControl.onResourceId
               : "";
           this.openPicker(
             { kind: "rebind-radio", nodeId, state },
+            button,
+            preferred,
+          );
+        }),
+      );
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-rebind-step-slider]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          const nodeId = button.dataset.layerNodeId!;
+          const role = button.dataset.rebindStepSlider as "track" | "thumb";
+          const node = this.#store
+            .getSnapshot()
+            .project.nodes.find((candidate) => candidate.id === nodeId);
+          const preferred =
+            node?.layerType === "ui-control" &&
+            node.uiControl.kind === "step-slider"
+              ? role === "track"
+                ? node.uiControl.trackResourceId
+                : node.uiControl.thumbResourceId
+              : "";
+          this.openPicker(
+            { kind: "rebind-step-slider", nodeId, role },
             button,
             preferred,
           );
@@ -2266,11 +2289,37 @@ export class GameLayoutEditorApp {
       input.addEventListener("change", () => {
         this.runTransaction((draft) => {
           const path = input.dataset.number!;
+          const stepSliderMatch =
+            /^nodes\.(\d+)\.uiControl\.(steps|snapDurationSeconds)$/u.exec(
+              path,
+            );
           const nodeTransformMatch =
             /^nodes\.(\d+)\.placements\.(default|landscape|portrait)\.(rotation|center\.[xy])$/u.exec(
               path,
             );
           const nodeOrderMatch = /^nodes\.(\d+)\.order$/u.exec(path);
+          if (stepSliderMatch) {
+            const node = draft.nodes[Number(stepSliderMatch[1])];
+            if (
+              !node ||
+              node.layerType !== "ui-control" ||
+              node.uiControl.kind !== "step-slider"
+            )
+              throw new Error(`无效多档选择框字段路径：${path}`);
+            configureStepSliderControl({
+              project: draft,
+              nodeId: node.id,
+              steps:
+                stepSliderMatch[2] === "steps"
+                  ? Number(input.value)
+                  : node.uiControl.steps,
+              snapDurationSeconds:
+                stepSliderMatch[2] === "snapDurationSeconds"
+                  ? Number(input.value)
+                  : node.uiControl.snapDurationSeconds,
+            });
+            return;
+          }
           if (nodeTransformMatch) {
             const node = draft.nodes[Number(nodeTransformMatch[1])];
             const placement =
@@ -2393,7 +2442,9 @@ export class GameLayoutEditorApp {
     const selected = this.#session.picker.selectedResourceId;
     if (
       selected &&
-      (context.kind === "add-layer" || context.kind === "add-radio")
+      (context.kind === "add-layer" ||
+        context.kind === "add-radio" ||
+        context.kind === "add-step-slider")
     ) {
       this.#session.picker.nodeId = suggestNodeId(
         this.#store.getSnapshot().project,
@@ -2419,40 +2470,53 @@ export class GameLayoutEditorApp {
     }
     const candidates = getResourcePickerCandidates(project, state);
     const selected = project.resources.get(state.selectedResourceId);
+    const addingStepSlider = state.context.kind === "add-step-slider";
+    const addingDualImageControl =
+      state.context.kind === "add-radio" || addingStepSlider;
+    const imageControlContext =
+      addingDualImageControl ||
+      state.context.kind === "rebind-radio" ||
+      state.context.kind === "rebind-step-slider";
     const contextLabel =
       state.context.kind === "add-layer"
         ? "添加图形图层"
         : state.context.kind === "add-radio"
           ? "添加 UI 控件 / 单选框"
-          : state.context.kind === "rebind-radio"
-            ? `重绑单选框 ${state.context.nodeId} / ${state.context.state}`
-            : `重绑图层 ${state.context.nodeId}`;
+          : state.context.kind === "add-step-slider"
+            ? "添加 UI 控件 / 多档选择框"
+            : state.context.kind === "rebind-radio"
+              ? `重绑单选框 ${state.context.nodeId} / ${state.context.state}`
+              : state.context.kind === "rebind-step-slider"
+                ? `重绑多档选择框 ${state.context.nodeId} / ${state.context.role}`
+                : `重绑图层 ${state.context.nodeId}`;
     const placementHint =
       state.context.kind === "add-layer" && selected?.kind === "spine"
         ? "普通 Spine 以骨架原点放在当前画布中心，不需要填写骨架大小；scale 为 1。"
-        : state.context.kind === "add-layer" ||
-            state.context.kind === "add-radio"
+        : state.context.kind === "add-layer" || addingDualImageControl
           ? "初始 placement 为 { x: 0, y: 0, scale: 1 }。不会按文件名或唯一候选自动绑定。"
           : "重绑资源会保留已有 placement，并尽可能保留兼容的播放配置。";
     const candidateMarkup = candidates
       .map((candidate) =>
         state.context.kind === "add-radio"
           ? `<div class="picker-radio-candidate"><span><strong>${escapeHtml(candidate.resourceId)}</strong><small>${escapeHtml(candidate.summary)}</small></span><button type="button" data-picker-radio-slot="off" data-resource-id="${escapeHtml(candidate.resourceId)}" aria-pressed="${candidate.resourceId === state.selectedResourceId}">设为 off</button><button type="button" data-picker-radio-slot="on" data-resource-id="${escapeHtml(candidate.resourceId)}" aria-pressed="${candidate.resourceId === state.secondaryResourceId}">设为 on</button></div>`
-          : `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "vni" ? "VNI" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`,
+          : addingStepSlider
+            ? `<div class="picker-radio-candidate"><span><strong>${escapeHtml(candidate.resourceId)}</strong><small>${escapeHtml(candidate.summary)}</small></span><button type="button" data-picker-step-slider-slot="track" data-resource-id="${escapeHtml(candidate.resourceId)}" aria-pressed="${candidate.resourceId === state.selectedResourceId}">设为 track</button><button type="button" data-picker-step-slider-slot="thumb" data-resource-id="${escapeHtml(candidate.resourceId)}" aria-pressed="${candidate.resourceId === state.secondaryResourceId}">设为 thumb</button></div>`
+            : `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "vni" ? "VNI" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`,
       )
       .join("");
     const selectionMarkup =
       state.context.kind === "add-radio"
         ? `<fieldset><legend>单选框图片</legend><p><strong>off</strong> ${escapeHtml(state.selectedResourceId || "未选择")}</p><p><strong>on</strong> ${escapeHtml(state.secondaryResourceId || "未选择")}</p></fieldset>`
-        : selected
-          ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>`
-          : "<p>请选择一个 filename-key resource。</p>";
-    const canConfirm =
-      state.context.kind === "add-radio"
-        ? Boolean(state.selectedResourceId && state.secondaryResourceId)
-        : Boolean(selected);
-    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type ${state.context.kind === "add-radio" || state.context.kind === "rebind-radio" ? "disabled" : ""}><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${state.type === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidateMarkup || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form"><div class="picker-resource-preview" data-picker-preview aria-live="polite"></div>${selectionMarkup}${state.context.kind === "add-layer" || state.context.kind === "add-radio" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : ""}${
-      state.context.kind === "add-layer" || state.context.kind === "add-radio"
+        : addingStepSlider
+          ? `<fieldset><legend>多档选择框图片与档位</legend><p><strong>track</strong> ${escapeHtml(state.selectedResourceId || "未选择")}</p><p><strong>thumb</strong> ${escapeHtml(state.secondaryResourceId || "未选择")}</p><label>档位数<input type="number" min="2" step="1" data-picker-step-slider-steps value="${state.steps}" /></label><label>吸附时长（秒）<input type="number" min="0.01" step="0.01" data-picker-step-slider-duration value="${state.snapDurationSeconds}" /></label></fieldset>`
+          : selected
+            ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>`
+            : "<p>请选择一个 filename-key resource。</p>";
+    const canConfirm = addingDualImageControl
+      ? Boolean(state.selectedResourceId && state.secondaryResourceId)
+      : Boolean(selected);
+    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type ${imageControlContext ? "disabled" : ""}><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${state.type === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidateMarkup || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form"><div class="picker-resource-preview" data-picker-preview aria-live="polite"></div>${selectionMarkup}${state.context.kind === "add-layer" || addingDualImageControl ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : ""}${
+      state.context.kind === "add-layer" || addingDualImageControl
         ? ordinaryLayerVariantIds
             .map(
               (variant) =>
@@ -2578,6 +2642,33 @@ export class GameLayoutEditorApp {
         }),
       );
     dialog
+      .querySelectorAll<HTMLButtonElement>("[data-picker-step-slider-slot]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          const resourceId = button.dataset.resourceId!;
+          if (button.dataset.pickerStepSliderSlot === "track") {
+            state.selectedResourceId = resourceId;
+            if (!state.nodeId)
+              state.nodeId = suggestNodeId(project, resourceId);
+          } else {
+            state.secondaryResourceId = resourceId;
+          }
+          this.renderPicker(project);
+        }),
+      );
+    dialog
+      .querySelector<HTMLInputElement>("[data-picker-step-slider-steps]")
+      ?.addEventListener("input", (event) => {
+        state.steps = Number((event.currentTarget as HTMLInputElement).value);
+      });
+    dialog
+      .querySelector<HTMLInputElement>("[data-picker-step-slider-duration]")
+      ?.addEventListener("input", (event) => {
+        state.snapDurationSeconds = Number(
+          (event.currentTarget as HTMLInputElement).value,
+        );
+      });
+    dialog
       .querySelector<HTMLInputElement>("[data-picker-node-id]")
       ?.addEventListener("input", (event) => {
         state.nodeId = (event.currentTarget as HTMLInputElement).value;
@@ -2587,8 +2678,7 @@ export class GameLayoutEditorApp {
       .forEach((input) =>
         input.addEventListener("change", () => {
           const variant = input.dataset.pickerVariant as
-            | "landscape"
-            | "portrait";
+            "landscape" | "portrait";
           state.variants = input.checked
             ? [...new Set([...state.variants, variant])]
             : state.variants.filter((item) => item !== variant);
@@ -2672,6 +2762,29 @@ export class GameLayoutEditorApp {
         this.showFeedback(`已添加 UI 控件 / 单选框 ${nodeId}。`);
         return;
       }
+      if (state.context.kind === "add-step-slider") {
+        const thumb = project.resources.get(state.secondaryResourceId);
+        if (!thumb) throw new Error("请选择多档选择框 thumb 图片。");
+        let nodeId = state.nodeId;
+        this.#store.transact((draft) => {
+          const node = addStepSliderControlLayer({
+            project: draft,
+            trackResourceId: resource.id,
+            thumbResourceId: thumb.id,
+            nodeId,
+            variants: state.variants,
+            steps: state.steps,
+            snapDurationSeconds: state.snapDurationSeconds,
+          });
+          nodeId = node.id;
+        });
+        this.#session.activeTab = "layout";
+        this.#session.selection = { kind: "layer", nodeId };
+        this.closePicker(false);
+        this.renderWorkspace(this.#store.getSnapshot());
+        this.showFeedback(`已添加 UI 控件 / 多档选择框 ${nodeId}。`);
+        return;
+      }
       if (state.context.kind === "rebind-layer") {
         const context = state.context;
         this.#store.transact((draft) =>
@@ -2708,6 +2821,23 @@ export class GameLayoutEditorApp {
         this.renderWorkspace(this.#store.getSnapshot());
         this.showFeedback(
           `单选框 ${context.nodeId} 的 ${context.state} 已重绑到 ${resource.id}。`,
+        );
+        return;
+      }
+      if (state.context.kind === "rebind-step-slider") {
+        const context = state.context;
+        this.#store.transact((draft) =>
+          rebindStepSliderControlResource({
+            project: draft,
+            nodeId: context.nodeId,
+            role: context.role,
+            resourceId: resource.id,
+          }),
+        );
+        this.closePicker(false);
+        this.renderWorkspace(this.#store.getSnapshot());
+        this.showFeedback(
+          `多档选择框 ${context.nodeId} 的 ${context.role} 已重绑到 ${resource.id}。`,
         );
         return;
       }

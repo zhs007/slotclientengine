@@ -32,6 +32,7 @@ import {
   type ImageStringResource,
 } from "../image-string/core/index.js";
 import { createImageStringResourceFromFiles } from "../image-string/package-runtime.js";
+import { collectSceneLayoutUiControlImages } from "./ui-control.js";
 import {
   collectSymbolPackageEntryPaths,
   createSymbolPackageResourceFromResolvedFiles,
@@ -619,7 +620,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     const jsonDataModules: Record<string, SceneLayoutJsonData> = {};
     for (const node of manifest.nodes) {
       if ("uiControl" in node) {
-        for (const image of [node.uiControl.off, node.uiControl.on])
+        for (const image of collectSceneLayoutUiControlImages(node.uiControl))
           imageModules[image.path] ??=
             options.resolveAssetUrl?.(image.path) ??
             createObjectUrl(

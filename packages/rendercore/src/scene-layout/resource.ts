@@ -18,6 +18,7 @@ import {
   parseSceneLayoutManifestDocument,
 } from "./manifest.js";
 import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
+import { collectSceneLayoutUiControlImages } from "./ui-control.js";
 import type {
   SceneLayoutResource,
   SceneLayoutRuntimeResource,
@@ -94,7 +95,7 @@ export function createSceneLayoutResource(
 
   for (const node of manifest.nodes) {
     if ("uiControl" in node) {
-      for (const image of [node.uiControl.off, node.uiControl.on]) {
+      for (const image of collectSceneLayoutUiControlImages(node.uiControl)) {
         imagePaths.add(image.path);
         imageUrls[image.path] = requireString(
           imageModules,
@@ -532,8 +533,8 @@ export async function loadSceneLayoutResourceFromUrl(options: {
     >();
     for (const node of manifest.nodes) {
       if ("uiControl" in node) {
-        resourceByPath.set(node.uiControl.off.path, "image");
-        resourceByPath.set(node.uiControl.on.path, "image");
+        for (const image of collectSceneLayoutUiControlImages(node.uiControl))
+          resourceByPath.set(image.path, "image");
         continue;
       }
       const resource = node.resource;
@@ -739,7 +740,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         );
         const imageSpec = manifest.nodes.flatMap((node) => {
           if ("uiControl" in node)
-            return [node.uiControl.off, node.uiControl.on].filter(
+            return collectSceneLayoutUiControlImages(node.uiControl).filter(
               (image) => image.path === path,
             );
           return node.resource.kind === "image" && node.resource.path === path

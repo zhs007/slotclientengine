@@ -64,6 +64,60 @@ describe("Game Layout runtime address", () => {
     controller.destroy();
   });
 
+  it("resolves an authored step-slider through the same owner endpoint", () => {
+    const control = {
+      kind: "step-slider" as const,
+      steps: 3,
+      getState: () => 0,
+      setState: async () => {},
+    };
+    const controller = createGameLayoutRuntimeAddresses(
+      {
+        manifest: {
+          nodes: [
+            {
+              id: "fast-play",
+              order: 1,
+              uiControl: {
+                kind: "step-slider",
+                track: {
+                  kind: "image",
+                  path: "fastplay-bar.png",
+                  size: { width: 336, height: 50 },
+                },
+                thumb: {
+                  kind: "image",
+                  path: "fastplay-tag.png",
+                  size: { width: 46, height: 46 },
+                },
+                steps: 3,
+                snapDurationSeconds: 0.12,
+              },
+              placements: {},
+            },
+          ],
+          reels: {},
+          gameModes: { modes: [], transitions: [] },
+        },
+        popupPackages: {},
+      } as any,
+      {
+        assertReady() {},
+        getUiControl: () => control,
+      } as any,
+    );
+    const address = formatGameLayoutRuntimeAddress("ui-control", "fast-play");
+    expect(controller.addresses.describe(address)).toMatchObject({
+      kind: "ui-control",
+      capability: "borrowed",
+      detail: { controlKind: "step-slider" },
+    });
+    const endpoint = controller.addresses.resolve(address, "ui-control");
+    if (endpoint.kind !== "ui-control") throw new Error("wrong endpoint kind");
+    expect(endpoint.get()).toBe(control);
+    controller.destroy();
+  });
+
   it("does not publish JSON program data as a render factory address", () => {
     const controller = createGameLayoutRuntimeAddresses(
       {
