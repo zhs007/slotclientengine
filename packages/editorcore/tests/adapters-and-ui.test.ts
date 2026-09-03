@@ -258,6 +258,90 @@ describe("default adapters", () => {
     preview.destroy();
   });
 
+  it("discovers a Popup Object resource and projects its nested closure", async () => {
+    const objectKey = "tap-to-continue-popup-object.manifest.json";
+    const entries = await mappedEntries([
+      {
+        key: objectKey,
+        mediaType: "application/json",
+        bytes: encode({
+          version: 1,
+          kind: "popup-object",
+          name: "tap-to-continue",
+          resources: {
+            "prompt.png": {
+              kind: "image",
+              path: "prompt.png",
+              size: { width: 1, height: 1 },
+            },
+          },
+          layers: [
+            {
+              id: "prompt-background",
+              kind: "image",
+              order: 0,
+              resource: "prompt.png",
+              transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+              alpha: 1,
+              attachment: { kind: "popup-root" },
+              anchor: { x: 0.5, y: 0.5 },
+            },
+          ],
+        }),
+      },
+      { key: "prompt.png", mediaType: "image/png", bytes: PNG },
+    ]);
+    entries.set(
+      "popup.manifest.json",
+      encode({
+        version: 9,
+        kind: "popup",
+        id: "object-host",
+        name: "Object Host",
+        type: "single-state",
+        adaptation: {
+          mode: "maximized-focus",
+          focus: { left: 50, right: 50, top: 50, bottom: 50 },
+        },
+        backdrop: {
+          enabled: false,
+          color: "#000000",
+          alpha: 0.5,
+          visibleStates: ["active"],
+        },
+        audio: { version: 1, effects: [], cues: [] },
+        resources: {
+          "tap-to-continue": { kind: "popup-object", manifest: objectKey },
+        },
+        singleState: {
+          layers: [
+            {
+              id: "continue",
+              kind: "popup-object",
+              order: 0,
+              resource: "tap-to-continue",
+              transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+              alpha: 1,
+              attachment: { kind: "popup-root" },
+            },
+          ],
+        },
+      }),
+    );
+
+    const result = await discoverDefaultEditorAssets({
+      sources: zipSources("popup-object-host.zip", entries),
+    });
+
+    expect(result.blockingErrors).toEqual([]);
+    expect(result.drafts[0]!.nodes.map(({ key }) => key)).toEqual(
+      expect.arrayContaining([
+        "object-host-tap-to-continue-popup-object.manifest.json",
+        "object-host-prompt.png",
+      ]),
+    );
+  });
+
   it("discovers and namespaces a strict mapped Symbols package", async () => {
     const packageManifest = {
       version: 1,

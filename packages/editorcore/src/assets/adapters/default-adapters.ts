@@ -23,7 +23,9 @@ import {
 } from "@slotclientengine/rendercore/image-string/data";
 import {
   collectMappedPopupAssetKeys,
+  collectPopupObjectDirectPaths,
   parsePopupManifest,
+  parsePopupObjectManifest,
 } from "@slotclientengine/rendercore/popup/data";
 import { namespaceMappedPopupPackageFiles } from "@slotclientengine/rendercore/popup/editor";
 import {
@@ -801,7 +803,7 @@ function createPackageDraft(options: {
       const keys =
         resource.kind === "vni"
           ? [resource.project]
-          : resource.kind === "image-string"
+          : resource.kind === "image-string" || resource.kind === "popup-object"
             ? [resource.manifest]
             : [resource.path];
       addResourceTree(nodes, relations, rootManifest.id, keys, inputByKey);
@@ -891,6 +893,19 @@ function addNestedManifest(
       relations,
       node.id,
       project.assets.map(({ path }) => path),
+      inputByKey,
+    );
+    return;
+  } catch {
+    // Not a VNI project.
+  }
+  try {
+    const popupObject = parsePopupObjectManifest(raw);
+    addResourceTree(
+      nodes,
+      relations,
+      node.id,
+      collectPopupObjectDirectPaths(popupObject),
       inputByKey,
     );
   } catch {
