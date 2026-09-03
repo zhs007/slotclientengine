@@ -13,7 +13,7 @@ Game Layout production runtime 的统一对象定位、资源 factory 与事件�
 `SceneLayoutPackageRuntime.addresses`。完整地址表、ownership 和示例见
 [`docs/gamelayout-runtime-addresses.md`](../../docs/gamelayout-runtime-addresses.md)。
 
-Scene Layout v7 的 node 是图层 union：既有图形分支保存 `resource`，UI 控件分支保存可扩展的
+Scene Layout v8 继承 v7 的 node 图层 union：既有图形分支保存 `resource`，UI 控件分支保存可扩展的
 `uiControl` discriminated union。`radio` 控件用两张不同且尺寸相同的 off/on 图片，一个稳定 Sprite
 在固定 `off` 初值与 `on` 之间切换。consumer 通过 `getUiControl(id)` 或
 `gamelayout:/ui-control/<id>` 获得 borrowed `radio` capability；它不属于 RenderObject，也不公开 Pixi 对象。
@@ -281,7 +281,7 @@ Sprite 复用，不创建 snapshot、`Application`、canvas、DOM、RAF 或字�
 
 `runtimeResources` 可声明 `{ kind: "json", path }` 的 program-only 数据，也可声明 `{ kind: "audio", path, mediaType }` 的 program audio。`SceneLayoutPackageResource.loadJsonData(exactKey)` 按需读取、严格解析并返回深度冻结的 JSON object/array；`loadRuntimeResource(exactKey, "audio")` 返回 package-owned URL 与 exact mediaType。JSON/audio 都不产生 RenderObject 或 `gamelayout:/resource/...` 地址；audio 程序键会额外派生 `gamelayout:/audio/effect/<key>` endpoint，并进入 `playEffect(key, options?)`。程序 audio 默认 once，`{ loop: true, endEvent? }` 可由 exact Event 或返回 handle 停止，`stopEffect(key)` 停止该 route。URL/cache 仍由 package resource 拥有，voice/handle 仍由 AudioCore 拥有。
 
-Scene Layout v7 的可选根 binding `tapInfoObject: { manifest }` 由 package resource 按 standalone Popup Object exact closure 准备并拥有。普通 Spine Popup 只有在自身 v9 manifest 同时声明 `spine.tapInfoObject.attachment` 时才创建独立 mutable instance；instance 与已有 overlay 合并进同一 main Spine slot/VNI text-layer attachment transaction，并固定为同父尾部 child。对象随 Popup start/loop update、进入 end 前停用，不进入 `objects/getObject()`、string registry、runtime address，也不建立自己的 input/ticker/completion。
+Scene Layout v8 继承的可选根 binding `tapInfoObject: { manifest }` 由 package resource 按 standalone Popup Object exact closure 准备并拥有。普通 Spine Popup 只有在自身 v9 manifest 同时声明 `spine.tapInfoObject.attachment` 时才创建独立 mutable instance；instance 与已有 overlay 合并进同一 main Spine slot/VNI text-layer attachment transaction，并固定为同父尾部 child。对象随 Popup start/loop update、进入 end 前停用，不进入 `objects/getObject()`、string registry、runtime address，也不建立自己的 input/ticker/completion。
 
 第一层统一使用`getSymbolArea()`、`getRenderLayer()`、`getRenderObject()`与`createRenderObject()`。authored object按image/Spine/VNI/image-string返回borrowed typed capability，可见性与mode/variant做AND且不开放position/destroy；program object从exact `runtimeResources`异步创建并由caller拥有。`getLayoutPoint/getLayoutAnchor/resolveLayoutAnchor`直接读写configured authored space，center-origin游戏无需复制Pixi左上角偏移。完整ref grammar、ownership、SymbolGroup几何、坐标映射与示例见[`docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md`](../../docs/rendercore-layer-symbol-area-render-object-coordinate-guide.md)。
 
@@ -401,6 +401,8 @@ Pixi Application、package resource 与所有 player 的 destroy。
 低层 `createSceneLayoutResource()` / `createSceneLayoutRuntime()` 保持用于 layout-only 和自定义 attachment；自包含 production 包使用 `createSceneLayoutPackageResource()` / `loadSceneLayoutPackageFromUrl()` 与 `createSceneLayoutPackageRuntime()`。URL loader 可接收 loading 阶段已取得的 `manifestBytes`，随后仍只按 manifest 与 assets map 的实际引用获取 package 文件。旧v1–v3无需Editor重导；缺Symbols binding时组合reel初始化与reset API仍显式不可用。
 
 完整 package runtime 可以 deferred prepare main reel：首次合法 scene commit 前 reel 不可见，scene/value/spin API 会严格失败。业务自定义 grid-cell controller 可通过 ownership-transfer factory 注入，package 仍拥有唯一 reel、manifest placement/order 和最终 destroy；cascade 等借用 overlay 通过 typed attach disposer 接入，保持在 transition/popup 下方。
+
+Scene Layout v8 的 `gameModes.splashMode` 是可选 authored 欢迎 mode，必须与正式 `initialMode` 不同并有 exact Splash→initial direct edge。配置时 `requestPrimaryGameModeAction()` 在同一真实手势、任何 await 前同时发起 AudioCore unlock 与现有 mode request；没有配置时 package runtime 在 initial 上方显示 full-viewport 纯黑默认 Splash，门禁期间拒绝直接 mode request，并在 primary click 成功 unlock 后才揭示 initial。默认画面不进入 manifest、allocation 或 delivery 资源。
 
 多Symbols binding package会在runtime init按allocation准备稳定reel entry。首次进入尚无scene的entry必须提交完整`reels.main`；之后离开和返回复用同一reel、catalog、player与settled scene，dormant entry不update。`recreateReel: true`是唯一强制替换入口，旧entry只在candidate成功commit后销毁；普通transition player仍按edge request创建和释放，Popup继续按exact id保持package owner。
 

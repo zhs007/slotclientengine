@@ -27,7 +27,7 @@ describe("scene layout audio runtime resource manifest", () => {
       },
     });
 
-    expect(parsed.version).toBe(7);
+    expect(parsed.version).toBe(8);
     expect(parsed.runtimeResources?.jingle).toEqual({
       kind: "audio",
       path: "assets/jingle.ogg",

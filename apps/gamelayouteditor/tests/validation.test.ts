@@ -19,7 +19,7 @@ describe("editor scene-layout v7 contract", () => {
     const manifest = editorProjectToManifest(createNewEditorProject());
 
     expect(manifest).toMatchObject({
-      version: 7,
+      version: 8,
       kind: "scene-layout",
       main: {
         columns: 5,
@@ -262,7 +262,7 @@ describe("editor scene-layout v7 contract", () => {
       new Map([["background.png", new Uint8Array([1])]]),
     );
     const latest = editorProjectToManifest(project);
-    expect(latest.version).toBe(7);
+    expect(latest.version).toBe(8);
     expect(latest.nodes[0]!.placements).toHaveProperty("landscape");
     expect(latest.nodes[0]!.placements).toHaveProperty("portrait");
     expect(project.nodes[0]!.scope).toEqual({

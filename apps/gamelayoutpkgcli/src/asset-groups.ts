@@ -11,6 +11,7 @@ import {
 } from "@slotclientengine/rendercore/popup/data";
 import {
   collectSceneLayoutUiControlImages,
+  resolveSceneLayoutStartupMode,
   type SceneLayoutManifest,
   type SceneLayoutNode,
 } from "@slotclientengine/rendercore/scene-layout/data";
@@ -50,8 +51,9 @@ export function createSceneLayoutAssetGroups(options: {
 }): SceneLayoutAssetGroupsV2 {
   const gameModes = options.manifest.gameModes;
   if (!gameModes) throw new Error("资源分组要求 Scene Layout gameModes。");
+  const startupMode = resolveSceneLayoutStartupMode(gameModes);
   const allBackgroundIds = new Set(
-    options.manifest.version === 7
+    options.manifest.version === 7 || options.manifest.version === 8
       ? []
       : gameModes.modes.flatMap((mode) =>
           "backgroundNodes" in mode
@@ -60,12 +62,13 @@ export function createSceneLayoutAssetGroups(options: {
         ),
   );
   const sharedNodes = options.manifest.nodes.filter((node) =>
-    options.manifest.version === 7
+    options.manifest.version === 7 || options.manifest.version === 8
       ? node.scope === undefined
       : !allBackgroundIds.has(node.id) && node.gameMode === undefined,
   );
   const tapInfoObjectRequired =
-    options.manifest.version === 7 && options.manifest.tapInfoObject
+    (options.manifest.version === 7 || options.manifest.version === 8) &&
+    options.manifest.tapInfoObject
       ? popupObjectClosure(
           options.manifest.tapInfoObject.manifest,
           options.files,
@@ -126,7 +129,7 @@ export function createSceneLayoutAssetGroups(options: {
       id: `mode:${mode.id}`,
       kind: "mode",
       modeId: mode.id,
-      initial: mode.id === gameModes.initialMode,
+      initial: mode.id === startupMode,
       requiredAssets: nodeClosure(nodes, options.files),
     });
   }
@@ -236,17 +239,15 @@ export function createSceneLayoutAssetGroups(options: {
   for (const group of provisional) {
     const include =
       group.kind === "shared" ||
-      (group.kind === "mode" && group.modeId === gameModes.initialMode) ||
-      (group.kind === "transition" &&
-        group.ownerMode === gameModes.initialMode) ||
-      (group.kind === "symbols" &&
-        group.usedByModes.includes(gameModes.initialMode)) ||
+      (group.kind === "mode" && group.modeId === startupMode) ||
+      (group.kind === "transition" && group.ownerMode === startupMode) ||
+      (group.kind === "symbols" && group.usedByModes.includes(startupMode)) ||
       (group.kind === "award-celebration" &&
-        group.usedByModes.includes(gameModes.initialMode)) ||
+        group.usedByModes.includes(startupMode)) ||
       (group.kind === "spine-popup" &&
         (group.usedByTransitions.length === 0 ||
           group.usedByTransitions.some((edge) =>
-            edge.startsWith(`${gameModes.initialMode}->`),
+            edge.startsWith(`${startupMode}->`),
           ))) ||
       group.kind === "single-state-popup";
     if (include)
@@ -281,7 +282,7 @@ export function createSceneLayoutAssetGroups(options: {
     version: 2,
     kind: "scene-layout-asset-groups",
     layoutId: options.manifest.id,
-    initialMode: gameModes.initialMode,
+    initialMode: startupMode,
     optimization: {
       imageCodec: "webp",
       quality: options.quality,

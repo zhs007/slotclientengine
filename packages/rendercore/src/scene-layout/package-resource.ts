@@ -261,7 +261,10 @@ export function collectSceneLayoutPackagePaths(options: {
     }
   }
 
-  if (manifest.version === 7 && manifest.tapInfoObject) {
+  if (
+    (manifest.version === 7 || manifest.version === 8) &&
+    manifest.tapInfoObject
+  ) {
     const binding = manifest.tapInfoObject;
     const nested = parsePopupObjectManifest(
       parseJsonBytes(
@@ -1422,7 +1425,10 @@ export async function loadSceneLayoutPackageFromUrl(options: {
       files,
     );
   }
-  if (manifest.version === 7 && manifest.tapInfoObject) {
+  if (
+    (manifest.version === 7 || manifest.version === 8) &&
+    manifest.tapInfoObject
+  ) {
     const binding = manifest.tapInfoObject;
     const nested = parsePopupObjectManifest(
       parseJsonBytes(requireBytes(files, binding.manifest), binding.manifest),
@@ -1555,7 +1561,10 @@ function validateBinding(
   binding: NonNullable<SceneLayoutManifestV1["symbolPackage"]>,
   resource: SymbolPackageResource,
 ): void {
-  const reel = manifest.version === 7 ? manifest.main : manifest.reels.main;
+  const reel =
+    manifest.version === 7 || manifest.version === 8
+      ? manifest.main
+      : manifest.reels.main;
   if (!reel) return;
   const prefix = `Scene layout "${manifest.id}" symbol binding to package "${resource.packageManifest.id}"`;
   if (
@@ -1685,7 +1694,7 @@ function resolveRuntimeMappedSceneLayoutPackageFiles(options: {
     if (bytes) virtual.set(key, bytes.slice());
   }
   const effectiveManifest = options.allowMissingRuntimeResources
-    ? options.manifest.version === 7
+    ? options.manifest.version === 7 || options.manifest.version === 8
       ? upgradeSceneLayoutManifestToLatest({
           ...options.manifest,
           runtimeResources: undefined,

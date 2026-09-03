@@ -59,6 +59,8 @@ export function renameGameMode(
       candidate.primaryActionTargetMode = nextId;
   if (project.gameModes.initialMode === currentId)
     project.gameModes.initialMode = nextId;
+  if (project.gameModes.splashMode === currentId)
+    project.gameModes.splashMode = nextId;
   if (project.gameModes.activeModeId === currentId)
     project.gameModes.activeModeId = nextId;
 }
@@ -68,6 +70,8 @@ export function deleteGameMode(project: EditorProject, id: string): void {
     throw new Error("layout 至少必须保留一个游戏模式。");
   if (project.gameModes.initialMode === id)
     throw new Error("删除 initial mode 前必须先选择其它 initial mode。");
+  if (project.gameModes.splashMode === id)
+    throw new Error("删除 splash mode 前必须先清除 Splash 配置。");
   const references = project.gameModes.transitions.filter(
     (transition) => transition.fromModeId === id || transition.toModeId === id,
   );
@@ -101,8 +105,21 @@ export function deleteGameMode(project: EditorProject, id: string): void {
 
 export function setInitialGameMode(project: EditorProject, id: string): void {
   requireMode(project, id);
+  if (project.gameModes.splashMode === id)
+    throw new Error("同一个 mode 不能同时配置为 initial 和 splash。");
   project.gameModes.initialMode = id;
   normalizeGameModeNodeOrders(project);
+}
+
+export function setSplashGameMode(project: EditorProject, id: string): void {
+  requireMode(project, id);
+  if (project.gameModes.initialMode === id)
+    throw new Error("同一个 mode 不能同时配置为 initial 和 splash。");
+  project.gameModes.splashMode = id;
+}
+
+export function clearSplashGameMode(project: EditorProject): void {
+  project.gameModes.splashMode = null;
 }
 
 export function setGameModeReelEnabled(

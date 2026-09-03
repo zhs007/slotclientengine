@@ -8,6 +8,7 @@ import type {
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
+import { resolveSceneLayoutStartupMode } from "./manifest-v8.js";
 import { createSceneLayoutPackageRuntime } from "./package-runtime.js";
 import type {
   SceneLayoutGameModeSnapshot,
@@ -54,8 +55,7 @@ export interface SceneLayoutPresentationSurface {
   enqueuePopup(request: SceneLayoutPopupOpenRequest): SceneLayoutPopupSession;
   closePopup(options?: SceneLayoutPopupCloseOptions): Promise<void>;
   getActivePopupAddress():
-    | import("./data/runtime-address.js").GameLayoutRuntimeAddress
-    | null;
+    import("./data/runtime-address.js").GameLayoutRuntimeAddress | null;
   getAwardCelebrationRuntime(id: string): AwardCelebrationRuntime;
   getSpinePopupRuntime(id: string): SpinePopupRuntime;
   getSingleStatePopupRuntime(id: string): SingleStatePopupRuntime;
@@ -219,8 +219,7 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   }
 
   getActivePopupAddress():
-    | import("./data/runtime-address.js").GameLayoutRuntimeAddress
-    | null {
+    import("./data/runtime-address.js").GameLayoutRuntimeAddress | null {
     this.assertReady();
     return this.#runtime.getActivePopupAddress();
   }
@@ -349,7 +348,7 @@ function resolveInitialMode(
     }
     return null;
   }
-  const id = requested ?? gameModes.initialMode;
+  const id = requested ?? resolveSceneLayoutStartupMode(gameModes);
   const mode = gameModes.modes.find((candidate) => candidate.id === id);
   if (!mode) {
     throw new SceneLayoutError(

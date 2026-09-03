@@ -15,12 +15,17 @@ import {
 } from "./manifest.js";
 import { materializeSceneLayoutManifestForMode } from "./manifest-v2.js";
 import { parseSceneLayoutManifestV7 } from "./manifest-v7.js";
+import {
+  parseSceneLayoutManifestV8,
+  resolveSceneLayoutStartupMode,
+} from "./manifest-v8.js";
 import type {
   ResolvedSceneLayoutReelGrid,
   SceneLayoutFramePolicy,
   SceneLayoutFrameViewport,
   SceneLayoutManifestV1,
   SceneLayoutManifestV7,
+  SceneLayoutManifestV8,
   SceneLayoutManifest,
   SceneLayoutOrientationVariantId,
   SceneLayoutLegacySnapshot,
@@ -29,7 +34,7 @@ import type {
 } from "./types.js";
 
 export function resolveSceneLayoutViewportV7(options: {
-  readonly manifest: SceneLayoutManifestV7;
+  readonly manifest: SceneLayoutManifestV7 | SceneLayoutManifestV8;
   readonly viewportSize: RenderViewportSize;
   readonly modeId?: string;
   readonly previousVariantId?: SceneLayoutOrientationVariantId;
@@ -39,7 +44,8 @@ export function resolveSceneLayoutViewportV7(options: {
     pageSize,
     options.previousVariantId,
   );
-  const modeId = options.modeId ?? options.manifest.gameModes.initialMode;
+  const modeId =
+    options.modeId ?? resolveSceneLayoutStartupMode(options.manifest.gameModes);
   const mode = options.manifest.gameModes.modes.find(
     (candidate) => candidate.id === modeId,
   );
@@ -113,9 +119,12 @@ export function resolveSceneLayoutFrameViewport(options: {
 }): SceneLayoutFrameViewport {
   const pageSize = validatePageSize(options.pageSize);
   const frameDesignSize =
-    options.manifest.version === 7
+    options.manifest.version === 7 || options.manifest.version === 8
       ? resolveSceneLayoutViewportV7({
-          manifest: parseSceneLayoutManifestV7(options.manifest),
+          manifest:
+            options.manifest.version === 8
+              ? parseSceneLayoutManifestV8(options.manifest)
+              : parseSceneLayoutManifestV7(options.manifest),
           viewportSize: pageSize,
           ...(options.modeId ? { modeId: options.modeId } : {}),
           ...(options.previousVariantId === "landscape" ||
@@ -165,8 +174,11 @@ export function resolveSceneLayoutFrameViewport(options: {
 export function createSceneLayoutFramePolicy(
   manifestValue: SceneLayoutManifest,
 ): SceneLayoutFramePolicy {
-  if (manifestValue.version === 7) {
-    const manifest = parseSceneLayoutManifestV7(manifestValue);
+  if (manifestValue.version === 7 || manifestValue.version === 8) {
+    const manifest =
+      manifestValue.version === 8
+        ? parseSceneLayoutManifestV8(manifestValue)
+        : parseSceneLayoutManifestV7(manifestValue);
     return Object.freeze({
       mode: "maximized-focus" as const,
       resolveViewportSize(pageSize: RenderViewportSize): RenderViewportSize {

@@ -39,8 +39,7 @@ export interface GridCellReelPresentationProfileV1 {
 }
 
 export type SlotReelPresentationProfileV1 =
-  | StandardReelPresentationProfileV1
-  | GridCellReelPresentationProfileV1;
+  StandardReelPresentationProfileV1 | GridCellReelPresentationProfileV1;
 
 export interface SlotFlowPresentationProfileV1 {
   readonly version: 1;
@@ -103,8 +102,7 @@ export interface SlotFlowPresentationProfileV2 {
 }
 
 export type SlotFlowPresentationProfile =
-  | SlotFlowPresentationProfileV1
-  | SlotFlowPresentationProfileV2;
+  SlotFlowPresentationProfileV1 | SlotFlowPresentationProfileV2;
 
 export interface SlotReelPresentationCapabilities {
   readonly spinToScene: true;
@@ -168,11 +166,13 @@ export function validateSlotTemplateCompatibility(options: {
   readonly roundFlow: SlotRoundFlowProfileV1;
   readonly presentation: SlotTemplatePresentationProfileV1;
   readonly packageResource:
-    | SceneLayoutPackageResource
-    | { readonly manifest: SceneLayoutManifest };
+    SceneLayoutPackageResource | { readonly manifest: SceneLayoutManifest };
 }): SlotTemplateCompatibilitySnapshot {
   const manifest = options.packageResource.manifest;
-  const reel = manifest.version === 7 ? manifest.main : manifest.reels.main;
+  const reel =
+    manifest.version === 7 || manifest.version === 8
+      ? manifest.main
+      : manifest.reels.main;
   if (!reel)
     throw new SceneLayoutError("Scene layout must declare reels.main.");
   const binding = resolveInitialBinding(manifest);

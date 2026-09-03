@@ -12,6 +12,7 @@ import {
 } from "./data/delivery.js";
 import { SCENE_LAYOUT_PRODUCTION_ZIP_LIMITS } from "./data/package-limits.js";
 import { SceneLayoutError } from "./errors.js";
+import { resolveSceneLayoutStartupMode } from "./manifest-v8.js";
 import { createSceneLayoutPackageResource } from "./package-resource.js";
 import type { SceneLayoutPackageResource } from "./types.js";
 
@@ -61,7 +62,8 @@ export async function loadSceneLayoutDeliveryFromUrl(options: {
     });
     if (
       resource.runtimeManifest.id !== manifest.layoutId ||
-      resource.runtimeManifest.gameModes?.initialMode !== manifest.initialMode
+      resolveSceneLayoutStartupMode(resource.runtimeManifest.gameModes) !==
+        manifest.initialMode
     ) {
       await resource.destroy();
       throw new SceneLayoutError(

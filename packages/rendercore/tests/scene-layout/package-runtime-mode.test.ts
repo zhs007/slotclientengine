@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Container } from "pixi.js";
+import type {
+  AudioBackend,
+  AudioBackendActivityState,
+  AudioBackendSound,
+} from "@slotclientengine/audiocore/core";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import type {
   PopupStringNodeHandle,
@@ -44,6 +49,28 @@ class FakeTransitionPlayer implements RendercoreSpinePlayer {
   destroy() {
     this.destroyed = true;
     this.view.parent?.removeChild(this.view);
+  }
+}
+
+class StartupAudioBackend implements AudioBackend {
+  readonly calls: string[] = [];
+  unlockPromise: Promise<void> = Promise.resolve();
+
+  getActivityState(): AudioBackendActivityState {
+    return "active";
+  }
+
+  observeActivity(): () => void {
+    return () => {};
+  }
+
+  async prepare(): Promise<AudioBackendSound> {
+    throw new Error("unexpected audio prepare");
+  }
+
+  unlock(): Promise<void> {
+    this.calls.push("unlock");
+    return this.unlockPromise;
   }
 }
 
@@ -318,6 +345,54 @@ function createRuntime(
   return { runtime, players, popups };
 }
 
+function startupPackageResource(configured: boolean) {
+  const resource = packageResource(true, false, "none") as any;
+  const base = resource.runtimeManifest;
+  const splashMode = {
+    id: "Splash",
+    main: { enabled: false, variants: modeVariants() },
+    nodeStates: {},
+  };
+  const splashTransition = {
+    from: "Splash",
+    to: "BaseGame",
+    overlay: { kind: "none" as const },
+  };
+  const manifest = {
+    ...base,
+    version: 8,
+    gameModes: configured
+      ? {
+          ...base.gameModes,
+          splashMode: "Splash",
+          modes: [splashMode, ...base.gameModes.modes],
+          transitions: [splashTransition, ...base.gameModes.transitions],
+        }
+      : base.gameModes,
+    runtimeAllocation: configured
+      ? {
+          ...base.runtimeAllocation,
+          onDemand: {
+            ...base.runtimeAllocation.onDemand,
+            transitions: [
+              "Splash=>BaseGame",
+              ...base.runtimeAllocation.onDemand.transitions,
+            ],
+          },
+          modes: {
+            Splash: {
+              variants: allocationVariants([]),
+              symbolPackage: null,
+              awardCelebrationPopup: null,
+            },
+            ...base.runtimeAllocation.modes,
+          },
+        }
+      : base.runtimeAllocation,
+  };
+  return { ...resource, manifest, runtimeManifest: manifest };
+}
+
 describe("scene layout package event-driven game-mode transition", () => {
   beforeEach(() => {
     state.variant = "landscape";
@@ -344,6 +419,91 @@ describe("scene layout package event-driven game-mode transition", () => {
       setNodeActive: vi.fn(),
       destroy: vi.fn(),
     };
+  });
+
+  it("keeps the default black Splash until a primary click unlocks audio", async () => {
+    const backend = new StartupAudioBackend();
+    let releaseUnlock!: () => void;
+    backend.unlockPromise = new Promise<void>((resolve) => {
+      releaseUnlock = resolve;
+    });
+    const runtime = createSceneLayoutPackageRuntime({
+      resource: startupPackageResource(false),
+      audioBackend: backend,
+    });
+    await runtime.init();
+    runtime.applyViewport({ width: 800, height: 600 });
+    const splash = runtime.container.children.find(
+      (child) => child.label === "scene-layout-default-splash",
+    );
+    expect(splash?.visible).toBe(true);
+    await expect(runtime.requestGameMode("FreeGame")).rejects.toThrow(
+      /default Splash must be dismissed/u,
+    );
+
+    const pending = runtime.requestPrimaryGameModeAction();
+    const duplicate = runtime.requestPrimaryGameModeAction();
+    expect(duplicate).toBe(pending);
+    expect(backend.calls).toEqual(["unlock"]);
+    expect(splash?.visible).toBe(true);
+    releaseUnlock();
+    await pending;
+    expect(splash?.visible).toBe(false);
+    expect(runtime.getStableGameMode()).toBe("BaseGame");
+    runtime.destroy();
+  });
+
+  it("keeps the default Splash active after unlock failure and permits retry", async () => {
+    const backend = new StartupAudioBackend();
+    backend.unlockPromise = Promise.reject(new Error("unlock blocked"));
+    const runtime = createSceneLayoutPackageRuntime({
+      resource: startupPackageResource(false),
+      audioBackend: backend,
+    });
+    await runtime.init();
+    runtime.applyViewport({ width: 800, height: 600 });
+    const splash = runtime.container.children.find(
+      (child) => child.label === "scene-layout-default-splash",
+    );
+
+    await expect(runtime.requestPrimaryGameModeAction()).rejects.toThrow(
+      /unlock blocked/u,
+    );
+    expect(splash?.visible).toBe(true);
+    backend.unlockPromise = Promise.resolve();
+    await runtime.requestPrimaryGameModeAction();
+    expect(backend.calls).toEqual(["unlock", "unlock"]);
+    expect(splash?.visible).toBe(false);
+    runtime.destroy();
+  });
+
+  it("starts configured Splash audio unlock and initial transition synchronously", async () => {
+    const backend = new StartupAudioBackend();
+    const runtime = createSceneLayoutPackageRuntime({
+      resource: startupPackageResource(true),
+      audioBackend: backend,
+    });
+    await runtime.init();
+    expect(runtime.getStableGameMode()).toBe("Splash");
+    let releaseTransition!: () => void;
+    const request = vi
+      .spyOn(runtime, "requestGameMode")
+      .mockImplementation(() => {
+        backend.calls.push("transition");
+        return new Promise<void>((resolve) => {
+          releaseTransition = resolve;
+        });
+      });
+
+    const pending = runtime.requestPrimaryGameModeAction();
+    const duplicate = runtime.requestPrimaryGameModeAction();
+    expect(duplicate).toBe(pending);
+    expect(backend.calls).toEqual(["unlock", "transition"]);
+    expect(request).toHaveBeenCalledWith("BaseGame", {});
+    expect(request).toHaveBeenCalledTimes(1);
+    releaseTransition();
+    await pending;
+    runtime.destroy();
   });
 
   it("rejects a missing directed edge before visible mutation", async () => {

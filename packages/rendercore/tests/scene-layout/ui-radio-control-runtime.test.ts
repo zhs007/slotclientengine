@@ -6,6 +6,7 @@ import {
   createSceneLayoutRuntimeAllocation,
   parseSceneLayoutManifestDocument,
   parseSceneLayoutManifestV7,
+  upgradeSceneLayoutManifestToLatest,
 } from "../../src/scene-layout/index.js";
 import { compileGameLayoutRuntimeEventCatalog } from "../../src/scene-layout/core/runtime-address-catalog.js";
 import { game002LayoutFixture } from "./fixtures.js";
@@ -211,7 +212,7 @@ describe("Scene Layout radio UI control", () => {
 
   it("publishes globally unique state-specific catalog addresses", () => {
     const catalog = compileGameLayoutRuntimeEventCatalog({
-      manifest: radioManifest(),
+      manifest: upgradeSceneLayoutManifestToLatest(radioManifest()),
       symbolPackages: {},
       popupManifests: {},
     });

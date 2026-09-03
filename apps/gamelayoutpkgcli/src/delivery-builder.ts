@@ -188,8 +188,7 @@ export async function buildSceneLayoutDelivery(
   };
   ensureChunk("initial");
   for (const mode of options.source.manifest.gameModes!.modes)
-    if (mode.id !== options.source.manifest.gameModes!.initialMode)
-      ensureChunk(`mode:${mode.id}`);
+    if (mode.id !== groups.initialMode) ensureChunk(`mode:${mode.id}`);
 
   const mapEntries: Record<string, EditorAssetsMapEntry> = {};
   const metadataRecords = await Promise.all(
@@ -389,7 +388,7 @@ export async function buildSceneLayoutDelivery(
     version: 2,
     kind: "scene-layout-delivery",
     layoutId: options.source.manifest.id,
-    initialMode: options.source.manifest.gameModes!.initialMode,
+    initialMode: groups.initialMode,
     initialChunk: "initial",
     chunks: chunkRecords,
     atlases: atlasRecords.sort((a, b) => compare(a.id, b.id)),

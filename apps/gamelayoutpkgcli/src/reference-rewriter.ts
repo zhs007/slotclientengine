@@ -246,12 +246,14 @@ export function rewriteLayoutManifest(
     ...(manifest.version === 4 ||
     manifest.version === 5 ||
     manifest.version === 6 ||
-    manifest.version === 7
+    manifest.version === 7 ||
+    manifest.version === 8
       ? { audio: rewriteOptimizedAudioAssets(manifest.audio, mapping) }
       : {}),
     ...(manifest.version === 5 ||
     manifest.version === 6 ||
-    manifest.version === 7
+    manifest.version === 7 ||
+    manifest.version === 8
       ? {
           eventAudio: {
             ...manifest.eventAudio,
@@ -304,7 +306,8 @@ export function rewriteLayoutManifest(
           ),
         }
       : {}),
-    ...(manifest.version === 7 && manifest.tapInfoObject
+    ...((manifest.version === 7 || manifest.version === 8) &&
+    manifest.tapInfoObject
       ? {
           tapInfoObject: {
             manifest: rewriteRef(manifest.tapInfoObject.manifest, mapping),

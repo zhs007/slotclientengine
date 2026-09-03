@@ -115,8 +115,8 @@ describe("optimized package flow", () => {
     expect(validated.files.has("base.m4a")).toBe(true);
     expect(validated.files.has("click.m4a")).toBe(true);
     expect(validated.files.has("base.wav")).toBe(false);
-    if (validated.manifest.version !== 7)
-      throw new Error("Expected Scene Layout v7.");
+    if (validated.manifest.version !== 8)
+      throw new Error("Expected Scene Layout v8.");
     expect(validated.manifest.audio.music[0]?.asset.sources).toEqual([
       { path: "base.m4a", mediaType: "audio/mp4" },
     ]);

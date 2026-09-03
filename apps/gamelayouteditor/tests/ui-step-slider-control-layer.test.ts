@@ -68,7 +68,7 @@ describe("Game Layout Editor step-slider UI-control layer", () => {
     ]);
 
     const manifest = editorProjectToManifest(project);
-    expect(manifest.version).toBe(7);
+    expect(manifest.version).toBe(8);
     expect(manifest.nodes[0]).toMatchObject({
       id: "fast-play",
       uiControl: {

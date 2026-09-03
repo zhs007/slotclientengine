@@ -11,6 +11,7 @@ import {
   createSceneLayoutRuntimeAllocation,
   parseSceneLayoutManifestDocument,
   parseSceneLayoutManifestV7,
+  upgradeSceneLayoutManifestToLatest,
   resolveNearestStepSliderState,
   resolveStepSliderPosition,
 } from "../../src/scene-layout/index.js";
@@ -255,7 +256,7 @@ describe("Scene Layout step-slider UI control", () => {
 
   it("publishes one globally unique catalog event per step", () => {
     const catalog = compileGameLayoutRuntimeEventCatalog({
-      manifest: sliderManifest(),
+      manifest: upgradeSceneLayoutManifestToLatest(sliderManifest()),
       symbolPackages: {},
       popupManifests: {},
     });

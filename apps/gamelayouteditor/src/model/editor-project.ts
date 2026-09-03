@@ -1,7 +1,8 @@
 import {
   createSceneLayoutRuntimeAllocation,
   parseSceneLayoutJsonData,
-  parseSceneLayoutManifestV7,
+  parseSceneLayoutManifestV8,
+  resolveSceneLayoutStartupMode,
   upgradeSceneLayoutManifestToLatest,
   type SceneLayoutManifest,
   type SceneLayoutManifestLatest,
@@ -244,6 +245,7 @@ export interface EditorProject {
   gameModes: {
     activeModeId: string;
     initialMode: string;
+    splashMode: string | null;
     modes: EditorGameModeDraft[];
     transitions: EditorGameModeTransitionDraft[];
   };
@@ -285,6 +287,7 @@ export function createNewEditorProject(_legacyMode?: unknown): EditorProject {
     gameModes: {
       activeModeId: "BaseGame",
       initialMode: "BaseGame",
+      splashMode: null,
       transitions: [],
       modes: [
         {
@@ -299,25 +302,6 @@ export function createNewEditorProject(_legacyMode?: unknown): EditorProject {
       ],
     },
   };
-  return project;
-}
-
-export function createSplashFirstEditorProject(
-  _splashMode?: unknown,
-  _baseGameMode?: unknown,
-): EditorProject {
-  const project = createNewEditorProject();
-  const splash = createEditorGameModeDraft("Splash", false);
-  splash.primaryActionTargetMode = "BaseGame";
-  project.gameModes.modes.unshift(splash);
-  project.gameModes.transitions.push({
-    kind: "none",
-    fromModeId: "Splash",
-    toModeId: "BaseGame",
-    preludePopupId: null,
-  });
-  project.gameModes.initialMode = "Splash";
-  activateEditorGameMode(project, "Splash");
   return project;
 }
 
@@ -536,7 +520,7 @@ export function editorProjectToPreviewManifest(
             ),
           },
         };
-    return parseSceneLayoutManifestV7({
+    return parseSceneLayoutManifestV8({
       ...previewDraft,
       runtimeAllocation: createSceneLayoutRuntimeAllocation(previewDraft),
     });
@@ -555,7 +539,7 @@ export function editorProjectToManifest(
   if (!initialMode)
     throw new Error(`initial 主状态不存在：${project.gameModes.initialMode}`);
   const base = {
-    version: 7 as const,
+    version: 8 as const,
     kind: "scene-layout" as const,
     id: project.id,
     main: {
@@ -668,6 +652,9 @@ export function editorProjectToManifest(
       : {}),
     gameModes: {
       initialMode: project.gameModes.initialMode,
+      ...(project.gameModes.splashMode
+        ? { splashMode: project.gameModes.splashMode }
+        : {}),
       modes: project.gameModes.modes.map((mode) => ({
         id: mode.id,
         main: {
@@ -782,7 +769,7 @@ export function editorProjectToManifest(
   };
   const latestDraft = {
     ...base,
-    version: 7 as const,
+    version: 8 as const,
     nodes: project.nodes.map((node) => editorNodeToManifest(project, node)),
     audio: emptyLegacyAudioCatalog(),
     eventAudio: canonicalEditorEventAudio(project),
@@ -790,8 +777,8 @@ export function editorProjectToManifest(
   } satisfies SceneLayoutManifestLatest;
   const runtimeAllocation = createSceneLayoutRuntimeAllocation(latestDraft);
   if (runtimeAllocation.version !== 3)
-    throw new Error("Scene Layout v7 必须生成 runtimeAllocation v3。");
-  const manifest = parseSceneLayoutManifestV7({
+    throw new Error("Scene Layout v8 必须生成 runtimeAllocation v3。");
+  const manifest = parseSceneLayoutManifestV8({
     ...latestDraft,
     runtimeAllocation,
   });
@@ -1209,8 +1196,9 @@ export function manifestToEditorProject(
     project.tapInfoObjectName = nested.name;
   }
   project.gameModes = {
-    activeModeId: latest.gameModes.initialMode,
+    activeModeId: resolveSceneLayoutStartupMode(latest.gameModes),
     initialMode: latest.gameModes.initialMode,
+    splashMode: latest.gameModes.splashMode ?? null,
     transitions: (latest.gameModes.transitions ?? []).map((transition) => {
       const overlay = transition.overlay;
       const common = {
@@ -1275,7 +1263,10 @@ export function manifestToEditorProject(
       };
     }),
   };
-  activateEditorGameMode(project, latest.gameModes.initialMode);
+  activateEditorGameMode(
+    project,
+    resolveSceneLayoutStartupMode(latest.gameModes),
+  );
   editorProjectToManifest(project);
   return project;
 }

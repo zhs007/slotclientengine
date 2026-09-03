@@ -3,6 +3,11 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
+import {
+  createSceneLayoutRuntimeAllocation,
+  parseSceneLayoutManifestV8,
+  upgradeSceneLayoutManifestToLatest,
+} from "@slotclientengine/rendercore/scene-layout/data";
 import sharp from "sharp";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -27,6 +32,72 @@ afterEach(async () => {
 });
 
 describe("Scene Layout CDN delivery builder", () => {
+  it("keeps gameplay initial in a mode chunk when configured Splash owns startup", async () => {
+    const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
+    const alpha = latest.gameModes.modes.find((mode) => mode.id === "Alpha")!;
+    const draft = {
+      ...latest,
+      gameModes: {
+        ...latest.gameModes,
+        splashMode: "Splash",
+        modes: [
+          ...latest.gameModes.modes,
+          {
+            ...alpha,
+            id: "Splash",
+            main: { ...alpha.main, enabled: false },
+            nodeStates: {},
+            symbolPackage: undefined,
+            awardCelebrationPopup: undefined,
+          },
+        ],
+        transitions: [
+          ...(latest.gameModes.transitions ?? []),
+          {
+            from: "Splash",
+            to: "Alpha",
+            overlay: { kind: "none" as const },
+          },
+        ],
+      },
+      runtimeAllocation: undefined as never,
+    };
+    const manifest = parseSceneLayoutManifestV8({
+      ...draft,
+      runtimeAllocation: createSceneLayoutRuntimeAllocation(draft),
+    });
+    const logicalFiles = new Map(logicalFixtureFiles());
+    logicalFiles.set("alpha.png", await image(200, 80, "#ff0000"));
+    logicalFiles.set("beta.jpg", await image(40, 40, "#00ff00", "jpeg"));
+    logicalFiles.set("shared.webp", await image(80, 200, "#0000ff", "webp"));
+    const source = await validateLayoutPackageBytes(
+      await createMappedLayoutZip({
+        manifest,
+        logicalFiles,
+      }),
+    );
+    const runner: CwebpRunner = {
+      version: vi.fn(async () => "cwebp test"),
+      encode: vi.fn(async ({ inputPath, outputPath, quality }) => {
+        await sharp(inputPath).webp({ quality }).toFile(outputPath);
+      }),
+    };
+    const delivery = await buildSceneLayoutDelivery({
+      source,
+      quality: 80,
+      cwebpExecutable: "cwebp",
+      cwebpRunner: runner,
+      maxAtlasSize: 256,
+      atlasPadding: 2,
+      atlasExtrude: 1,
+    });
+
+    expect(delivery.manifest.initialMode).toBe("Splash");
+    expect(delivery.manifest.chunks.map((chunk) => chunk.id)).toContain(
+      "mode:Alpha",
+    );
+  });
+
   it("owns assets by earliest mode, atlases before WebP and preserves media bytes", async () => {
     const original = logicalFixtureFiles();
     const alpha = await image(200, 80, "#ff0000");

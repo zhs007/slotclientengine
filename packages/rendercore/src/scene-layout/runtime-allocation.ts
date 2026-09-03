@@ -5,6 +5,7 @@ import type {
   SceneLayoutManifestModern,
   SceneLayoutManifestV6,
   SceneLayoutManifestV7,
+  SceneLayoutManifestV8,
   SceneLayoutRuntimeAllocationV1,
   SceneLayoutRuntimeAllocationV2,
   SceneLayoutRuntimeAllocationV3,
@@ -18,7 +19,7 @@ export function sceneLayoutTransitionOwnerId(from: string, to: string): string {
 }
 
 export function createSceneLayoutRuntimeAllocation(
-  manifest: SceneLayoutManifestV7,
+  manifest: SceneLayoutManifestV7 | SceneLayoutManifestV8,
 ): SceneLayoutRuntimeAllocationV3;
 export function createSceneLayoutRuntimeAllocation(
   manifest: SceneLayoutManifestV6,
@@ -26,7 +27,7 @@ export function createSceneLayoutRuntimeAllocation(
 export function createSceneLayoutRuntimeAllocation(
   manifest: Exclude<
     SceneLayoutManifestModern,
-    SceneLayoutManifestV6 | SceneLayoutManifestV7
+    SceneLayoutManifestV6 | SceneLayoutManifestV7 | SceneLayoutManifestV8
   >,
 ): SceneLayoutRuntimeAllocationV1;
 export function createSceneLayoutRuntimeAllocation(
@@ -35,7 +36,7 @@ export function createSceneLayoutRuntimeAllocation(
   | SceneLayoutRuntimeAllocationV1
   | SceneLayoutRuntimeAllocationV2
   | SceneLayoutRuntimeAllocationV3 {
-  if (manifest.version === 7)
+  if (manifest.version === 7 || manifest.version === 8)
     return createSceneLayoutRuntimeAllocationV3(manifest);
   return manifest.version === 6
     ? createSceneLayoutRuntimeAllocationV2(manifest)
@@ -43,7 +44,7 @@ export function createSceneLayoutRuntimeAllocation(
 }
 
 function createSceneLayoutRuntimeAllocationV3(
-  manifest: SceneLayoutManifestV7,
+  manifest: SceneLayoutManifestV7 | SceneLayoutManifestV8,
 ): SceneLayoutRuntimeAllocationV3 {
   const orderedNodes = [...manifest.nodes].sort(
     (left, right) => left.order - right.order,
@@ -98,7 +99,7 @@ function createSceneLayoutRuntimeAllocationV3(
 export function createSceneLayoutRuntimeAllocationV1(
   manifest: Exclude<
     SceneLayoutManifestModern,
-    SceneLayoutManifestV6 | SceneLayoutManifestV7
+    SceneLayoutManifestV6 | SceneLayoutManifestV7 | SceneLayoutManifestV8
   >,
 ): SceneLayoutRuntimeAllocationV1 {
   const backgroundNodes = new Set(
@@ -249,7 +250,7 @@ function createSceneLayoutRuntimeAllocationV2(
 
 export function parseSceneLayoutRuntimeAllocation(
   value: unknown,
-  manifest: SceneLayoutManifestV7,
+  manifest: SceneLayoutManifestV7 | SceneLayoutManifestV8,
 ): SceneLayoutRuntimeAllocationV3;
 export function parseSceneLayoutRuntimeAllocation(
   value: unknown,
@@ -259,7 +260,7 @@ export function parseSceneLayoutRuntimeAllocation(
   value: unknown,
   manifest: Exclude<
     SceneLayoutManifestModern,
-    SceneLayoutManifestV6 | SceneLayoutManifestV7
+    SceneLayoutManifestV6 | SceneLayoutManifestV7 | SceneLayoutManifestV8
   >,
 ): SceneLayoutRuntimeAllocationV1;
 export function parseSceneLayoutRuntimeAllocation(
@@ -270,7 +271,7 @@ export function parseSceneLayoutRuntimeAllocation(
   | SceneLayoutRuntimeAllocationV2
   | SceneLayoutRuntimeAllocationV3 {
   const expected =
-    manifest.version === 7
+    manifest.version === 7 || manifest.version === 8
       ? createSceneLayoutRuntimeAllocationV3(manifest)
       : manifest.version === 6
         ? createSceneLayoutRuntimeAllocationV2(manifest)

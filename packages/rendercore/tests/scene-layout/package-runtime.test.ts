@@ -190,6 +190,7 @@ function createRuntimeWithTransitions(
       layout: { ...resource.layout, manifest: layoutManifest, spineResources },
     },
     createTransitionPlayer,
+    audioBackend: new EventAudioBackend(),
   });
 }
 
@@ -911,13 +912,15 @@ describe("scene layout package runtime", () => {
         lazyRuntimeResources: true,
         decodeImage: async () => ({ width: 1, height: 1 }),
       });
-      expect(resource.runtimeManifest.version).toBe(7);
+      expect(resource.runtimeManifest.version).toBe(8);
       expect(resource.layout.manifest.runtimeResources).toBeUndefined();
       const runtime = createSceneLayoutPackageRuntime({
         resource,
         presentationOnly: true,
+        audioBackend: new EventAudioBackend(),
       });
       await runtime.init();
+      await runtime.requestPrimaryGameModeAction();
       runtime.applyViewport({ width: 2000, height: 2000 });
       const badge = await runtime.createRenderObject("badge");
 
@@ -1792,6 +1795,7 @@ describe("scene layout package runtime", () => {
         localPhaseYs: [0, 0],
       };
       await runtime.init({ reels: { main: baseInput } });
+      await runtime.requestPrimaryGameModeAction();
       runtime.applyViewport({ width: 2000, height: 2000 });
       const baseReel = runtime.getReelPresentation("main");
       expect(baseReel).toBeInstanceOf(RenderReelSet);
@@ -1964,6 +1968,7 @@ describe("scene layout package runtime", () => {
         localPhaseYs: [0, 0],
       };
       await runtime.init({ reels: { main: scene } });
+      await runtime.requestPrimaryGameModeAction();
       runtime.applyViewport({ width: 2000, height: 2000 });
       const sourceReel = runtime.getReelPresentation("main");
       const pending = runtime.requestGameMode("FreeGame", {
@@ -2190,6 +2195,7 @@ describe("scene layout package runtime", () => {
       ]);
       const inspector = createSceneLayoutPackageRuntimeInspector(runtime);
       await runtime.init();
+      await runtime.requestPrimaryGameModeAction();
       runtime.applyViewport({ width: 2000, height: 2000 });
       expect(runtime.getGameModeIds()).toEqual(["BaseGame", "FreeGame"]);
       expect(runtime.getGameModeIds()).toBe(runtime.getGameModeIds());
@@ -2263,10 +2269,14 @@ describe("scene layout package runtime", () => {
         manifest: game002LayoutFixture,
         files: new Map([["assets/bg.png", new Uint8Array([1])]]),
       });
-      const runtime = createSceneLayoutPackageRuntime({ resource });
+      const runtime = createSceneLayoutPackageRuntime({
+        resource,
+        audioBackend: new EventAudioBackend(),
+      });
       await runtime.init();
-      expect(resource.manifest.version).toBe(7);
-      expect(resource.runtimeManifest.version).toBe(7);
+      await runtime.requestPrimaryGameModeAction();
+      expect(resource.manifest.version).toBe(8);
+      expect(resource.runtimeManifest.version).toBe(8);
       expect(runtime.getGameModeIds()).toEqual(["BaseGame"]);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
         stableMode: "BaseGame",
@@ -2298,6 +2308,7 @@ describe("scene layout package runtime", () => {
       ]);
       const inspector = createSceneLayoutPackageRuntimeInspector(runtime);
       await runtime.init();
+      await runtime.requestPrimaryGameModeAction();
       runtime.applyViewport({ width: 200, height: 100 });
       const popup = runtime.getAwardCelebrationPopup("celebration");
       expect(resource.popupPackages.celebration.manifest.type).toBe(

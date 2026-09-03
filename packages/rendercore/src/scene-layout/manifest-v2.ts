@@ -239,9 +239,9 @@ export function materializeSceneLayoutManifestForMode(
   modeId?: string,
 ): SceneLayoutManifestV1 {
   if (manifest.version === 1) return parseSceneLayoutManifestV1(manifest);
-  if (manifest.version === 7)
+  if (manifest.version === 7 || manifest.version === 8)
     fail(
-      "Scene Layout v7 must be consumed directly and cannot be materialized as legacy art space.",
+      `Scene Layout v${manifest.version} must be consumed directly and cannot be materialized as legacy art space.`,
     );
   const parsed = parseSceneLayoutManifestModernWithoutMaterialization(manifest);
   const selected = modeId ?? parsed.gameModes.initialMode;

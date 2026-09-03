@@ -142,7 +142,7 @@ describe("scene layout manifest v7", () => {
     const before = structuredClone(source);
     const upgraded = upgradeSceneLayoutManifestToLatest(source);
     expect(source).toEqual(before);
-    expect(upgraded.version).toBe(7);
+    expect(upgraded.version).toBe(8);
     expect(upgraded).toHaveProperty("main");
     expect(upgraded).not.toHaveProperty("coordinateOrigin");
     expect(upgraded).not.toHaveProperty("adaptation");

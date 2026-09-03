@@ -43,7 +43,7 @@ export function projectWorkspaceMarkup(
     .join("");
   const readinessRows = project.gameModes.modes
     .map((mode) => {
-      return `<tr><th>${escapeHtml(mode.id)}${mode.id === project.gameModes.initialMode ? " · initial" : ""}</th><td>${mode.mainEnabled ? "启用" : "停用"}</td><td>${mode.symbols ? `${escapeHtml(mode.symbols.packageId)} · ${escapeHtml(mode.symbols.reelSet)} · ${mode.symbols.renderMode}` : "无"}</td><td>${mode.awardCelebrationPopupId ? escapeHtml(mode.awardCelebrationPopupId) : "无"}</td></tr>`;
+      return `<tr><th>${escapeHtml(mode.id)}${mode.id === project.gameModes.initialMode ? " · initial" : ""}${mode.id === project.gameModes.splashMode ? " · splash" : ""}</th><td>${mode.mainEnabled ? "启用" : "停用"}</td><td>${mode.symbols ? `${escapeHtml(mode.symbols.packageId)} · ${escapeHtml(mode.symbols.reelSet)} · ${mode.symbols.renderMode}` : "无"}</td><td>${mode.awardCelebrationPopupId ? escapeHtml(mode.awardCelebrationPopupId) : "无"}</td></tr>`;
     })
     .join("");
   let closure: readonly string[] = [];

@@ -243,8 +243,8 @@ describe("typed asset reference rewriting", () => {
   it("preserves a canonical v3 runtime allocation while rewriting paths", () => {
     const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
     const rewritten = rewriteLayoutManifest(latest, mapping);
-    expect(rewritten.version).toBe(7);
-    if (rewritten.version !== 7) throw new Error("Expected layout v7.");
+    expect(rewritten.version).toBe(8);
+    if (rewritten.version !== 8) throw new Error("Expected layout v8.");
     expect(rewritten.runtimeAllocation).toEqual(latest.runtimeAllocation);
     expect(graphicResource(rewritten.nodes[0])).toMatchObject({
       kind: "image",
