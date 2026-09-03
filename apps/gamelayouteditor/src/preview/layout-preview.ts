@@ -14,6 +14,7 @@ import {
   type SceneLayoutSnapshot,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/core";
+import { resolveSceneLayoutStartupMode } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   createSceneLayoutPackageRuntimeInspector,
   type SceneLayoutPackageRuntimeInspector,
@@ -190,10 +191,8 @@ export class LayoutPreview {
       return;
     }
     const manifest = nextPackage.manifest;
-    const initialBinding = resolveModeSymbolBinding(
-      manifest,
-      manifest.gameModes.initialMode,
-    );
+    const startupMode = resolveSceneLayoutStartupMode(manifest.gameModes);
+    const startupBinding = resolveModeSymbolBinding(manifest, startupMode);
     const packageScenes = new Map<string, RandomReelSceneSnapshot>();
     const bindings = manifest.symbolPackage
       ? [
@@ -223,16 +222,16 @@ export class LayoutPreview {
           randomSource: this.getRandomSource(),
         }),
       );
-    const packageScene = initialBinding
-      ? packageScenes.get(initialBinding.id)!
+    const packageScene = startupBinding
+      ? packageScenes.get(startupBinding.id)!
       : null;
-    const initialSymbolResource = initialBinding
-      ? (nextPackage.packageResource.symbolPackages[initialBinding.id] ??
+    const startupSymbolResource = startupBinding
+      ? (nextPackage.packageResource.symbolPackages[startupBinding.id] ??
         nextPackage.packageResource.symbolPackage)
       : null;
-    if (initialBinding && !initialSymbolResource)
+    if (startupBinding && !startupSymbolResource)
       throw new Error(
-        `组合 preview 缺少 Symbols resource：${initialBinding.id}`,
+        `组合 preview 缺少 Symbols resource：${startupBinding.id}`,
       );
     const needsPackageRuntime = Boolean(
       manifest.symbolPackage ||
@@ -257,11 +256,11 @@ export class LayoutPreview {
     try {
       if (needsPackageRuntime) {
         await (nextRuntime as SceneLayoutPackageRuntime).init(
-          initialBinding
+          startupBinding
             ? {
                 reels: {
                   main: this.createPackageReelInput(
-                    initialSymbolResource!,
+                    startupSymbolResource!,
                     packageScene!,
                   ),
                 },
@@ -452,7 +451,10 @@ export class LayoutPreview {
     const mode = this.#manifest.gameModes.modes.find(
       (candidate) => candidate.id === current,
     );
-    const target = mode?.primaryAction?.targetMode;
+    const target =
+      current === this.#manifest.gameModes.splashMode
+        ? this.#manifest.gameModes.initialMode
+        : mode?.primaryAction?.targetMode;
     if (!target) return;
     await this.#packageRuntime.prepareGameModeTransition(
       target,
@@ -468,12 +470,22 @@ export class LayoutPreview {
       transition = this.#packageRuntime.requestPrimaryGameModeAction();
     } else {
       const current = this.#packageRuntime.getStableGameMode();
-      const target = this.#manifest.gameModes.modes.find(
-        (candidate) => candidate.id === current,
-      )?.primaryAction?.targetMode;
+      const consumesStartupSplash =
+        this.#manifest.gameModes.splashMode === undefined ||
+        current === this.#manifest.gameModes.splashMode;
+      const target =
+        current === this.#manifest.gameModes.splashMode
+          ? this.#manifest.gameModes.initialMode
+          : this.#manifest.gameModes.modes.find(
+              (candidate) => candidate.id === current,
+            )?.primaryAction?.targetMode;
       transition = this.#packageRuntime.requestPrimaryGameModeAction(
         target ? this.gameModeRequestOptions(target) : {},
       );
+      if (consumesStartupSplash)
+        transition = transition.then(() => {
+          this.#audioUnlocked = true;
+        });
     }
     await transition;
     this.applySize();

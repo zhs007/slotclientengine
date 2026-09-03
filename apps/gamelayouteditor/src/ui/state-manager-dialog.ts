@@ -36,16 +36,19 @@ export function stateManagerDialogMarkup(
       ? "layout 至少必须保留一个游戏模式。"
       : selectedModeId === options.project.gameModes.initialMode
         ? "删除 initial mode 前必须先选择其它 initial mode。"
-        : "";
+        : selectedModeId === options.project.gameModes.splashMode
+          ? "删除 splash mode 前必须先清除 Splash 配置。"
+          : "";
 
   const rows = options.project.gameModes.modes
     .map((mode) => {
       const initial = mode.id === options.project.gameModes.initialMode;
+      const splash = mode.id === options.project.gameModes.splashMode;
       const complete = Object.values(mode.mainVariants).every((variant) => {
         const focusRect = calculateEditorFocusRect(options.project, variant);
         return focusRect.width > 0 && focusRect.height > 0;
       });
-      return `<button type="button" role="option" data-select-game-mode="${escapeHtml(mode.id)}" aria-selected="${mode.id === selectedModeId}"><span>${escapeHtml(mode.id)}</span><small><span class="mode-badge">${mode.mainEnabled ? "main" : "no main"}</span>${initial ? '<span class="mode-badge">initial</span>' : ""}<span class="mode-readiness ${complete ? "ready" : "incomplete"}">${complete ? "ready" : "incomplete"}</span></small></button>`;
+      return `<button type="button" role="option" data-select-game-mode="${escapeHtml(mode.id)}" aria-selected="${mode.id === selectedModeId}"><span>${escapeHtml(mode.id)}</span><small><span class="mode-badge">${mode.mainEnabled ? "main" : "no main"}</span>${initial ? '<span class="mode-badge">initial</span>' : ""}${splash ? '<span class="mode-badge">splash</span>' : ""}<span class="mode-readiness ${complete ? "ready" : "incomplete"}">${complete ? "ready" : "incomplete"}</span></small></button>`;
     })
     .join("");
 
@@ -55,7 +58,8 @@ export function stateManagerDialogMarkup(
     <p class="state-manager-selected">选中状态：<strong>${escapeHtml(selected.id)}</strong></p>
     <label><input type="checkbox" data-mode-reel-enabled ${selected.mainEnabled ? "checked" : ""}/> 启用 main</label>
     <label>重命名为<input data-rename-game-mode-input value="${escapeHtml(options.renameModeId)}" /></label>
-    <div class="button-row"><button type="button" data-rename-game-mode>重命名</button><button type="button" data-set-initial-mode ${selectedModeId === options.project.gameModes.initialMode ? "disabled" : ""}>设为 initial</button><button type="button" class="danger" data-delete-game-mode ${deleteReason ? "disabled" : ""}>删除</button></div>
+    <p class="hint">Splash 是可选欢迎页；设置后必须配置一条 Splash → initial 的直接转场。</p>
+    <div class="button-row"><button type="button" data-rename-game-mode>重命名</button><button type="button" data-set-initial-mode ${selectedModeId === options.project.gameModes.initialMode || selectedModeId === options.project.gameModes.splashMode ? "disabled" : ""}>设为 initial</button><button type="button" data-toggle-splash-mode ${selectedModeId === options.project.gameModes.initialMode ? "disabled" : ""}>${selectedModeId === options.project.gameModes.splashMode ? "清除 splash" : "设为 splash"}</button><button type="button" class="danger" data-delete-game-mode ${deleteReason ? "disabled" : ""}>删除</button></div>
     <output class="state-manager-feedback" data-mode-dialog-feedback aria-live="polite">${escapeHtml([options.feedback, deleteReason].filter(Boolean).join(" · "))}</output>
     <div class="button-row state-manager-footer"><button type="button" data-close-mode-dialog>完成</button></div>
   </section>`;

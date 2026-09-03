@@ -1,6 +1,6 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v7 编辑器，覆盖 layout、mode/orientation、全局 Event 音乐音效、图形图层、UI 控件图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v7 ZIP 会在打开事务中规范化；后续预览和导出只生成 canonical v7。
+纯前端 Scene Layout v8 编辑器，覆盖 layout、mode/orientation、可选 Splash role、全局 Event 音乐音效、图形图层、UI 控件图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v8 ZIP 会在打开事务中规范化；后续预览和导出只生成 canonical v8。新项目只创建 BaseGame initial；用户自行创建欢迎 mode、设为 Splash并配置到 initial 的 direct edge。未配置时 preview 使用 RenderCore 的纯黑默认 Splash，首次有效点击解锁声音后才显示 initial。
 
 图层先区分“图形图层”和“UI 控件”。`radio` 必须从 Assets 明确选择不同且同尺寸的 off/on image root；`step-slider` 必须明确选择不同的 track/thumb，配置至少 2 档和正吸附时长，新建默认 3 档。两者都复用普通图层的唯一 id、order、scope 和横竖屏 placement，不按文件名配对。预览交互不回写 authoring draft；Inspector 可分别重绑图片，production closure 会包含控件的全部图片。
 
@@ -9,7 +9,7 @@ runtime 可按图层 id 调用 `getUiControl(id)`，或解析 `gamelayout:/ui-co
 
 ## 中心坐标与 per-mode 可见性
 
-Scene Layout v7 固定使用中心坐标。root `main` 保存 grid，每个 mode 显式保存 `main.enabled` 以及
+Scene Layout v8 继承 v7 的固定中心坐标。root `main` 保存 grid，每个 mode 显式保存 `main.enabled` 以及
 landscape/portrait 的 main center、absolute focusRect 和可选 margin。Editor 以相对 main 四边的
 `left/top/right/bottom` 外扩量编辑 focus（正数外扩、负数内缩），导入时从 absolute focusRect 反算，
 导出时再派生 canonical absolute focusRect。背景没有专属类型、selector 或 readiness；零个、一个或
@@ -97,7 +97,7 @@ Spine atlas 的 page 是 atlas 内部逻辑名，texture map 的 value 才是全
 - 根 `assets.map.json`；
 - 一个 `assets/<完整 SHA-256>.<ext>` payload 区。
 
-layout、audio、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。只有被 Event audio binding 引用的 root audio asset 才写入 ZIP；canonical v7 固定写空 `audio.music/effects/programmaticEffects`、mode 不写 `bgm`、`eventAudio.ignoreLegacyAudio=true`，并无损保留 exact Event binding/address。项目 Tab 的“编辑音乐音效”复用 EditorCore event dialog，只选择 Assets 中已上传的 audio；loop 的结束 event 通过 EditorCore 单 Event picker 选择，并且必须与启动 event 不同。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
+layout、audio、VNI、image-string、Symbols、Popup 和程序资源的全部配置引用均为 filename keys；production export 只写传递可达 exact closure，不写 nested dependency 目录或 unused key。只有被 Event audio binding 引用的 root audio asset 才写入 ZIP；canonical v8 固定写空 `audio.music/effects/programmaticEffects`、mode 不写 `bgm`、`eventAudio.ignoreLegacyAudio=true`，并无损保留 exact Event binding/address。项目 Tab 的“编辑音乐音效”复用 EditorCore event dialog，只选择 Assets 中已上传的 audio；loop 的结束 event 通过 EditorCore 单 Event picker 选择，并且必须与启动 event 不同。Spine 只要某个 JSON 根被 Scene 或程序键引用，就导出该根及其 atlas/贴图闭包；共享 leaf 只写一份，同批未引用的 sibling JSON 不导出。VNI project 只结构化改写 schema 声明的 asset path。重新导入、Blob preview、package resource 与 CDN URL loader 共享 rendercore map resolver。无 map 的合法 legacy package 继续按 direct-path 合同加载；Editor 导入后升级为新格式。
 
 每个 mode 可独立选择 Symbols 与 award-celebration Popup。每条有向转场显式选择无效果、Spine 顶层特效或黑场视频，并可独立选择“无”或一个普通 Spine `preludePopup`；切换效果类型会保留 Popup binding。未选 Popup 时直接执行效果，无效果分支在目标 scene prepare 成功后原子切换；已选时保持 source mode，复用 Popup 的 start→loop→end 状态机，完整 end 后再继续效果。preview 将完整 canvas 与 window keyboard 绑定到 rendercore：active Popup 可在 canvas 任意位置点击或按任意非 repeat 键，idle 时输入透传。带 Popup 的视频随后进入等待阶段，必须由第二次真实 pointer/key 启动有声媒体。Popup 直接渲染在当前状态的顶层 Popup root，不建立独立 scene。
 

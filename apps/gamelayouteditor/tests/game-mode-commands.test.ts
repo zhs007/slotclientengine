@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   createNewEditorProject,
   editorProjectToManifest,
+  manifestToEditorProject,
 } from "../src/model/editor-project.js";
 import {
   addGameMode,
+  clearSplashGameMode,
   createGameModeTransition,
   deleteGameMode,
   renameGameMode,
   setGameModeReelEnabled,
+  setGameModeTransitionKind,
   setInitialGameMode,
+  setSplashGameMode,
 } from "../src/model/game-mode-commands.js";
 
 describe("game mode commands", () => {
@@ -103,15 +107,48 @@ describe("game mode commands", () => {
     ).toThrow(/已存在/u);
   });
 
-  it("keeps main specialization inside the mode and exports latest v7", () => {
+  it("keeps main specialization inside the mode and exports latest v8", () => {
     const project = createNewEditorProject();
     setGameModeReelEnabled(project, "BaseGame", false);
 
     const manifest = editorProjectToManifest(project);
-    expect(manifest.version).toBe(7);
+    expect(manifest.version).toBe(8);
     expect(manifest.main).toMatchObject({ columns: 5, rows: 3 });
     expect(manifest.gameModes.modes[0]!.main.enabled).toBe(false);
     expect(manifest).not.toHaveProperty("adaptation");
     expect(manifest).not.toHaveProperty("artSize");
+  });
+
+  it("configures Splash separately from initial and requires its direct edge", () => {
+    const project = createNewEditorProject();
+    addGameMode(project, "Splash");
+    setSplashGameMode(project, "Splash");
+
+    expect(project.gameModes).toMatchObject({
+      initialMode: "BaseGame",
+      splashMode: "Splash",
+    });
+    expect(() => setInitialGameMode(project, "Splash")).toThrow(
+      /不能同时配置/u,
+    );
+    expect(() => deleteGameMode(project, "Splash")).toThrow(/清除 Splash/u);
+    expect(() => editorProjectToManifest(project)).toThrow(
+      /direct transition/u,
+    );
+
+    createGameModeTransition(project, "Splash", "BaseGame");
+    setGameModeTransitionKind(
+      project,
+      project.gameModes.transitions[0]!,
+      "none",
+    );
+    const manifest = editorProjectToManifest(project);
+    expect(manifest.gameModes.splashMode).toBe("Splash");
+    const restored = manifestToEditorProject(manifest, project.assets);
+    expect(restored.gameModes.splashMode).toBe("Splash");
+    expect(restored.gameModes.initialMode).toBe("BaseGame");
+    expect(restored.gameModes.activeModeId).toBe("Splash");
+    clearSplashGameMode(project);
+    expect(project.gameModes.splashMode).toBeNull();
   });
 });

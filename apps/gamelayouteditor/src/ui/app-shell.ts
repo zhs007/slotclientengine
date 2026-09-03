@@ -3,7 +3,10 @@ import {
   type SceneLayoutManifestLatest,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout/editor";
-import { formatGameLayoutRuntimeAddress } from "@slotclientengine/rendercore/scene-layout/data";
+import {
+  formatGameLayoutRuntimeAddress,
+  resolveSceneLayoutStartupMode,
+} from "@slotclientengine/rendercore/scene-layout/data";
 import { parsePopupManifest } from "@slotclientengine/rendercore/popup/editor";
 import {
   createBoundedSourceIndex,
@@ -38,7 +41,6 @@ import {
   activateEditorGameMode,
   cloneEditorProject,
   createNewEditorProject,
-  createSplashFirstEditorProject,
   editorProjectToManifest,
   editorProjectToPreviewManifest,
   manifestToEditorProject,
@@ -94,6 +96,7 @@ import {
   bindGameModeSymbols,
   bindGameModePopup,
   deleteGameMode,
+  clearSplashGameMode,
   deletePopupDependency,
   deletePopupObjectDependency,
   importPopupDependency,
@@ -115,6 +118,7 @@ import {
   setGameModeVideoTransitionFadeOut,
   setGameModeVideoTransitionResource,
   setInitialGameMode,
+  setSplashGameMode,
   setGameModeReelEnabled,
   setPopupOrder,
   setPopupPlacement,
@@ -284,6 +288,8 @@ export class GameLayoutEditorApp {
 
   async init(): Promise<void> {
     this.#root.innerHTML = shellMarkup();
+    this.requireElement("[data-new-project-dialog] p").textContent =
+      "默认只创建 BaseGame；未配置 Splash 时运行时会显示纯黑默认 Splash，并要求点击解锁声音。";
     const previewHost = this.requireElement("[data-preview-host]");
     const diagnostics = this.requireElement("[data-preview-diagnostics]");
     this.#preview = new LayoutPreview(previewHost, diagnostics, {
@@ -664,9 +670,7 @@ export class GameLayoutEditorApp {
           const popupId = this.#selectedPopupId;
           const variant = input.dataset.popupPlacement as SceneLayoutVariantId;
           const field = input.dataset.popupPlacementField as
-            | "x"
-            | "y"
-            | "scale";
+            "x" | "y" | "scale";
           if (!popupId) {
             this.#store.setExternalError(
               new Error("尚未选择 popup dependency。"),
@@ -717,8 +721,7 @@ export class GameLayoutEditorApp {
       "change",
       (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          | "standard"
-          | "grid-cell";
+          "standard" | "grid-cell";
         this.runTransaction((draft) => {
           const mode = draft.gameModes.modes.find(
             (candidate) => candidate.id === this.#selectedGameMode,
@@ -798,11 +801,11 @@ export class GameLayoutEditorApp {
     this.#session.selection = null;
     this.#session.expandedResourceIds.clear();
     this.#session.expandedInspectorSections.clear();
-    this.#selectedGameMode = "Splash";
-    this.#selectedPreviewMode = "Splash";
+    this.#selectedGameMode = "BaseGame";
+    this.#selectedPreviewMode = "BaseGame";
     this.#selectedSymbolId = null;
     this.#selectedPopupId = null;
-    this.#store.replace(createSplashFirstEditorProject());
+    this.#store.replace(createNewEditorProject());
     this.showFeedback("已新建中心坐标项目。先上传资源，再添加普通图层。");
   }
 
@@ -1358,7 +1361,7 @@ export class GameLayoutEditorApp {
       ...project.gameModes.modes.map((mode) => {
         const option = document.createElement("option");
         option.value = mode.id;
-        option.textContent = `${mode.id}${mode.id === project.gameModes.initialMode ? " (initial)" : ""}`;
+        option.textContent = `${mode.id}${mode.id === project.gameModes.initialMode ? " (initial)" : ""}${mode.id === project.gameModes.splashMode ? " (splash)" : ""}`;
         option.selected = mode.id === this.#selectedGameMode;
         return option;
       }),
@@ -1586,6 +1589,28 @@ export class GameLayoutEditorApp {
         this.renderWorkspace(this.#store.getSnapshot());
       });
     dialog
+      .querySelector<HTMLButtonElement>("[data-toggle-splash-mode]")!
+      .addEventListener("click", () => {
+        const current = this.#store.getSnapshot().project.gameModes.splashMode;
+        const clearing = current === this.#selectedGameMode;
+        if (
+          !this.runTransaction((draft) =>
+            clearing
+              ? clearSplashGameMode(draft)
+              : setSplashGameMode(draft, this.#selectedGameMode),
+          )
+        ) {
+          this.#modeDialogFeedback =
+            this.#store.getSnapshot().externalError ?? "设置 splash 失败。";
+          this.renderModeDialog(this.#store.getSnapshot().project);
+          return;
+        }
+        this.#modeDialogFeedback = clearing
+          ? "已清除 Splash 配置"
+          : `已将 ${this.#selectedGameMode} 设为 splash`;
+        this.renderWorkspace(this.#store.getSnapshot());
+      });
+    dialog
       .querySelector<HTMLButtonElement>("[data-delete-game-mode]")!
       .addEventListener("click", () => {
         const removed = this.#selectedGameMode;
@@ -1679,7 +1704,7 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-preview-transition-status]").textContent =
       transitionStatus;
     this.requireElement("[data-main-state-status]").textContent =
-      `${transitionStatus} · initial=${project.gameModes.initialMode}`;
+      `${transitionStatus} · initial=${project.gameModes.initialMode} · splash=${project.gameModes.splashMode ?? "无"}`;
   }
 
   private bindWorkspaceActions(project: EditorProject): void {
@@ -1757,9 +1782,7 @@ export class GameLayoutEditorApp {
       .querySelector<HTMLSelectElement>("[data-transition-kind]")
       ?.addEventListener("change", (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value as
-          | "none"
-          | "spine"
-          | "video";
+          "none" | "spine" | "video";
         this.runTransaction((draft) => {
           const transition = draft.gameModes.transitions.find(
             (candidate) =>
@@ -1817,9 +1840,7 @@ export class GameLayoutEditorApp {
           const variant = input.dataset
             .transitionPopupPlacement as SceneLayoutVariantId;
           const field = input.dataset.transitionPopupPlacementField as
-            | "x"
-            | "y"
-            | "scale";
+            "x" | "y" | "scale";
           this.runTransaction((draft) => {
             const transition = draft.gameModes.transitions.find(
               (candidate) =>
@@ -1963,11 +1984,7 @@ export class GameLayoutEditorApp {
     );
     status?.addEventListener("change", () => {
       this.#session.resourceStatus = status.value as
-        | "all"
-        | "referenced"
-        | "runtime"
-        | "unused"
-        | "error";
+        "all" | "referenced" | "runtime" | "unused" | "error";
       this.renderWorkspace(this.#store.getSnapshot());
     });
     panel
@@ -2713,8 +2730,7 @@ export class GameLayoutEditorApp {
       .forEach((input) =>
         input.addEventListener("change", () => {
           const variant = input.dataset.pickerVariant as
-            | "landscape"
-            | "portrait";
+            "landscape" | "portrait";
           state.variants = input.checked
             ? [...new Set([...state.variants, variant])]
             : state.variants.filter((item) => item !== variant);
@@ -3432,8 +3448,14 @@ export class GameLayoutEditorApp {
       this.#session.selection = defaultLayoutSelection(project);
       this.#session.expandedResourceIds.clear();
       this.#session.expandedInspectorSections.clear();
-      this.#selectedGameMode = project.gameModes.initialMode;
-      this.#selectedPreviewMode = project.gameModes.initialMode;
+      const startupMode = resolveSceneLayoutStartupMode({
+        initialMode: project.gameModes.initialMode,
+        ...(project.gameModes.splashMode
+          ? { splashMode: project.gameModes.splashMode }
+          : {}),
+      });
+      this.#selectedGameMode = startupMode;
+      this.#selectedPreviewMode = startupMode;
       this.#selectedSymbolId =
         project.gameModes.modes.find(
           (mode) => mode.id === project.gameModes.initialMode,

@@ -526,7 +526,7 @@ describe("layout zip IO", () => {
     const canonicalManifest = JSON.parse(
       new TextDecoder().decode(secondEntries.get("layout.manifest.json")),
     );
-    expect(canonicalManifest.version).toBe(7);
+    expect(canonicalManifest.version).toBe(8);
     expect(canonicalManifest).not.toHaveProperty("coordinateOrigin");
     expect(canonicalManifest.gameModes.modes[0]).not.toHaveProperty(
       "reelPlacements",
@@ -996,7 +996,7 @@ describe("layout zip IO", () => {
       ]);
       const imported = await importLayoutZip(first.bytes, { decodeImage });
       expect(imported.manifest).toMatchObject({
-        version: 7,
+        version: 8,
         id: fixture.manifest.id,
         symbolPackages: fixture.manifest.symbolPackages,
       });
@@ -1286,7 +1286,7 @@ describe("layout zip IO", () => {
         decodeImage,
         loadSymbolTextures: false,
       });
-      expect(imported.manifest.version).toBe(7);
+      expect(imported.manifest.version).toBe(8);
       expect(imported.manifest).not.toHaveProperty("adaptation");
       expect(imported.manifest.symbolPackages).toEqual(
         fixture.manifest.symbolPackages,
@@ -1337,7 +1337,7 @@ describe("layout zip IO", () => {
     expect(first.bytes).toEqual(second.bytes);
     const imported = await importLayoutZip(first.bytes, { decodeImage });
     expect(imported.manifest).toMatchObject({
-      version: 7,
+      version: 8,
       id: imageManifest.id,
     });
     expect(imported.manifest).not.toHaveProperty("adaptation");

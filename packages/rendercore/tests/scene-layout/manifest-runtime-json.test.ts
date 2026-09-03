@@ -14,7 +14,7 @@ describe("scene layout JSON runtime resource manifest", () => {
   it("adds the JSON kind without changing the latest version or old documents", () => {
     const legacyLatest =
       upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
-    expect(legacyLatest.version).toBe(7);
+    expect(legacyLatest.version).toBe(8);
     expect(legacyLatest.runtimeResources).toBeUndefined();
 
     const latest = parseSceneLayoutManifestDocument({
@@ -30,7 +30,7 @@ describe("scene layout JSON runtime resource manifest", () => {
         },
       },
     });
-    expect(latest.version).toBe(7);
+    expect(latest.version).toBe(8);
     expect(latest.runtimeResources?.["spin-config"]).toEqual({
       kind: "json",
       path: "assets/spin-config.json",

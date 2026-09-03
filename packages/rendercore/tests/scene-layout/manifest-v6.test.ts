@@ -37,7 +37,7 @@ describe("scene layout manifest v6", () => {
     const ordinary = latest.nodes.find((node) => node.id === "ordinary")!;
 
     expect(v6.version).toBe(6);
-    expect(latest.version).toBe(7);
+    expect(latest.version).toBe(8);
     expect(source).toEqual(before);
     expect(v6.nodes.find((node) => node.id === "ordinary")?.placements).toEqual(
       {
@@ -116,7 +116,7 @@ describe("scene layout manifest v6", () => {
 
     const v5 = parseSceneLayoutManifestV5(v5Draft);
     const upgraded = upgradeSceneLayoutManifestToLatest(v5);
-    expect(upgraded.version).toBe(7);
+    expect(upgraded.version).toBe(8);
     expect(upgraded.nodes[1]!.placements).toHaveProperty("landscape");
     expect(upgraded.nodes[1]!.placements).toHaveProperty("portrait");
   });
@@ -165,7 +165,7 @@ describe("scene layout manifest v6", () => {
     expect(() =>
       parseSceneLayoutManifestDocument({
         ...upgradeSceneLayoutManifestToLatest(game002LayoutFixture),
-        version: 8,
+        version: 9,
       }),
     ).toThrow(/version|unknown key/u);
   });

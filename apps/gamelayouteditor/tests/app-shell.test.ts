@@ -136,14 +136,14 @@ describe("GameLayoutEditorApp current workspace", () => {
     app.destroy();
   });
 
-  it("creates only a centered, untyped Splash/BaseGame project", async () => {
+  it("creates only a centered, untyped BaseGame project", async () => {
     const { app, root } = await createApp();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
     const dialog = root.querySelector(
       "[data-new-project-dialog]",
     ) as HTMLDialogElement;
     expect(dialog.textContent).toContain("新建中心坐标项目");
-    expect(dialog.textContent).toContain("横竖屏均使用中心坐标");
+    expect(dialog.textContent).toContain("默认只创建 BaseGame");
     expect(dialog.querySelector("select")).toBeNull();
     expect(dialog.querySelector("[data-coordinate-origin]")).toBeNull();
     (
@@ -151,13 +151,10 @@ describe("GameLayoutEditorApp current workspace", () => {
     ).click();
 
     const modes = root.querySelector("[data-game-mode]") as HTMLSelectElement;
-    expect([...modes.options].map(({ value }) => value)).toEqual([
-      "Splash",
-      "BaseGame",
-    ]);
+    expect([...modes.options].map(({ value }) => value)).toEqual(["BaseGame"]);
     expect(previewSpies.setLayout).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        version: 7,
+        version: 8,
         main: expect.any(Object),
         gameModes: expect.any(Object),
       }),
@@ -191,7 +188,7 @@ describe("GameLayoutEditorApp current workspace", () => {
       expect(previewSpies.applyGeometryManifest).toHaveBeenCalled(),
     );
     expect(previewSpies.applyGeometryManifest).toHaveBeenLastCalledWith(
-      expect.objectContaining({ version: 7 }),
+      expect.objectContaining({ version: 8 }),
     );
     focusLeft.value = "75";
     focusLeft.dispatchEvent(new Event("change"));

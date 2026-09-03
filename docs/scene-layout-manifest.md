@@ -2,6 +2,8 @@
 
 根 sentinel 为 `layout.manifest.json`。runtime 兼容 v1；Game Layout Editor 导入 v1 后立即升级，预览与导出恒写 v2。
 
+> 当前 latest 是 v8。v8 继承 v7 的中心坐标、typed `main`、普通 scoped node、UI control、audio 与 allocation v3 合同，并新增可选 project-level `gameModes.splashMode`。它必须引用与 `initialMode` 不同的已有 mode，且存在 exact Splash→initial direct edge；`initialMode` 始终表示正式游戏入口。未配置时不推断任何 mode，而由 package runtime 显示无资源的纯黑默认 Splash，首次有效点击成功解锁音频后才揭示 initial。Editor 读取合法 v1–v8，始终导出 canonical v8。
+
 ## v2：每个 mode 拥有自己的适配几何
 
 v1 的根级 `adaptation` 和 `reels.main.placements` 在 v2 中分别下移为
@@ -18,7 +20,7 @@ placement，focus 由 reel 矩形加四边外扩量得到。v1 升级的旧 mode
 因此同一项目可以使用双背景 Splash 和单背景 BaseGame。方向只由宿主原始宽高判定：高大于宽为
 portrait，宽大于高为 landscape；宽高相等时保持当前方向，首次正方形确定为 landscape。
 
-新项目以 `Splash` 为 `initialMode`，Splash 的 `primaryAction` 指向 BaseGame，并要求存在同方向的
+历史 v2 项目可曾以 `Splash` 为 `initialMode`，Splash 的 `primaryAction` 指向 BaseGame，并要求存在同方向的
 显式 transition。preview/runtime 只有在真实点击触发 primary action 后才请求该边；边继续使用现有
 none、Spine 或 MP4 overlay。v1 升级会把旧根适配和 reel placement 复制到每个已有 mode，保留
 mode id、initialMode、背景、node scope、Symbols、Popup 与 transition，不会伪造 Splash。
@@ -93,9 +95,9 @@ size/stage/authored layout 映射 node-local pivot。
 仍只接受 `x/y`。transform 由 rendercore node container 统一应用，geometry-only 更新不重建
 texture、Spine/VNI player、reel 或当前 mode。
 
-## v7 UI 控件图层
+## v7/v8 UI 控件图层
 
-Scene Layout latest 仍为 v7。`nodes[*]` 是严格互斥的图层 union：图形图层声明 `resource`，UI 控件图层声明
+Scene Layout v8 继承 v7 的 UI control 合同。`nodes[*]` 是严格互斥的图层 union：图形图层声明 `resource`，UI 控件图层声明
 `uiControl`，不得同时声明或同时省略。历史 v1–v6 只接受图形图层。`radio` 分支为二态图片单选框：
 
 ```json

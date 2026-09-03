@@ -89,6 +89,7 @@ import {
 } from "./manifest.js";
 import { materializeSceneLayoutManifestForMode } from "./manifest-v2.js";
 import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
+import { resolveSceneLayoutStartupMode } from "./manifest-v8.js";
 import { transitionResourceKey } from "./resource.js";
 import {
   createPreparedSceneLayoutRuntime,
@@ -178,7 +179,8 @@ function readEventAudio(
 ): SceneLayoutEventAudioV1 {
   return document.version === 5 ||
     document.version === 6 ||
-    document.version === 7
+    document.version === 7 ||
+    document.version === 8
     ? document.eventAudio
     : Object.freeze({
         version: 1,
@@ -434,14 +436,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #layout;
   readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
   readonly #areaSpinFunction:
-    | import("../reel/index.js").AreaSpinFunction
-    | undefined;
+    import("../reel/index.js").AreaSpinFunction | undefined;
   readonly #symbolValueTextBindings:
-    | import("../symbol/index.js").SymbolValueTextBindingMap
-    | undefined;
+    import("../symbol/index.js").SymbolValueTextBindingMap | undefined;
   readonly #symbolValueTextFormatters:
-    | import("../symbol/index.js").SymbolValueTextFormatterMap
-    | undefined;
+    import("../symbol/index.js").SymbolValueTextFormatterMap | undefined;
   readonly #gridCellPresentation:
     | {
         readonly createEffectController?: (options: {
@@ -453,8 +452,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #createGridCellReel: (() => RenderGridCellReelSet) | undefined;
   readonly #hostUpdatesMainReel: boolean;
   readonly #formatPopupAmount:
-    | import("../popup/data/types.js").PopupAmountFormatter
-    | undefined;
+    import("../popup/data/types.js").PopupAmountFormatter | undefined;
   readonly #createTransitionPlayer: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
@@ -494,6 +492,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #renderObjectMotionRuntime: RenderObjectMotionRuntime;
   readonly #videoBlackoutRoot = new Container();
   readonly #videoBlackout = new Graphics();
+  readonly #defaultSplashRoot = new Container();
+  readonly #defaultSplash = new Graphics();
+  #defaultSplashPending: boolean;
+  #startupSplashAction: Promise<void> | null = null;
   #reel: ReelPresentation | null = null;
   readonly #reelEntries = new Map<string, ReelEntry>();
   #mainReelSceneCommitted = false;
@@ -565,11 +567,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     reelPresentation: SlotReelPresentationProfileV1 | undefined,
     areaSpinFunction: import("../reel/index.js").AreaSpinFunction | undefined,
     symbolValueTextBindings:
-      | import("../symbol/index.js").SymbolValueTextBindingMap
-      | undefined,
+      import("../symbol/index.js").SymbolValueTextBindingMap | undefined,
     symbolValueTextFormatters:
-      | import("../symbol/index.js").SymbolValueTextFormatterMap
-      | undefined,
+      import("../symbol/index.js").SymbolValueTextFormatterMap | undefined,
     gridCellPresentation:
       | {
           readonly createEffectController?: (options: {
@@ -581,8 +581,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     createGridCellReel: (() => RenderGridCellReelSet) | undefined,
     hostUpdatesMainReel: boolean,
     formatPopupAmount:
-      | import("../popup/data/types.js").PopupAmountFormatter
-      | undefined,
+      import("../popup/data/types.js").PopupAmountFormatter | undefined,
     createTransitionPlayer:
       | ((options: {
           readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
@@ -604,8 +603,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       | undefined,
     audioBackend: AudioBackend | undefined,
     renderObjectFactoryDependencies:
-      | SceneLayoutRenderObjectFactoryDependencies
-      | undefined,
+      SceneLayoutRenderObjectFactoryDependencies | undefined,
   ) {
     this.#renderObjectMotionRuntime = createRenderObjectMotionRuntime({
       createError: (message) => new SceneLayoutError(message),
@@ -613,6 +611,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#resource = resource;
     this.#presentationOnly = presentationOnly;
     this.#document = resource.runtimeManifest;
+    this.#defaultSplashPending =
+      this.#document.version === 8 &&
+      this.#document.gameModes.splashMode === undefined;
     this.#eventAudio = readEventAudio(this.#document);
     this.#manifest = resource.runtimeManifest;
     this.#areaSpinFunction = areaSpinFunction;
@@ -628,7 +629,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       ...(resource.delivery
         ? {
             initialNodeIds: this.resolveOwnedNodeIds(
-              this.#document.gameModes?.initialMode ?? null,
+              resolveSceneLayoutStartupMode(this.#document.gameModes),
             ),
           }
         : {}),
@@ -780,11 +781,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#videoBlackout.label = "scene-transition-video-black";
     this.#videoBlackoutRoot.visible = false;
     this.#videoBlackoutRoot.addChild(this.#videoBlackout);
+    this.#defaultSplashRoot.label = "scene-layout-default-splash";
+    this.#defaultSplashRoot.eventMode = "static";
+    this.#defaultSplashRoot.visible = this.#defaultSplashPending;
+    this.#defaultSplash.label = "scene-layout-default-splash-black";
+    this.#defaultSplashRoot.addChild(this.#defaultSplash);
     this.container.addChild(
       this.#cameraRoot,
       this.#popupRoot,
       this.#transitionRoot,
       this.#videoBlackoutRoot,
+      ...(this.#defaultSplashPending ? [this.#defaultSplashRoot] : []),
     );
   }
 
@@ -802,11 +809,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
     this.#initializing = true;
     try {
-      const initialModeId = this.#document.gameModes?.initialMode ?? null;
-      const initialMode = initialModeId
-        ? this.requireMode(initialModeId)
+      const startupModeId = resolveSceneLayoutStartupMode(
+        this.#document.gameModes,
+      );
+      const startupMode = startupModeId
+        ? this.requireMode(startupModeId)
         : null;
-      const activeBinding = this.resolveModeSymbolBinding(initialMode);
+      const activeBinding = this.resolveModeSymbolBinding(startupMode);
       if (activeBinding && this.#presentationOnly && options.reels?.main)
         throw new SceneLayoutError(
           "Presentation-only scene layout runtime must not receive reels.main input.",
@@ -871,7 +880,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
               }),
             );
       const popupIds = this.#resource.delivery
-        ? this.resolveOwnedPopupIds(initialModeId)
+        ? this.resolveOwnedPopupIds(startupModeId)
         : Object.keys(this.popupPackageManifests());
       const popupPromises = popupIds.map((id) => this.preparePopup(id));
 
@@ -910,15 +919,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#activeSymbolPackageId = activeBinding.id;
         this.#stableSymbolPackageId = activeBinding.id;
       }
-      this.commitModeVisibility(initialMode);
+      this.commitModeVisibility(startupMode);
       this.#popupRoot.sortChildren();
-      this.#displayedMode = initialModeId;
-      this.#stableMode = initialModeId;
+      this.#displayedMode = startupModeId;
+      this.#stableMode = startupModeId;
       this.#gameModeIds = Object.freeze(
         this.requireGameModes().modes.map((mode) => mode.id),
       );
       this.#initialized = true;
-      this.emitInitialModeEvents(initialModeId);
+      this.emitInitialModeEvents(startupModeId);
     } catch (error) {
       this.destroy();
       throw asSceneLayoutError(error);
@@ -940,6 +949,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#viewportSize = Object.freeze({ ...viewportSize });
     this.#cameraEffects.applyViewport(viewportSize.width, viewportSize.height);
     this.#popupRoot.hitArea = new Rectangle(
+      0,
+      0,
+      viewportSize.width,
+      viewportSize.height,
+    );
+    this.#defaultSplashRoot.hitArea = new Rectangle(
       0,
       0,
       viewportSize.width,
@@ -1027,6 +1042,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (activeTransition?.kind === "video")
       activeTransition.player.applyViewport(viewportSize);
     this.redrawVideoBlackout(viewportSize);
+    this.redrawDefaultSplash(viewportSize);
     const previousVariantId = this.#publishedVariantId;
     this.#publishedVariantId = snapshot.variantId;
     if (previousVariantId !== null && previousVariantId !== snapshot.variantId)
@@ -2744,6 +2760,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     let transition: SceneLayoutGameModeTransition;
     try {
       this.assertCanPrepareTransition(true);
+      if (this.#defaultSplashPending)
+        throw new SceneLayoutError(
+          "Scene layout default Splash must be dismissed by a primary user action before requesting a game mode.",
+        );
       assertGameModePrepareOptions(options);
       if (
         options.immediate !== undefined &&
@@ -2826,7 +2846,51 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ): Promise<void> {
     try {
       this.assertReady();
+      if (this.#defaultSplashPending) {
+        if (this.#startupSplashAction) return this.#startupSplashAction;
+        this.assertCanPrepareTransition(true);
+        this.assertNoPopupWork("consume the startup Splash");
+        const unlockPromise = this.unlockAudio();
+        let action: Promise<void>;
+        action = unlockPromise
+          .then(() => {
+            this.assertReady();
+            this.#defaultSplashPending = false;
+            this.#defaultSplashRoot.visible = false;
+            this.#defaultSplashRoot.parent?.removeChild(
+              this.#defaultSplashRoot,
+            );
+          })
+          .finally(() => {
+            if (this.#startupSplashAction === action)
+              this.#startupSplashAction = null;
+          });
+        this.#startupSplashAction = action;
+        return action;
+      }
       const mode = this.requireMode(this.#stableMode!);
+      const gameModes = this.requireGameModes();
+      if (gameModes.splashMode === mode.id) {
+        if (this.#startupSplashAction) return this.#startupSplashAction;
+        this.assertCanPrepareTransition(true);
+        this.assertNoPopupWork("consume the startup Splash");
+        // Both operations must begin in the native input turn. In particular,
+        // do not await audio unlock before requesting the authored transition.
+        const unlockPromise = this.unlockAudio();
+        const transitionPromise = this.requestGameMode(
+          gameModes.initialMode,
+          options,
+        );
+        let action: Promise<void>;
+        action = Promise.all([unlockPromise, transitionPromise])
+          .then(() => undefined)
+          .finally(() => {
+            if (this.#startupSplashAction === action)
+              this.#startupSplashAction = null;
+          });
+        this.#startupSplashAction = action;
+        return action;
+      }
       const action = "primaryAction" in mode ? mode.primaryAction : undefined;
       if (!action) return Promise.resolve();
       return this.requestGameMode(action.targetMode, options);
@@ -3241,6 +3305,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#symbolAudioHandles.clear();
     this.#videoBlackoutRoot.removeChildren();
     this.#videoBlackout.destroy();
+    this.#defaultSplashRoot.removeChildren();
+    this.#defaultSplash.destroy();
     this.#disposeAudioMusicObserver();
     for (const dispose of this.#disposeEventAudioBindings.splice(0)) dispose();
     this.#eventAudioLoopIntents.clear();
@@ -3259,6 +3325,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#displayedMode = null;
     this.#targetMode = null;
     this.#modeRequestInProgress = false;
+    this.#startupSplashAction = null;
     this.#activePopupId = null;
     this.#activeSymbolPackageId = null;
     this.#stableSymbolPackageId = null;
@@ -4297,7 +4364,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     }
     return Object.freeze(
       Object.keys(this.popupPackageManifests()).filter(
-        (id) => (ownerById.get(id) ?? gameModes.initialMode) === modeId,
+        (id) =>
+          (ownerById.get(id) ?? resolveSceneLayoutStartupMode(gameModes)) ===
+          modeId,
       ),
     );
   }
@@ -4461,6 +4530,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   private redrawVideoBlackout(viewportSize: RenderViewportSize): void {
     this.#videoBlackout.clear();
     this.#videoBlackout
+      .rect(0, 0, viewportSize.width, viewportSize.height)
+      .fill({ color: 0x000000, alpha: 1 });
+  }
+
+  private redrawDefaultSplash(viewportSize: RenderViewportSize): void {
+    this.#defaultSplash.clear();
+    this.#defaultSplash
       .rect(0, 0, viewportSize.width, viewportSize.height)
       .fill({ color: 0x000000, alpha: 1 });
   }
@@ -5334,8 +5410,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const finished = createPopupSessionDeferred();
     const sessionId = this.#nextPopupSessionId++;
     let popupInstance:
-      | ProgrammaticPopupSessionController["popupInstance"]
-      | undefined;
+      ProgrammaticPopupSessionController["popupInstance"] | undefined;
     if (capturedRequest.instanceId !== undefined) {
       const root = new Container();
       root.label = `scene-layout-popup-instance:${id}:${capturedRequest.instanceId}`;

@@ -7,9 +7,9 @@ import {
 import { game002LayoutFixture } from "./fixtures.js";
 
 describe("scene layout manifest latest upgrade", () => {
-  it("upgrades v1 to a canonical v7 center-coordinate document", () => {
+  it("upgrades v1 to a canonical v8 center-coordinate document", () => {
     const latest = upgradeSceneLayoutManifestToLatest(game002LayoutFixture);
-    expect(latest.version).toBe(7);
+    expect(latest.version).toBe(8);
     expect(latest).not.toHaveProperty("adaptation");
     expect(latest).not.toHaveProperty("reels");
     expect(latest.main).toEqual({

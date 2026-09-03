@@ -519,6 +519,66 @@ describe("asset-groups versioned parser", () => {
   });
 });
 
+describe("asset-groups Splash ownership", () => {
+  it("uses configured Splash as the physical initial owner", () => {
+    const latest = upgradeSceneLayoutManifestToLatest(layoutFixture());
+    const alpha = latest.gameModes.modes.find((mode) => mode.id === "Alpha")!;
+    const manifest = {
+      ...latest,
+      gameModes: {
+        ...latest.gameModes,
+        splashMode: "Splash",
+        modes: [
+          ...latest.gameModes.modes,
+          {
+            ...alpha,
+            id: "Splash",
+            main: { ...alpha.main, enabled: false },
+            nodeStates: {},
+            symbolPackage: undefined,
+            awardCelebrationPopup: undefined,
+          },
+        ],
+        transitions: [
+          ...(latest.gameModes.transitions ?? []),
+          {
+            from: "Splash",
+            to: "Alpha",
+            overlay: { kind: "none" as const },
+          },
+        ],
+      },
+    } as never;
+    const keys = [
+      "alpha.png",
+      "beta.jpg",
+      "shared.webp",
+      "alpha-to-beta.mp4",
+      "beta-to-alpha.mp4",
+    ];
+    const groups = createSceneLayoutAssetGroups({
+      manifest,
+      files: new Map(),
+      sourceZipBytes: 4,
+      output: outputFixture(keys),
+      quality: 80,
+      cwebpVersion: "test",
+      convertedImageCount: 0,
+      ...audioOptimizationFixture(),
+    });
+
+    expect(groups.initialMode).toBe("Splash");
+    expect(
+      groups.groups.find((group) => group.id === "mode:Splash"),
+    ).toMatchObject({ initial: true });
+    expect(
+      groups.groups.find((group) => group.id === "mode:Alpha"),
+    ).toMatchObject({ initial: false });
+    expect(groups.initialAssets).toContain("shared.webp");
+    expect(groups.initialAssets).not.toContain("alpha.png");
+  });
+});
+
 function imageNode(id: string, path: string) {
   return {
     id,

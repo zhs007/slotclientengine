@@ -28,6 +28,10 @@ import {
   parseSceneLayoutManifestV7,
   upgradeSceneLayoutManifestV6ToV7,
 } from "./manifest-v7.js";
+import {
+  parseSceneLayoutManifestV8,
+  upgradeSceneLayoutManifestV7ToV8,
+} from "./manifest-v8.js";
 
 export function parseSceneLayoutManifestV3(
   value: unknown,
@@ -56,10 +60,12 @@ export function upgradeSceneLayoutManifestToLatest(
   value: unknown,
 ): SceneLayoutManifestLatest {
   const root = record(value, "scene layout manifest");
-  if (root.version === 7) return parseSceneLayoutManifestV7(value);
-  return upgradeSceneLayoutManifestV6ToV7(
-    upgradeSceneLayoutManifestToV6(value),
-  );
+  if (root.version === 8) return parseSceneLayoutManifestV8(value);
+  const v7 =
+    root.version === 7
+      ? parseSceneLayoutManifestV7(value)
+      : upgradeSceneLayoutManifestV6ToV7(upgradeSceneLayoutManifestToV6(value));
+  return upgradeSceneLayoutManifestV7ToV8(v7);
 }
 
 export function upgradeSceneLayoutManifestToV6(

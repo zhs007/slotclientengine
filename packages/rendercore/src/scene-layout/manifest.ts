@@ -16,6 +16,7 @@ import type {
   SceneLayoutGameModes,
   SceneLayoutGameModeTransition,
   SceneLayoutManifestV7,
+  SceneLayoutManifestV8,
   SceneLayoutRuntimeResourceSpec,
   SceneLayoutScaledPlacement,
   SceneLayoutVariantId,
@@ -48,8 +49,10 @@ export function parseSceneLayoutManifest(
   value: unknown,
 ): SceneLayoutManifestV1 {
   const sourceRecord = readRecord(value, "scene layout manifest");
-  if (sourceRecord.version === 7)
-    fail("Scene Layout v7 must be consumed through the center-layout runtime.");
+  if (sourceRecord.version === 7 || sourceRecord.version === 8)
+    fail(
+      `Scene Layout v${sourceRecord.version} must be consumed through the center-layout runtime.`,
+    );
   if (
     sourceRecord.version === 3 ||
     sourceRecord.version === 4 ||
@@ -77,7 +80,8 @@ export function parseSceneLayoutManifestDocument(
     sourceRecord.version === 4 ||
     sourceRecord.version === 5 ||
     sourceRecord.version === 6 ||
-    sourceRecord.version === 7
+    sourceRecord.version === 7 ||
+    sourceRecord.version === 8
   )
     return upgradeSceneLayoutManifestToLatest(value);
   const normalized = normalizeLegacySceneLayoutPresentationOrders(value);
@@ -236,10 +240,16 @@ export function collectSceneLayoutAssetPaths(
     parsed.version === 4 ||
     parsed.version === 5 ||
     parsed.version === 6 ||
-    parsed.version === 7
+    parsed.version === 7 ||
+    parsed.version === 8
   )
     for (const path of collectAudioAssetPaths(parsed.audio)) paths.add(path);
-  if (parsed.version === 5 || parsed.version === 6 || parsed.version === 7)
+  if (
+    parsed.version === 5 ||
+    parsed.version === 6 ||
+    parsed.version === 7 ||
+    parsed.version === 8
+  )
     for (const binding of parsed.eventAudio.bindings)
       for (const source of binding.audio.asset.sources) paths.add(source.path);
   for (const node of parsed.nodes) {
@@ -263,7 +273,7 @@ export function collectSceneLayoutAssetPaths(
     paths.add(binding.manifest);
   for (const popup of Object.values(parsed.popups ?? {}))
     paths.add(popup.manifest);
-  if (parsed.version === 7 && parsed.tapInfoObject)
+  if ((parsed.version === 7 || parsed.version === 8) && parsed.tapInfoObject)
     paths.add(parsed.tapInfoObject.manifest);
   for (const resource of Object.values(parsed.runtimeResources ?? {})) {
     if (
@@ -860,7 +870,10 @@ export function assertSceneLayoutGeometryCompatible(
   currentValue: SceneLayoutManifest,
   nextValue: SceneLayoutManifest,
 ): void {
-  if (currentValue.version === 7 && nextValue.version === 7) {
+  if (
+    (currentValue.version === 7 || currentValue.version === 8) &&
+    (nextValue.version === 7 || nextValue.version === 8)
+  ) {
     if (
       JSON.stringify(sceneLayoutStructureV7(currentValue)) !==
       JSON.stringify(sceneLayoutStructureV7(nextValue))
@@ -877,7 +890,9 @@ export function assertSceneLayoutGeometryCompatible(
     fail("scene layout geometry update changed immutable structure.");
 }
 
-function sceneLayoutStructureV7(manifest: SceneLayoutManifestV7): unknown {
+function sceneLayoutStructureV7(
+  manifest: SceneLayoutManifestV7 | SceneLayoutManifestV8,
+): unknown {
   return {
     version: manifest.version,
     kind: manifest.kind,
@@ -1134,8 +1149,7 @@ function parseGameModes(
   nodes: readonly SceneLayoutGraphicNode[],
   legacySymbolPackage: SceneLayoutSymbolPackageBinding | undefined,
   symbolPackages:
-    | Readonly<Record<string, SceneLayoutSymbolPackageBinding>>
-    | undefined,
+    Readonly<Record<string, SceneLayoutSymbolPackageBinding>> | undefined,
   popups: Readonly<Record<string, SceneLayoutPopupBinding>> | undefined,
 ): SceneLayoutGameModes {
   const record = readRecord(value, "scene layout gameModes");
@@ -1188,8 +1202,7 @@ function parseGameModes(
   const parsedHeads = rawModes.map(({ mode, label }) => {
     const id = stateIdentifier(mode.id, `${label}.id`);
     let backgroundNodes:
-      | Readonly<Partial<Record<SceneLayoutVariantId, string>>>
-      | undefined;
+      Readonly<Partial<Record<SceneLayoutVariantId, string>>> | undefined;
     if (canonical) {
       if (mode.backgroundNodes === undefined)
         fail(`${label}.backgroundNodes is required for canonical gameModes.`);

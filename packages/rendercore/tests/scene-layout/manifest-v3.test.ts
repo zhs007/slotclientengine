@@ -110,11 +110,11 @@ describe("scene layout manifest v3", () => {
       /order.*unique/,
     );
     const repairedV3 = parseSceneLayoutManifestDocument(conflictedV3);
-    expect(repairedV3.version).toBe(7);
-    if (repairedV3.version !== 7) throw new Error("expected v7 repair");
+    expect(repairedV3.version).toBe(8);
+    if (repairedV3.version !== 8) throw new Error("expected v8 repair");
     expect(repairedV3.nodes[0].order).toBe(1);
     expect(repairedV3.main.order).toBe(0);
-    expect(upgradeSceneLayoutManifestToLatest(conflictedV3).version).toBe(7);
+    expect(upgradeSceneLayoutManifestToLatest(conflictedV3).version).toBe(8);
   });
 
   it("parses optional per-mode BGM and global programmatic routes in v4", () => {
@@ -156,7 +156,7 @@ describe("scene layout manifest v3", () => {
         ),
       },
     });
-    expect(withAudio.version).toBe(7);
+    expect(withAudio.version).toBe(8);
     expect(withAudio.gameModes.modes[0]!.bgm).toBe("base");
     expect(collectSceneLayoutAssetPaths(withAudio)).toEqual(
       expect.arrayContaining(["base.ogg", "click.mp3"]),
@@ -202,7 +202,7 @@ describe("scene layout manifest v3", () => {
         ],
       },
     });
-    expect(withEventAudio.version).toBe(7);
+    expect(withEventAudio.version).toBe(8);
     expect(withEventAudio.eventAudio.ignoreLegacyAudio).toBe(true);
     expect(collectSceneLayoutAssetPaths(withEventAudio)).toContain(
       "event-base.mp3",

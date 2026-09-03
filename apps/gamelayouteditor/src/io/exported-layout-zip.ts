@@ -410,9 +410,8 @@ async function flattenLayoutClosure(
     const directory = mapped
       ? ""
       : sourcePath.slice(0, sourcePath.lastIndexOf("/"));
-    const rewrittenProject = rewriteVNIProjectAssetPaths(
-      project,
-      (path) => mapping.get(mapped ? path : `${directory}/${path}`)!,
+    const rewrittenProject = rewriteVNIProjectAssetPaths(project, (path) =>
+      mapping.get(mapped ? path : `${directory}/${path}`)!,
     );
     virtual.set(
       mapping.get(sourcePath)!,
@@ -431,9 +430,8 @@ async function flattenLayoutClosure(
     const directory = mapped
       ? ""
       : sourcePath.slice(0, sourcePath.lastIndexOf("/"));
-    const rewrittenProject = rewriteVNIProjectAssetPaths(
-      project,
-      (path) => mapping.get(mapped ? path : `${directory}/${path}`)!,
+    const rewrittenProject = rewriteVNIProjectAssetPaths(project, (path) =>
+      mapping.get(mapped ? path : `${directory}/${path}`)!,
     );
     virtual.set(
       mapping.get(sourcePath)!,
@@ -878,7 +876,7 @@ function rewriteLayoutManifestFilenameKeys(
           ),
         }
       : {}),
-    ...(value.version === 7 && value.tapInfoObject
+    ...((value.version === 7 || value.version === 8) && value.tapInfoObject
       ? {
           tapInfoObject: {
             manifest: key(value.tapInfoObject.manifest),

@@ -12,21 +12,22 @@
 
 ## Mode、variant 与稳定节点
 
-- Scene Layout latest 为 v7：root 只保留 typed `main` grid；每个 mode 直接声明 `main.enabled` 与 `main.variants.landscape/portrait`，每侧保存 main center `x/y`、absolute `focusRect` 和可选 `minFocusMargin`。v7 不含 `coordinateOrigin`、`artSize`、adaptation type、`backgroundNodes`、`reelPlacements` 或 `frameFocusRect`。RenderCore 与 Editor 读取合法 v1–v7并统一规范化为 v7；Editor 只预览和导出 canonical v7。
-- canonical v7 可选保存一个 project-wide `tapInfoObject: { manifest }` binding，指向 standalone Popup Object exact closure。它不保存 Popup id、target、transform、order或visibility；未配置时省略。只有普通 Spine Popup 同时声明自身 exact Tap info attachment 时才实例化，单边配置均为 no-op，不得按唯一对象或名字猜默认值。
-- v7 `nodes` 是严格的 `resource | uiControl` 图层 union；v1–v6 只接受图形。UI 控件使用可扩展 discriminated union：`radio` 显式绑定不同且同尺寸的 off/on image root；`step-slider` 显式绑定不同 track/thumb、至少 2 档和正吸附时长，track 必须形成正水平行程。两者复用唯一 id/order/scope/placement并固定从首状态初始化；Editor 不按文件名配对，也不把控件降级为普通 image 图层。
+- Scene Layout latest 为 v8：它继承 v7 center-layout 合同，root 只保留 typed `main` grid；每个 mode 直接声明 `main.enabled` 与 `main.variants.landscape/portrait`。v8 可选声明 project-level `gameModes.splashMode`，它必须引用与 `initialMode` 不同的已有 mode并拥有到 initial 的 direct edge；RenderCore 与 Editor 读取合法 v1–v8并统一规范化为 v8，旧版本不得按 mode id 推断 Splash，Editor 只预览和导出 canonical v8。
+- `initialMode` 永远表示欢迎页后的正式游戏入口。配置 `splashMode` 时 runtime 首显 authored Splash，首个未被 UI control/Popup 消费的 primary click 必须在原生手势栈同时调用 AudioCore unlock 与 existing direct transition request；未配置时 package runtime 显示覆盖完整 viewport 的纯黑默认 Splash，拒绝直接 mode request，并在首个 primary click 成功 unlock 后才揭示已准备的 initial。默认黑 Splash 没有持久 mode id或资源，不改变 delivery bytes ownership。
+- canonical v8 继承 project-wide optional `tapInfoObject: { manifest }` binding，指向 standalone Popup Object exact closure。它不保存 Popup id、target、transform、order或visibility；未配置时省略。只有普通 Spine Popup 同时声明自身 exact Tap info attachment 时才实例化，单边配置均为 no-op，不得按唯一对象或名字猜默认值。
+- v7–v8 `nodes` 是严格的 `resource | uiControl` 图层 union；v1–v6 只接受图形。UI 控件使用可扩展 discriminated union：`radio` 显式绑定不同且同尺寸的 off/on image root；`step-slider` 显式绑定不同 track/thumb、至少 2 档和正吸附时长，track 必须形成正水平行程。两者复用唯一 id/order/scope/placement并固定从首状态初始化；Editor 不按文件名配对，也不把控件降级为普通 image 图层。
 - RenderCore 继续 strict 读取和运行历史 per-mode loop BGM、root effects 与 Popup/Symbol cue；该 compatibility 只属于历史 artifact consumer，不是 Editor authoring 合同。Game Layout Editor 打开旧 package 时必须先完整验证 source schema/map/hash/closure，随后迁移删除 root legacy audio 与 mode BGM，但不得改写只读 Symbols/Popup dependency。
-- Game Layout Editor 中 root 音频先作为统一 filename-key asset 导入，不因文件名自动绑定用途；全局 Event 音乐音效对话框是唯一持久化音频行为 authoring 入口，只选择已上传 audio，不负责导入 bytes。audio root 可另外绑定唯一稳定程序键，以 `{ kind: "audio", path, mediaType }` 进入 `runtimeResources`；该key同时派生默认once的effect route和`gamelayout:/audio/effect/<key>`，调用方可按次选择loop及可选结束Event，并用exact handle或route stop停止，但这些调用选项不写回manifest。既无 Event 引用也无程序键的音频保留在authoring workspace但不进入production closure；audio不得伪装成scene node或RenderObject。canonical v7的legacy audio catalog恒为空、mode不含`bgm`、`eventAudio.ignoreLegacyAudio`恒为true。
+- Game Layout Editor 中 root 音频先作为统一 filename-key asset 导入，不因文件名自动绑定用途；全局 Event 音乐音效对话框是唯一持久化音频行为 authoring 入口，只选择已上传 audio，不负责导入 bytes。audio root 可另外绑定唯一稳定程序键，以 `{ kind: "audio", path, mediaType }` 进入 `runtimeResources`；该key同时派生默认once的effect route和`gamelayout:/audio/effect/<key>`，调用方可按次选择loop及可选结束Event，并用exact handle或route stop停止，但这些调用选项不写回manifest。既无 Event 引用也无程序键的音频保留在authoring workspace但不进入production closure；audio不得伪装成scene node或RenderObject。canonical v8的legacy audio catalog恒为空、mode不含`bgm`、`eventAudio.ignoreLegacyAudio`恒为true。
 - event audio 的 `music` / `effect` 是玩家可独立控制的音量总线，不是互斥播放策略。once track 可独立降低 BGM，并在 `same-audio` / `all` 中至多选择一种音效范围；target gain 为 `0..1`，默认 authoring 值为 `0.5`。衰减由每个 active voice 的 owner-scoped lease 持有，owner 自身不被降低，重叠 lease 取最小 gain，结束、停止、失败和 destroy 必须恢复。loop track 不配置 focus，开始 event 在解锁前保留播放意图，once event 在解锁前丢弃。
 - Shared schema/runtime 中 `ignoreLegacyAudio=false` 仍按历史合同播放自动 mode BGM、Popup cue 与 Symbol cue；Game Layout Editor 不再暴露该开关且导出恒为 true。初始 mode 的 displayed/stable entered occurrence 必须在 init 成功后发出，使 Event audio 与其它 event consumer 看到一致的首次状态。
-- 每个 v7 mode 显式声明 `main.enabled`；关闭时不得绑定 Symbols，但横竖 main/focus 几何仍必填并用于 viewport。runtime 不得按 mode id 猜测开关。
+- 每个 v7–v8 mode 显式声明 `main.enabled`；关闭时不得绑定 Symbols，但横竖 main/focus 几何仍必填并用于 viewport。runtime 不得按 mode id 猜测开关。
 - orientation variant只由宿主原始page width/height决定；正方形保持当前variant，首次正方形为landscape，focus和派生frame尺寸不得反馈成方向输入。
 - main、普通 scene node、Popup 与 transition 都按当前 `landscape` / `portrait` variant 解析；方向 resize 只更新 placement/visibility，不重建稳定 player。
 - orientation variant选定后必须把该variant的actual focusRect（及显式margin）按contain最大化；无margin时focus映射到CSS page后至少一轴与page相等。frameDesignSize、visibleRect、worldOffset和focusRectInViewport只由page aspect、所选actual focus及显式margin决定，不依赖美术边界或背景。
 - primary action只引用同source的显式direct transition target；runtime复用既有prepare/commit/rollback和trusted gesture边界，不按mode名称推断点击行为。
 - editor 拥有无类型的通用 game mode draft、main 横竖配置、Symbols package 与 award popup binding；背景只是零至多个普通 node，不存在背景专属 selector、readiness 或隐式默认值。
-- 普通 scene node 可使用 image、official Spine、image-string 或 runtime VNI。所有 v7 placement 都位于同一中心坐标平面：image 以图片中心、VNI 以项目 authored `(0,0)`、Spine 以 skeleton authored origin、image-string 以显式 anchor 对齐 `x/y`；不得读取或改写 VNI JSON 来换算坐标，也不得从 bounds 或当前帧猜中心。
-- 普通 scene node 和 main 的 order 可由用户显式编辑并保留稀疏值；canonical v7 中 node、main、Popup root 的 order 全局唯一。legacy 冲突只由共享 latest upgrader 确定性处理并同步重建 runtimeAllocation；显式 v7 parser 执行 strict canonical 校验。
+- 普通 scene node 可使用 image、official Spine、image-string 或 runtime VNI。所有 v7–v8 placement 都位于同一中心坐标平面：image 以图片中心、VNI 以项目 authored `(0,0)`、Spine 以 skeleton authored origin、image-string 以显式 anchor 对齐 `x/y`；不得读取或改写 VNI JSON 来换算坐标，也不得从 bounds 或当前帧猜中心。
+- 普通 scene node 和 main 的 order 可由用户显式编辑并保留稀疏值；canonical v8 中 node、main、Popup root 的 order 全局唯一。legacy 冲突只由共享 latest upgrader 确定性处理并同步重建 runtimeAllocation；显式 latest parser 执行 strict canonical 校验。
 - 普通 scene node 的 optional `scope` 精确表达 mode 与方向可见性；字段缺失表示全局。最终可见性是 scope 匹配与当前 variant placement 的 AND；不可见不删除 node、不改变全局 order。mode rename 必须改写 scope，仍有 scoped node 引用时禁止删除。
 
 ## Symbols binding 与 preview
@@ -54,7 +55,7 @@
 - core 不创建 Application、canvas、ticker 或 RAF，不拥有 workspace/authoring session；宿主逐帧调用 `update(deltaSeconds)`。游戏热路径使用 `getStableGameMode()`、`getGameModePhase()` 等标量 query；完整 game-mode/award snapshot 只由 editor inspector 读取。
 - Scene Layout 在组合 Popup/Symbol package 时才把 local effect name 编译为 `<binding>.<local>` route；程序只能播放/停止显式 allowlist route。cue delay 使用宿主 `update(deltaSeconds)` 时钟，stop、切状态、rollback 与 destroy 必须取消未触发播放并清理 owner-scoped instance。
 - rendercore 拥有 strict gameModes、plural symbolPackages、directed transition schema、exact dependency closure 和 production API。
-- canonical v7 只有中心坐标系，原点固定为 `(0,0)`；authored x/y 允许任意有限负数。legacy `top-left` / `center` 和 `artSize` 只存在于 v1–v6 strict parser/upgrader 输入，不能泄漏到 v7 snapshot、Editor draft 或 consumer API。
+- canonical v8 只有中心坐标系，原点固定为 `(0,0)`；authored x/y 允许任意有限负数。legacy `top-left` / `center` 和 `artSize` 只存在于 v1–v6 strict parser/upgrader 输入，不能泄漏到 latest snapshot、Editor draft 或 consumer API。
 - `focusRect` 与 main rect 不要求互相包含；parser、runtime 与 editor 不因越界自动裁切或修正。Editor 必须用相对 main 的 `left/top/right/bottom` 四边外扩量编辑 focus，正数向外、负数向内；导入从 absolute rect 精确反算，导出保存 absolute center-plane rect。
 - runtime必须从current snapshot公开 main/visibleRect 九宫格 point 及 authored point↔opaque Anchor；Point/Rect是调用时快照，Anchor延迟解析，不得把logical visibleRect称为CSS/window/device坐标。
 - canonical layer ref只能由一个strict parser按stable、`node:` legacy、exact area suffix、canonical node顺序解析；unknown/ambiguous/unavailable显式失败，禁止alias或node/resource同名fallback。

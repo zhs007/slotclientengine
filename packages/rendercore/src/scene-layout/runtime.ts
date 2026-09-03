@@ -23,6 +23,7 @@ import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import { parseSceneLayoutManifestDocument } from "./manifest.js";
 import { upgradeSceneLayoutManifestToLatest } from "./manifest-v3.js";
+import { resolveSceneLayoutStartupMode } from "./manifest-v8.js";
 import { resolveSceneLayoutViewportV7 } from "./geometry.js";
 import type {
   AttachChildOptions,
@@ -316,7 +317,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.#manifest = upgradeSceneLayoutManifestToLatest(
       options.resource.manifest,
     );
-    this.#modeId = this.#manifest.gameModes.initialMode;
+    this.#modeId = resolveSceneLayoutStartupMode(this.#manifest.gameModes);
     this.#loadTexture = options.loadTexture ?? loadSceneLayoutTexture;
     this.#unloadTexture =
       options.unloadTexture ??
@@ -538,7 +539,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   ): SceneLayoutSnapshot | null {
     assertCompatibleSceneLayoutNodes(this.#manifest, manifest);
     if (!manifest.gameModes.modes.some((mode) => mode.id === this.#modeId))
-      this.#modeId = manifest.gameModes.initialMode;
+      this.#modeId = resolveSceneLayoutStartupMode(manifest.gameModes);
     const nextSnapshot = this.#snapshot
       ? resolveSceneLayoutViewportV7({
           manifest,
