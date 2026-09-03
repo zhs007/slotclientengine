@@ -21,6 +21,15 @@ export interface SymbolPreviewCell {
   readonly imageStringTexts?: Readonly<Record<string, string>>;
 }
 
+export interface SymbolPreviewGalleryLayout {
+  readonly columns: number;
+  readonly rows: number;
+  readonly strideX: number;
+  readonly strideY: number;
+  readonly contentWidth: number;
+  readonly contentHeight: number;
+}
+
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 4;
 
@@ -37,6 +46,7 @@ export class SymbolEditorPreview {
   #fitZoom = 1;
   #zoom = 1;
   #manualZoom = false;
+  #cellOffset = 0;
   #resizeObserver: ResizeObserver | null = null;
 
   constructor(host: HTMLElement) {
@@ -85,14 +95,14 @@ export class SymbolEditorPreview {
     const available = new Set(resource?.displaySymbols ?? []);
     const cellWidth = resource?.packageManifest.cellSize.width ?? 160;
     const cellHeight = resource?.packageManifest.cellSize.height ?? 160;
-    const { columns } = calculateGalleryLayout(
+    const layout = calculateGalleryLayout(
       cells.length,
       this.#app.renderer.width,
       this.#app.renderer.height,
       cellWidth,
       cellHeight,
+      this.#cellOffset,
     );
-    const rows = Math.max(1, Math.ceil(cells.length / columns));
     const nextRoots: Container[] = [];
     const nextSymbols: SymbolPreviewPlayer[] = [];
     try {
@@ -168,12 +178,8 @@ export class SymbolEditorPreview {
         });
         label.y = cellHeight / 2 - 6;
         root.addChild(label);
-        const x = index % columns;
-        const y = Math.floor(index / columns);
-        root.position.set(
-          (x - (columns - 1) / 2) * cellWidth,
-          (y - (rows - 1) / 2) * cellHeight,
-        );
+        const position = calculateGalleryCellPosition(index, layout);
+        root.position.set(position.x, position.y);
       });
     } catch (error) {
       for (const symbol of nextSymbols) symbol.destroy();
@@ -188,7 +194,7 @@ export class SymbolEditorPreview {
     this.#selectedState = state;
     this.#symbols.push(...nextSymbols);
     attachPreviewRoots(this.#gallery, nextRoots);
-    this.applyLayout(cellWidth, cellHeight, columns, rows, !this.#manualZoom);
+    this.applyLayout(layout, !this.#manualZoom);
   }
 
   replay(): void {
@@ -218,6 +224,17 @@ export class SymbolEditorPreview {
     return this.#zoom;
   }
 
+  setCellOffset(value: number): number {
+    assertValidCellOffset(value);
+    this.#cellOffset = value;
+    if (this.#ready) this.rebuild(false);
+    return this.#cellOffset;
+  }
+
+  getCellOffset(): number {
+    return this.#cellOffset;
+  }
+
   clearResource(): void {
     this.#request += 1;
     this.clearGallery();
@@ -241,39 +258,32 @@ export class SymbolEditorPreview {
     this.#app.renderer.resize(width, height);
     this.#gallery.position.set(width / 2, height / 2);
     this.#manualZoom = false;
-    this.rebuild();
+    this.rebuild(true);
   }
 
-  private rebuild(): void {
+  private rebuild(applyFit: boolean): void {
     const resource = this.#resource;
     // Resize only repositions the current tree. Recreating it would race the
     // active resource owner and an empty initial gallery must remain a no-op.
     const cellWidth = resource?.packageManifest.cellSize.width ?? 160;
     const cellHeight = resource?.packageManifest.cellSize.height ?? 160;
-    const { columns } = calculateGalleryLayout(
+    const layout = calculateGalleryLayout(
       this.#cells.length,
       this.#app.renderer.width,
       this.#app.renderer.height,
       cellWidth,
       cellHeight,
+      this.#cellOffset,
     );
-    const rows = Math.max(1, Math.ceil(this.#cells.length / columns));
     this.#gallery.children.forEach((root, index) => {
-      const x = index % columns;
-      const y = Math.floor(index / columns);
-      root.position.set(
-        (x - (columns - 1) / 2) * cellWidth,
-        (y - (rows - 1) / 2) * cellHeight,
-      );
+      const position = calculateGalleryCellPosition(index, layout);
+      root.position.set(position.x, position.y);
     });
-    this.applyLayout(cellWidth, cellHeight, columns, rows, true);
+    this.applyLayout(layout, applyFit);
   }
 
   private applyLayout(
-    cellWidth: number,
-    cellHeight: number,
-    columns: number,
-    rows: number,
+    layout: SymbolPreviewGalleryLayout,
     applyFit: boolean,
   ): void {
     this.#gallery.position.set(
@@ -282,8 +292,8 @@ export class SymbolEditorPreview {
     );
     this.#fitZoom = clampZoom(
       Math.min(
-        (this.#app.renderer.width * 0.94) / Math.max(1, columns * cellWidth),
-        (this.#app.renderer.height * 0.94) / Math.max(1, rows * cellHeight),
+        (this.#app.renderer.width * 0.94) / Math.max(1, layout.contentWidth),
+        (this.#app.renderer.height * 0.94) / Math.max(1, layout.contentHeight),
       ),
     );
     if (applyFit) this.fitAll();
@@ -310,17 +320,53 @@ export function calculateGalleryLayout(
   viewportHeight: number,
   cellWidth: number,
   cellHeight: number,
-): Readonly<{ columns: number; rows: number }> {
-  if (count <= 0) return Object.freeze({ columns: 1, rows: 1 });
+  cellOffset = 0,
+): Readonly<SymbolPreviewGalleryLayout> {
+  assertValidCellOffset(cellOffset);
+  const strideX = cellWidth + cellOffset;
+  const strideY = cellHeight + cellOffset;
+  if (count <= 0)
+    return Object.freeze({
+      columns: 1,
+      rows: 1,
+      strideX,
+      strideY,
+      contentWidth: cellWidth,
+      contentHeight: cellHeight,
+    });
   const target = Math.sqrt(
-    (count * viewportWidth * cellHeight) /
-      Math.max(1, viewportHeight * cellWidth),
+    (count * viewportWidth * strideY) / Math.max(1, viewportHeight * strideX),
   );
   const columns = Math.max(1, Math.min(count, Math.ceil(target)));
-  return Object.freeze({ columns, rows: Math.ceil(count / columns) });
+  const rows = Math.ceil(count / columns);
+  return Object.freeze({
+    columns,
+    rows,
+    strideX,
+    strideY,
+    contentWidth: columns * cellWidth + Math.max(0, columns - 1) * cellOffset,
+    contentHeight: rows * cellHeight + Math.max(0, rows - 1) * cellOffset,
+  });
+}
+
+export function calculateGalleryCellPosition(
+  index: number,
+  layout: SymbolPreviewGalleryLayout,
+): Readonly<{ x: number; y: number }> {
+  const x = index % layout.columns;
+  const y = Math.floor(index / layout.columns);
+  return Object.freeze({
+    x: (x - (layout.columns - 1) / 2) * layout.strideX,
+    y: (y - (layout.rows - 1) / 2) * layout.strideY,
+  });
 }
 
 export function clampZoom(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+}
+
+function assertValidCellOffset(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new Error("预览偏移必须是非负安全整数。");
 }

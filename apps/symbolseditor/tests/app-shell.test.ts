@@ -12,6 +12,7 @@ const previewSpies = vi.hoisted(() => ({
   replay: vi.fn(),
   destroy: vi.fn(),
   setResource: vi.fn(async (..._args: unknown[]) => undefined),
+  setCellOffset: vi.fn(),
 }));
 
 const codecSpies = vi.hoisted(() => ({
@@ -21,6 +22,8 @@ const codecSpies = vi.hoisted(() => ({
 
 vi.mock("../src/preview/symbol-preview.js", () => ({
   SymbolEditorPreview: class {
+    #cellOffset = 0;
+
     async init() {}
     destroy() {
       previewSpies.destroy();
@@ -39,6 +42,16 @@ vi.mock("../src/preview/symbol-preview.js", () => ({
       return 1;
     }
     setZoom(value: number) {
+      return value;
+    }
+    getCellOffset() {
+      return this.#cellOffset;
+    }
+    setCellOffset(value: number) {
+      previewSpies.setCellOffset(value);
+      if (!Number.isSafeInteger(value) || value < 0)
+        throw new Error("预览偏移必须是非负安全整数。");
+      this.#cellOffset = value;
       return value;
     }
   },
@@ -76,6 +89,7 @@ describe("symbols editor app shell", () => {
   let app: SymbolsEditorApp;
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     root = document.createElement("div");
     document.body.append(root);
     app = new SymbolsEditorApp(root);
@@ -104,6 +118,55 @@ describe("symbols editor app shell", () => {
     ).toBe(true);
     expect(root.querySelectorAll('[role="tab"]')).toHaveLength(0);
     expect(root.textContent).toContain("建立 Symbols 项目");
+  });
+
+  it("applies a session-only preview offset without rebuilding or changing export", async () => {
+    const offset = root.querySelector<HTMLInputElement>(
+      "[data-preview-offset]",
+    )!;
+    expect(offset.value).toBe("0");
+    expect(offset.min).toBe("0");
+    expect(offset.step).toBe("1");
+
+    await createProject(root);
+    await vi.waitFor(() => expect(previewSpies.setResource).toHaveBeenCalled());
+    const resourceCalls = previewSpies.setResource.mock.calls.length;
+    const createObjectUrl = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:preview-offset-export");
+
+    click(root, "[data-export]");
+    await vi.waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(1));
+    const before = new Uint8Array(
+      await (createObjectUrl.mock.calls[0]![0] as Blob).arrayBuffer(),
+    );
+
+    offset.value = "200";
+    offset.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(previewSpies.setCellOffset).toHaveBeenLastCalledWith(200);
+    expect(offset.value).toBe("200");
+    expect(previewSpies.setResource).toHaveBeenCalledTimes(resourceCalls);
+
+    click(root, "[data-export]");
+    await vi.waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(2));
+    const after = new Uint8Array(
+      await (createObjectUrl.mock.calls[1]![0] as Blob).arrayBuffer(),
+    );
+    expect(after).toEqual(before);
+
+    offset.value = "-1";
+    offset.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(offset.value).toBe("200");
+    expect(root.querySelector("[data-errors]")?.textContent).toContain(
+      "预览偏移必须是非负安全整数",
+    );
+    expect(previewSpies.setResource).toHaveBeenCalledTimes(resourceCalls);
+
+    offset.value = "";
+    offset.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(offset.value).toBe("200");
+    expect(previewSpies.setCellOffset).toHaveBeenLastCalledWith(Number.NaN);
+    expect(previewSpies.setResource).toHaveBeenCalledTimes(resourceCalls);
   });
 
   it("creates into the assets workspace and renders only the active workspace", async () => {

@@ -52,6 +52,9 @@ symbol/state。
 
 导出 ZIP 的 symbol manifest 与所有嵌套 VNI/Spine/image-string 引用均为 filename keys；根 `assets.map.json` 将它们映射到 `assets/<完整 SHA-256>.<ext>`。合法 legacy direct-path package 可导入并结构化升级，新导出不含 nested dependency 资源目录。
 
-预览继续由 rendercore/Pixi/VNI/official Spine owner 驱动，不复制 player、slot 或 state-machine 算法。
+预览继续由 rendercore/Pixi/VNI/official Spine owner 驱动，不复制 player、slot 或 state-machine 算法。预览 toolbar 的
+“偏移（px）”只给横纵相邻 cell 增加本地像素间隔，适合分开视觉范围超过 `cellSize` 的美术；间隔先参与布局、再随
+gallery zoom 一起缩放（例如偏移 `200`、缩放 `50%` 时显示为 `100px`）。该值只属于当前页面会话，不修改图标缩放、
+project、manifest、assets map 或导出 ZIP。
 
 运行：`pnpm --filter symbolseditor dev`

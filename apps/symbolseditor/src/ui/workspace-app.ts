@@ -250,6 +250,27 @@ export class SymbolsEditorApp {
       const zoom = Number((event.currentTarget as HTMLInputElement).value);
       this.updateZoom(this.#preview?.setZoom(zoom) ?? zoom);
     });
+    this.requireElement("[data-preview-offset]").addEventListener(
+      "change",
+      (event) => {
+        const input = event.currentTarget as HTMLInputElement;
+        const value =
+          input.value.trim() === "" ? Number.NaN : Number(input.value);
+        try {
+          if (!this.#preview) return;
+          input.value = String(this.#preview.setCellOffset(value));
+          input.setCustomValidity("");
+          input.removeAttribute("aria-invalid");
+          this.setPreviewOffsetError("");
+        } catch (error) {
+          const message = formatError(error);
+          input.value = String(this.#preview?.getCellOffset() ?? 0);
+          input.setCustomValidity(message);
+          input.setAttribute("aria-invalid", "true");
+          this.setPreviewOffsetError(message);
+        }
+      },
+    );
     this.requireElement("[data-preview-state]").addEventListener(
       "change",
       (event) => {
@@ -2706,6 +2727,21 @@ export class SymbolsEditorApp {
       `${Math.round(value * 100)}%`;
   }
 
+  private setPreviewOffsetError(message: string): void {
+    const errors = this.requireElement("[data-errors]");
+    const current = errors.querySelector<HTMLElement>(
+      "[data-preview-offset-error]",
+    );
+    if (!message) {
+      current?.remove();
+      return;
+    }
+    const error = current ?? document.createElement("div");
+    error.dataset.previewOffsetError = "";
+    error.textContent = message;
+    if (!current) errors.append(error);
+  }
+
   private captureViewState(): void {
     for (const element of this.#root.querySelectorAll<HTMLElement>(
       "[data-scroll-key]",
@@ -2830,6 +2866,7 @@ function shellMarkup(): string {
           <button data-fit>适配全部</button><button data-zoom-out aria-label="缩小">−</button>
           <input data-zoom aria-label="预览缩放" type="range" min="0.25" max="4" step="0.05" value="1">
           <button data-zoom-in aria-label="放大">＋</button><span data-zoom-label>100%</span>
+          <label>偏移（px）<input data-preview-offset aria-label="预览图标偏移" type="number" min="0" step="1" value="0"></label>
         </div>
         <div class="preview" data-preview></div>
       </section>
