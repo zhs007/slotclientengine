@@ -152,10 +152,19 @@ class PixiBackendSound implements AudioBackendSound {
     readonly volume: number;
   }): Promise<AudioBackendInstance> {
     if (this.#destroyed) throw new Error("Pixi backend sound is destroyed.");
-    const instance = await this.#sound.play({
-      loop: options.loop,
-      volume: options.volume,
-    });
+    const loopEnd = this.#sound.duration;
+    if (options.loop && (!Number.isFinite(loopEnd) || loopEnd <= 0))
+      throw new Error("Pixi backend loop sound duration must be positive.");
+    const instance = await this.#sound.play(
+      options.loop
+        ? {
+            start: 0,
+            end: loopEnd,
+            loop: true,
+            volume: options.volume,
+          }
+        : { loop: false, volume: options.volume },
+    );
     return new PixiBackendInstance(instance);
   }
 
