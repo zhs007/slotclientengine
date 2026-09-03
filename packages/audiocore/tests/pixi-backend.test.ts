@@ -177,6 +177,38 @@ describe("Pixi sound backend", () => {
     expect(soundMocks.library.disableAutoPause).toBe(false);
   });
 
+  it("pins loop playback to the complete decoded sound range", async () => {
+    const instance = {
+      volume: 1,
+      paused: false,
+      stop: vi.fn(),
+      once: vi.fn(),
+      off: vi.fn(),
+    };
+    const play = vi.fn(() => instance);
+    soundMocks.from.mockReturnValue({
+      isLoaded: true,
+      duration: 12.5,
+      play,
+      stop: vi.fn(),
+      destroy: vi.fn(),
+    });
+    const backend = createPixiSoundBackend();
+    const prepared = await backend.prepare([
+      { url: "blob:bgm", mediaType: "audio/mpeg" },
+    ]);
+
+    await prepared.play({ loop: true, volume: 0.75 });
+
+    expect(play).toHaveBeenCalledWith({
+      start: 0,
+      end: 12.5,
+      loop: true,
+      volume: 0.75,
+    });
+    prepared.destroy();
+  });
+
   it("publishes one composed activity state from focus, visibility, and page lifecycle", () => {
     const backend = createPixiSoundBackend();
     const states: string[] = [];
