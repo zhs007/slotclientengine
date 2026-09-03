@@ -60,7 +60,7 @@
 - Popup Editor 的 award tier VNI 只允许 authoring `segmented`，必须显式保存合法 `loopStartTime/loopEndTime`；普通 single-state/overlay VNI 仍可选择 `once`。production parser/runtime 继续兼容历史 award `once` package，但 Editor 不得新建、切换或导出这种配置。
 - Popup v4–v9 的 image、字体文字、ImgNumber、VNI 与 Spine layer 可挂 Popup root、同作用域 official Spine exact slot或 VNI exact text layer；普通 Spine Popup 还可挂主 Spine。VNI/Spine parent edge 必须使用同一依赖图拒绝 self与混合循环；Editor 候选必须来自 shared Spine/VNI strict metadata和当前可共同实例化的 layer作用域，不把仅导入资源库的 VNI当父节点、不猜首项。跨作用域引用、缺 slot/text layer、同父 order冲突、覆盖后失效与删除被引用 target 都阻止 transaction，不自动回根。
 - 普通 Spine Popup 的可选 Tap info 子对象挂载配置只保存 external object 的父节点 metadata：main Spine exact slot或当前 Spine overlay的VNI exact文字层。Popup package与Editor不因此拥有对象resource、instance、transform、order、visibility、ticker、input或lifecycle；未配置时不生成默认target，真正对象的提供与挂载必须由后续consumer另行定义typed ownership合同。
-- Game Layout Editor 可严格导入 standalone Popup Object ZIP 到候选库，并在项目级显式选择零或一个 Tap info 对象；导入不得自动绑定，未选对象不得进入production closure，删除已选对象必须先清空binding。同name替换与失败回滚保持旧selection和bytes。
+- Game Layout Editor 可严格导入 standalone Popup Object ZIP 到候选库，并在项目级显式选择零或一个 Tap info 对象；导入不得自动绑定，未选对象不得进入production closure，删除已选对象必须先清空binding。同name替换与失败回滚保持旧selection和bytes。选中的对象由 Scene Layout runtime 同时显示在 default/authored Splash 的 viewport center，并继续为声明 exact attachment 的普通 Spine Popup 提供独立实例。
 - VNI export bundle 只把 `purpose=runtime` 作为运行候选：唯一 runtime 自动选择，多个 runtime 才枚举；禁止手输 profile id，`purpose=editing` 不进入候选。
 - popup package 使用完整 SHA-256 content-addressed owned payload，并保持 exact closure。
 - Popup 字体与其它 payload 一样按完整 SHA-256 物理去重；logical filename key 与 owner 引用不得从 hash path 反推或合并。

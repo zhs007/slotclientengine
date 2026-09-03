@@ -23,6 +23,7 @@ vi.mock("../../src/scene-layout/runtime.js", () => ({
 }));
 
 import { createSceneLayoutPackageRuntime } from "../../src/scene-layout/package-runtime.js";
+import { DEFAULT_SCENE_LAYOUT_POPUP_ORDER } from "../../src/scene-layout/manifest.js";
 import { formatGameLayoutRuntimeAddress } from "../../src/scene-layout/data/runtime-address.js";
 import { transitionResourceKey } from "../../src/scene-layout/resource.js";
 import { singleStatePopupFixture } from "../popup/fixtures.js";
@@ -393,6 +394,60 @@ function startupPackageResource(configured: boolean) {
   return { ...resource, manifest, runtimeManifest: manifest };
 }
 
+function startupPackageResourceWithTapInfo(configured: boolean) {
+  const resource = startupPackageResource(configured);
+  const objectManifest = {
+    version: 1,
+    kind: "popup-object",
+    name: "tap-to-continue",
+    resources: {},
+    layers: [],
+  } as const;
+  return {
+    ...resource,
+    tapInfoObject: {
+      kind: "popup-object" as const,
+      manifest: objectManifest,
+      resource: {
+        manifest: {
+          version: 9,
+          kind: "popup",
+          id: objectManifest.name,
+          name: objectManifest.name,
+          type: "single-state",
+          adaptation: {
+            mode: "maximized-focus",
+            focus: { left: 1, right: 1, top: 1, bottom: 1 },
+          },
+          backdrop: {
+            enabled: false,
+            color: "#000000",
+            alpha: 0,
+            visibleStates: ["active"],
+          },
+          resources: {},
+          audio: { version: 1, effects: [], cues: [] },
+          singleState: { layers: [] },
+        },
+        resources: {},
+        destroy: vi.fn(),
+      },
+    },
+  };
+}
+
+function findSplashTapInfo(
+  runtime: ReturnType<typeof createSceneLayoutPackageRuntime>,
+) {
+  const popupRoot = runtime.container.children.find(
+    (child) => child.label === "scene-layout-popup-root",
+  );
+  const tapInfoRoot = popupRoot?.children.find(
+    (child) => child.label === "scene-layout-splash-tap-info",
+  );
+  return { popupRoot, tapInfoRoot, tapInfo: tapInfoRoot?.children[0] };
+}
+
 describe("scene layout package event-driven game-mode transition", () => {
   beforeEach(() => {
     state.variant = "landscape";
@@ -453,6 +508,38 @@ describe("scene layout package event-driven game-mode transition", () => {
     runtime.destroy();
   });
 
+  it("shows project Tap info above the default black Splash at Popup order", async () => {
+    const backend = new StartupAudioBackend();
+    let releaseUnlock!: () => void;
+    backend.unlockPromise = new Promise<void>((resolve) => {
+      releaseUnlock = resolve;
+    });
+    const runtime = createSceneLayoutPackageRuntime({
+      resource: startupPackageResourceWithTapInfo(false) as never,
+      audioBackend: backend,
+    });
+    await runtime.init();
+    runtime.applyViewport({ width: 800, height: 600 });
+
+    const splash = runtime.container.children.find(
+      (child) => child.label === "scene-layout-default-splash",
+    );
+    const { popupRoot, tapInfoRoot, tapInfo } = findSplashTapInfo(runtime);
+    expect(runtime.container.getChildIndex(splash!)).toBeLessThan(
+      runtime.container.getChildIndex(popupRoot!),
+    );
+    expect(tapInfoRoot?.zIndex).toBe(DEFAULT_SCENE_LAYOUT_POPUP_ORDER);
+    expect(tapInfoRoot?.position).toMatchObject({ x: 400, y: 300 });
+    expect(tapInfo?.visible).toBe(true);
+
+    const pending = runtime.requestPrimaryGameModeAction();
+    expect(tapInfo?.visible).toBe(false);
+    releaseUnlock();
+    await pending;
+    expect(tapInfo?.visible).toBe(false);
+    runtime.destroy();
+  });
+
   it("keeps the default Splash active after unlock failure and permits retry", async () => {
     const backend = new StartupAudioBackend();
     backend.unlockPromise = Promise.reject(new Error("unlock blocked"));
@@ -474,6 +561,24 @@ describe("scene layout package event-driven game-mode transition", () => {
     await runtime.requestPrimaryGameModeAction();
     expect(backend.calls).toEqual(["unlock", "unlock"]);
     expect(splash?.visible).toBe(false);
+    runtime.destroy();
+  });
+
+  it("restores default Splash Tap info when audio unlock fails", async () => {
+    const backend = new StartupAudioBackend();
+    backend.unlockPromise = Promise.reject(new Error("unlock blocked"));
+    const runtime = createSceneLayoutPackageRuntime({
+      resource: startupPackageResourceWithTapInfo(false) as never,
+      audioBackend: backend,
+    });
+    await runtime.init();
+    const { tapInfo } = findSplashTapInfo(runtime);
+    expect(tapInfo?.visible).toBe(true);
+
+    await expect(runtime.requestPrimaryGameModeAction()).rejects.toThrow(
+      /unlock blocked/u,
+    );
+    expect(tapInfo?.visible).toBe(true);
     runtime.destroy();
   });
 
@@ -503,6 +608,23 @@ describe("scene layout package event-driven game-mode transition", () => {
     expect(request).toHaveBeenCalledTimes(1);
     releaseTransition();
     await pending;
+    runtime.destroy();
+  });
+
+  it("shows project Tap info for an authored Splash and hides it after entering initialMode", async () => {
+    const runtime = createSceneLayoutPackageRuntime({
+      resource: startupPackageResourceWithTapInfo(true) as never,
+      audioBackend: new StartupAudioBackend(),
+    });
+    await runtime.init();
+    runtime.applyViewport({ width: 600, height: 900 });
+    const { tapInfoRoot, tapInfo } = findSplashTapInfo(runtime);
+    expect(tapInfoRoot?.position).toMatchObject({ x: 300, y: 450 });
+    expect(tapInfo?.visible).toBe(true);
+
+    await runtime.requestPrimaryGameModeAction();
+    expect(runtime.getStableGameMode()).toBe("BaseGame");
+    expect(tapInfo?.visible).toBe(false);
     runtime.destroy();
   });
 
