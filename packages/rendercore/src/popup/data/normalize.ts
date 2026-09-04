@@ -76,6 +76,7 @@ function addDefaultTextWidthRanges(manifest: PopupManifestV8): unknown {
     ...manifest,
     version: 9,
     awardCelebration: {
+      ...manifest.awardCelebration,
       base: tier(manifest.awardCelebration.base),
       standard: tier(manifest.awardCelebration.standard),
       celebrationTiers: manifest.awardCelebration.celebrationTiers.map(tier),

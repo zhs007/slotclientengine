@@ -465,6 +465,7 @@ export function rewritePopupManifest(
     audio,
     resources,
     awardCelebration: {
+      ...manifest.awardCelebration,
       base: rewriteTier(manifest.awardCelebration.base),
       standard: rewriteTier(manifest.awardCelebration.standard),
       celebrationTiers:

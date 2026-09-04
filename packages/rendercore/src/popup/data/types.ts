@@ -391,7 +391,11 @@ export interface AwardCelebrationTier extends AwardTierPresentation {
   readonly id: "bigwin" | "superwin" | "megawin";
   readonly thresholdMultiplier: number;
 }
-export interface AwardCelebrationSpec {
+export interface AwardTimingOptions {
+  readonly onceMegaCountDurationSeconds?: number;
+  readonly finalAmountHoldDurationSeconds?: number;
+}
+export interface AwardCelebrationSpec extends AwardTimingOptions {
   readonly base: AwardTierPresentation;
   readonly standard: AwardTierPresentation;
   readonly celebrationTiers: readonly AwardCelebrationTier[];
@@ -534,7 +538,7 @@ export interface AwardCelebrationTierV4 extends AwardTierPresentationV4 {
   readonly id: "bigwin" | "superwin" | "megawin";
   readonly thresholdMultiplier: number;
 }
-export interface AwardCelebrationSpecV4 {
+export interface AwardCelebrationSpecV4 extends AwardTimingOptions {
   readonly base: AwardTierPresentationV4;
   readonly standard: AwardTierPresentationV4;
   readonly celebrationTiers: readonly AwardCelebrationTierV4[];
@@ -586,7 +590,7 @@ export interface AwardCelebrationTierV5 extends AwardTierPresentationV5 {
   readonly id: "bigwin" | "superwin" | "megawin";
   readonly thresholdMultiplier: number;
 }
-export interface AwardCelebrationSpecV5 {
+export interface AwardCelebrationSpecV5 extends AwardTimingOptions {
   readonly base: AwardTierPresentationV5;
   readonly standard: AwardTierPresentationV5;
   readonly celebrationTiers: readonly AwardCelebrationTierV5[];
@@ -632,7 +636,7 @@ export interface AwardCelebrationTierV6 extends AwardTierPresentationV6 {
   readonly id: "bigwin" | "superwin" | "megawin";
   readonly thresholdMultiplier: number;
 }
-export interface AwardCelebrationSpecV6 {
+export interface AwardCelebrationSpecV6 extends AwardTimingOptions {
   readonly base: AwardTierPresentationV6;
   readonly standard: AwardTierPresentationV6;
   readonly celebrationTiers: readonly AwardCelebrationTierV6[];
@@ -747,7 +751,7 @@ export interface AwardCelebrationTierV9 extends AwardTierPresentationV9 {
   readonly id: "bigwin" | "superwin" | "megawin";
   readonly thresholdMultiplier: number;
 }
-export interface AwardCelebrationSpecV9 {
+export interface AwardCelebrationSpecV9 extends AwardTimingOptions {
   readonly base: AwardTierPresentationV9;
   readonly standard: AwardTierPresentationV9;
   readonly celebrationTiers: readonly AwardCelebrationTierV9[];

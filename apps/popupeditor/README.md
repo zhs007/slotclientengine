@@ -33,6 +33,17 @@ VNI 图层可显式选择“分段循环”或“完整单次”。分段模式�
 最后一帧，到跨档或关闭 Popup 才隐藏。两种模式使用互斥字段，未知或残留字段会阻止
 preview/export。
 
+获奖档 VNI 也可选择完整单次；从 once 切回 segmented 时先显式初始化为整个 timeline 的循环区间，再按美术编辑
+`loopStartTime/loopEndTime`。仅当 Mega 的 VNI 全部为 once 且本轮到达 Mega 时，末档金额按最终值减去 Mega 阈值
+拟合动画时长，速度不低于进入 Mega 时的速度；Big/Super 和分段模式计数保持原曲线。
+
+项目页“最终金额展示”保存两个秒数：Mega once 的有效计数时长（默认 Mega 总时长 × `0.66`），以及最终金额最短停留
+（once 默认总时长 × `0.33`，分段默认 Mega end 时长）。非 once 不显示有效计数字段，也不使用合法存量值。
+多 Mega VNI 按最大时长聚合，混合模式不启用 once 拟合。两个字段在 v9 manifest 中可省略；加载时从实际资源补齐，
+已有值优先，导出保存当前有效秒数，重开或资源替换不覆盖已配置值；“恢复动画默认时长”可重新计算。
+数字提前结束时不会截断动画：最终金额从到达时起至少显示配置的停留秒数，且始终等到 once/end 动画完成，取两者较长时间。
+最低停留为 0 仍等待动画；普通点击不跳过收尾。
+
 每个 image、字体文字、ImgNumber、VNI 或 Spine 图层都可先选择当前作用域内的 Spine 目标，再选择该 skeleton 的 exact slot；普通 Spine Popup 还可选择主 Spine。award 目标限定在同档位，普通 overlay 目标限定在同一 Popup。目标 slot 内可同时挂图片背景、文字和 ImgNumber，`order` 只比较同一父节点下的兄弟；局部 transform 会跟随 slot bone、颜色和 draw order。循环引用、失效 target/slot、同父 order 冲突以及覆盖资源后 slot 消失都会阻止提交，删除仍被引用的 Spine layer 也会被拒绝。
 
 每个 image、字体文字、ImgNumber、VNI 或 Spine 图层也可显式选择当前作用域 VNI 的任意 exact 文字占位层；award 候选限定同档位，普通 Spine overlays 和 single-state 各限定自身 layer 集合，未放入画面的 VNI resource 不作为父节点。选择文字层后，图层 transform 与适用的 anchor 相对该层编辑并跟随其动画；同一文字层可按唯一 `order` 挂多个 child。候选从严格校验的 VNI project 枚举，self、VNI/Spine 混合循环、目标缺失或替换后失效都会阻止 transaction/preview/export，不会自动换到其它文字层或根节点。

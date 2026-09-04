@@ -960,7 +960,19 @@ function parseAwardCelebration(
   version: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9,
 ): AwardCelebrationSpec {
   const record = object(value, "awardCelebration");
-  keys(record, ["base", "standard", "celebrationTiers"], "awardCelebration");
+  keys(
+    record,
+    [
+      "base",
+      "standard",
+      "celebrationTiers",
+      ...[
+        "onceMegaCountDurationSeconds",
+        "finalAmountHoldDurationSeconds",
+      ].filter((key) => Object.hasOwn(record, key)),
+    ],
+    "awardCelebration",
+  );
   if (
     !Array.isArray(record.celebrationTiers) ||
     record.celebrationTiers.length !== 3
@@ -997,6 +1009,22 @@ function parseAwardCelebration(
     }) as AwardCelebrationTier;
   });
   const result = freeze({
+    ...(record.onceMegaCountDurationSeconds !== undefined
+      ? {
+          onceMegaCountDurationSeconds: positive(
+            record.onceMegaCountDurationSeconds,
+            "awardCelebration.onceMegaCountDurationSeconds",
+          ),
+        }
+      : {}),
+    ...(record.finalAmountHoldDurationSeconds !== undefined
+      ? {
+          finalAmountHoldDurationSeconds: nonNegative(
+            record.finalAmountHoldDurationSeconds,
+            "awardCelebration.finalAmountHoldDurationSeconds",
+          ),
+        }
+      : {}),
     base: parseTier(record.base, "awardCelebration.base", resources, version),
     standard: parseTier(
       record.standard,

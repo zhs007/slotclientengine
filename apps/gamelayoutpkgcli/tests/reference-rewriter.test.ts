@@ -535,6 +535,8 @@ describe("typed asset reference rewriting", () => {
           },
         },
         awardCelebration: {
+          onceMegaCountDurationSeconds: 2.5,
+          finalAmountHoldDurationSeconds: 0.75,
           base: tier("base"),
           standard: tier("standard"),
           celebrationTiers: [
@@ -553,6 +555,10 @@ describe("typed asset reference rewriting", () => {
     expect(popup.type).toBe("award-celebration");
     if (popup.type !== "award-celebration")
       throw new Error("Expected award celebration popup fixture.");
+    expect(popup.awardCelebration).toMatchObject({
+      onceMegaCountDurationSeconds: 2.5,
+      finalAmountHoldDurationSeconds: 0.75,
+    });
     expect(popup.awardCelebration.base.layers[0]?.resource).toBe("popup.webp");
     expect(popup.resources["runtime.hash.json"]).toMatchObject({
       kind: "vni",

@@ -12,6 +12,112 @@ import { popupFixture } from "./fixtures.js";
 import * as popupCoreApi from "../../src/popup/index.js";
 
 describe("award celebration player", () => {
+  it.each([2, 12])(
+    "waits for the longer of once animation and %s seconds hold after advance",
+    async (hold) => {
+      const player = createAwardCelebrationPlayer({
+        resource: onceResource(hold),
+        layerFactory: ({ layer, tierId }) =>
+          layer.kind === "vni" && tierId === "megawin"
+            ? timedOnceLayer(10)
+            : fakeLayer(layer.kind === "vni"),
+      });
+      await player.init();
+      player.start({ betAmountRaw: 100, winAmountRaw: 6000 });
+      player.requestAdvance();
+      player.requestAdvance();
+      player.requestAdvance();
+      expect(player.getSnapshot().activeTierId).toBe("megawin");
+      player.requestAdvance();
+      expect(player.getSnapshot()).toMatchObject({
+        phase: "dismissing",
+        displayedAmountRaw: 6000,
+      });
+      player.update(Math.max(10, hold) - 0.01);
+      expect(player.getSnapshot()).toMatchObject({
+        phase: "dismissing",
+        activeTierId: "megawin",
+        displayedAmountRaw: 6000,
+      });
+      const root = player.container.children[0] as Container;
+      expect(root.children[4]!.visible).toBe(true);
+      player.requestAdvance();
+      expect(player.isPlaying()).toBe(true);
+      player.update(0.02);
+      expect(player.isPlaying()).toBe(false);
+      player.start({ betAmountRaw: 100, winAmountRaw: 6000 });
+      player.requestDismiss();
+      player.update(hold - 0.01);
+      expect(player.isPlaying()).toBe(true);
+      player.dismissImmediately();
+      expect(player.isPlaying()).toBe(false);
+      player.destroy();
+    },
+  );
+
+  it("accounts for only post-final time in a large update and agrees with sliced updates", async () => {
+    const make = async () => {
+      const player = createAwardCelebrationPlayer({
+        resource: onceResource(3, 1),
+        layerFactory: ({ layer, tierId }) =>
+          layer.kind === "vni" && tierId === "megawin"
+            ? timedOnceLayer(1)
+            : fakeLayer(layer.kind === "vni"),
+      });
+      await player.init();
+      player.start({ betAmountRaw: 100, winAmountRaw: 100000 });
+      player.requestAdvance();
+      player.requestAdvance();
+      player.requestAdvance();
+      return player;
+    };
+    const whole = await make();
+    const sliced = await make();
+    whole.update(3.65);
+    for (let index = 0; index < 365; index++) sliced.update(0.01);
+    expect(whole.getSnapshot()).toMatchObject({
+      phase: "dismissing",
+      displayedAmountRaw: 100000,
+    });
+    expect(sliced.getSnapshot()).toMatchObject({
+      phase: "dismissing",
+      displayedAmountRaw: 100000,
+    });
+    whole.update(0.02);
+    sliced.update(0.02);
+    expect(whole.isPlaying()).toBe(false);
+    expect(sliced.isPlaying()).toBe(false);
+    whole.destroy();
+    sliced.destroy();
+  });
+
+  it("holds a static final amount and clears the wait on destroy", async () => {
+    const resource = staticResource();
+    const player = createAwardCelebrationPlayer({
+      resource: {
+        ...resource,
+        manifest: {
+          ...resource.manifest,
+          awardCelebration: {
+            ...resource.manifest.awardCelebration,
+            finalAmountHoldDurationSeconds: 2,
+          },
+        },
+      },
+    });
+    await player.init();
+    player.start({ betAmountRaw: 100, winAmountRaw: 50 });
+    player.update(1.9);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "dismissing",
+      displayedAmountRaw: 50,
+    });
+    player.update(0.11);
+    expect(player.isPlaying()).toBe(false);
+    player.start({ betAmountRaw: 100, winAmountRaw: 50 });
+    player.destroy();
+    expect(() => player.update(3)).toThrow(/destroyed/);
+  });
   it("keeps the game runtime command/query surface snapshot-free", async () => {
     expect("createAwardCelebrationPlayer" in popupCoreApi).toBe(false);
     expect("createSpinePopupPlayer" in popupCoreApi).toBe(false);
@@ -247,8 +353,8 @@ describe("award celebration player", () => {
     });
     player.update(1);
     expect(player.getSnapshot()).toMatchObject({
-      phase: "dismissing",
-      activeTierId: "megawin",
+      phase: "complete",
+      activeTierId: null,
       displayedAmountRaw: 5000,
       formattedAmount: "$50.00",
     });
@@ -258,7 +364,7 @@ describe("award celebration player", () => {
       layerContainers.get("megawin:vni"),
     ]);
     expect(amountRebinds).toBe(4);
-    expect(player.getSnapshot().activeSegment).toBe("end");
+    expect(player.getSnapshot().activeSegment).toBeNull();
     player.update(0.2);
     player.requestAdvance();
     expect(player.getSnapshot().phase).toBe("complete");
@@ -456,8 +562,8 @@ describe("award celebration player", () => {
     });
     player.update(1);
     expect(player.getSnapshot()).toMatchObject({
-      phase: "dismissing",
-      activeTierId: "bigwin",
+      phase: "complete",
+      activeTierId: null,
       displayedAmountRaw: 2000,
       formattedAmount: "$20.00",
     });
@@ -486,7 +592,7 @@ describe("award celebration player", () => {
     });
     player.update(0);
     expect(player.getSnapshot()).toMatchObject({
-      phase: "dismissing",
+      phase: "complete",
       displayedAmountRaw: 101,
       formattedAmount: "$1.01",
     });
@@ -622,8 +728,12 @@ describe("award celebration player", () => {
       activeTierId: baseline.player.getSnapshot().activeTierId,
       displayedAmountRaw: baseline.player.getSnapshot().displayedAmountRaw,
     });
-    expect(baseline.animatedUpdates).toEqual([0.5]);
-    expect(faster.animatedUpdates).toEqual([0.4]);
+    expect(
+      baseline.animatedUpdates.reduce((sum, delta) => sum + delta, 0),
+    ).toBeCloseTo(0.5);
+    expect(
+      faster.animatedUpdates.reduce((sum, delta) => sum + delta, 0),
+    ).toBeCloseTo(0.4);
     baseline.player.destroy();
     faster.player.destroy();
   });
@@ -798,10 +908,10 @@ describe("award celebration player", () => {
     });
     player.update(3);
     expect(player.getSnapshot()).toMatchObject({
-      phase: "dismissing",
-      activeTierId: "bigwin",
+      phase: "complete",
+      activeTierId: null,
     });
-    expect(bigwinContainer.visible).toBe(true);
+    expect(bigwinContainer.visible).toBe(false);
     player.update(0.1);
     expect(player.getSnapshot().phase).toBe("complete");
     expect(bigwinContainer.visible).toBe(false);
@@ -1004,11 +1114,78 @@ function fakeResource(): PopupPackageResource<AwardCelebrationPopupManifestV1> {
     manifest,
     resources: {
       amount: { kind: "image-string", resource: {} as never },
-      bigwin: { kind: "vni", project: {} as never, assetUrls: {} },
-      superwin: { kind: "vni", project: {} as never, assetUrls: {} },
-      megawin: { kind: "vni", project: {} as never, assetUrls: {} },
+      bigwin: {
+        kind: "vni",
+        project: { stage: { duration: 2.5 } } as never,
+        assetUrls: {},
+      },
+      superwin: {
+        kind: "vni",
+        project: { stage: { duration: 2.5 } } as never,
+        assetUrls: {},
+      },
+      megawin: {
+        kind: "vni",
+        project: { stage: { duration: 2.5 } } as never,
+        assetUrls: {},
+      },
     },
     destroy() {},
+  };
+}
+
+function onceResource(
+  hold: number,
+  duration = 10,
+): PopupPackageResource<AwardCelebrationPopupManifestV1> {
+  const resource = fakeResource();
+  return {
+    ...resource,
+    manifest: {
+      ...resource.manifest,
+      awardCelebration: {
+        ...resource.manifest.awardCelebration,
+        finalAmountHoldDurationSeconds: hold,
+        celebrationTiers:
+          resource.manifest.awardCelebration.celebrationTiers.map((tier) =>
+            tier.id !== "megawin"
+              ? tier
+              : {
+                  ...tier,
+                  layers: tier.layers.map((layer) =>
+                    layer.kind !== "vni"
+                      ? layer
+                      : { ...layer, playback: { mode: "once" } },
+                  ),
+                },
+          ),
+      },
+    },
+    resources: {
+      ...resource.resources,
+      megawin: {
+        kind: "vni",
+        project: { stage: { duration } } as never,
+        assetUrls: {},
+      },
+    },
+  };
+}
+
+function timedOnceLayer(duration: number): PopupLayerRuntime {
+  const runtime = fakeLayer(true);
+  let elapsed = 0;
+  return {
+    ...runtime,
+    enter() {
+      elapsed = 0;
+    },
+    update(delta) {
+      elapsed += delta;
+    },
+    requestEnd() {},
+    isLoopReady: () => elapsed >= duration,
+    isEndComplete: () => elapsed >= duration,
   };
 }
 

@@ -36,6 +36,8 @@ import {
   migratePopupEditorVisibility,
   popupEditorProjectDiagnostics,
   projectToManifest,
+  resolvePopupEditorAwardTiming,
+  setAwardVniPlaybackMode,
   projectToPopupObjectManifest,
   removePopupResource,
   renameSingleStateLayer,
@@ -47,6 +49,95 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 describe("popup editor filename-key project", () => {
+  it("round-trips once Mega seconds in v9 and fills missing legacy values on import", async () => {
+    const project = createPopupEditorProject();
+    const review = await discoverPopupResources([
+      new File([imageStringZip().slice().buffer], "amount.zip"),
+    ]);
+    await commitImportReview(project, review);
+    applyImportedResourceBindings(project, review[0]!.rootKey);
+    const vni = {
+      schemaVersion: "VNI_0.087",
+      editor: { name: "VNI", version: "VNI_0.087" },
+      engineTarget: { name: "cocos_creator", version: "3.8.6" },
+      name: "Timing",
+      stage: {
+        width: 100,
+        height: 100,
+        coordinate: "center",
+        duration: 10,
+        backgroundColor: "#000000",
+      },
+      assets: [],
+      layers: [],
+      layerGroups: [],
+      particles: [],
+      exportProfile: { id: "runtime_100", purpose: "runtime", assetScale: 1 },
+      maskCompositeMode: "precompose_light_alpha",
+    };
+    const entry = await createEditorAssetEntry({
+      key: "timing.json",
+      mediaType: "application/json",
+      bytes: new TextEncoder().encode(JSON.stringify(vni)),
+    });
+    project.assets.set(entry.key, entry);
+    project.resources.set(entry.key, {
+      rootKey: entry.key,
+      kind: "vni",
+      spec: { kind: "vni", project: entry.key },
+      keys: [entry.key],
+    });
+    addLayer(project, "megawin", entry.key);
+    const layer = project.tiers
+      .get("megawin")!
+      .layers.find((item) => item.kind === "vni")!;
+    setAwardVniPlaybackMode(project, "megawin", layer.id, "once");
+    expect(resolvePopupEditorAwardTiming(project)).toMatchObject({
+      megaOnce: true,
+      onceMegaCountDurationSeconds: 10 * 0.66,
+      finalAmountHoldDurationSeconds: 10 * 0.33,
+    });
+    project.awardTiming = {
+      onceMegaCountDurationSeconds: 2.75,
+      finalAmountHoldDurationSeconds: 0,
+    };
+    const manifest = projectToManifest(project);
+    expect(manifest.version).toBe(9);
+    const exported = await exportPopupZip(project, { prepare: false });
+    const imported = await importPopupZip(exported.bytes, { prepare: false });
+    expect(imported.awardTiming).toEqual(project.awardTiming);
+    expect(projectToManifest(imported)).toEqual(manifest);
+    const entries = new Map(
+      extractBoundedZip(exported.bytes, { limits: POPUP_ZIP_LIMITS }),
+    );
+    const legacy = JSON.parse(
+      new TextDecoder().decode(entries.get("popup.manifest.json")),
+    );
+    delete legacy.awardCelebration.onceMegaCountDurationSeconds;
+    delete legacy.awardCelebration.finalAmountHoldDurationSeconds;
+    entries.set(
+      "popup.manifest.json",
+      new TextEncoder().encode(JSON.stringify(legacy)),
+    );
+    const old = await importPopupZip(createDeterministicZip(entries), {
+      prepare: false,
+    });
+    expect(old.awardTiming).toEqual({
+      onceMegaCountDurationSeconds: 10 * 0.66,
+      finalAmountHoldDurationSeconds: 10 * 0.33,
+    });
+    setAwardVniPlaybackMode(project, "megawin", layer.id, "segmented");
+    expect(resolvePopupEditorAwardTiming(project)).toMatchObject({
+      megaOnce: false,
+      onceMegaCountDurationSeconds: 2.75,
+      finalAmountHoldDurationSeconds: 0,
+    });
+    expect(
+      project.tiers.get("megawin")!.layers.find((item) => item.kind === "vni"),
+    ).toMatchObject({
+      playback: { mode: "segmented", loopStartTime: 0, loopEndTime: 10 },
+    });
+  });
   it("strictly imports then removes legacy Popup audio and its payload", async () => {
     const project = createPopupEditorProject({ type: "spine" });
     const spineAssets = await Promise.all([
@@ -1009,8 +1100,10 @@ describe("popup editor filename-key project", () => {
     );
     if (invalid.kind !== "vni") throw new Error("Expected VNI layer.");
     (invalid as { playback: { mode: "once" } }).playback = { mode: "once" };
-    project.tiers.get("bigwin")!.layers.push(invalid);
-    expect(() => projectToManifest(project)).toThrow(/必须使用 segmented/);
+    project.tiers.get("bigwin")!.layers = project.tiers
+      .get("bigwin")!
+      .layers.map((layer) => (layer.id === invalid.id ? invalid : layer));
+    expect(() => projectToManifest(project)).not.toThrow();
   });
 
   it("enumerates only exact text layers from the VNI selected in this tier", () => {

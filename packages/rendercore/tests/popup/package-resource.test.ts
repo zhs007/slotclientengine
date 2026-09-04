@@ -36,6 +36,40 @@ vi.mock("../../src/image-string/package-runtime.js", async (original) => {
 });
 
 describe("popup package resource", () => {
+  it.each(["once", "segmented"] as const)(
+    "fills project timing from loaded %s Mega metadata without mutating the source",
+    async (mode) => {
+      const { createPopupPackageResource } =
+        await import("../../src/popup/package-resource.js");
+      const { manifest, files } = fixture();
+      const layer = structuredClone(
+        manifest.awardCelebration.base.layers.find(
+          (item: { kind: string }) => item.kind === "vni",
+        ),
+      );
+      if (mode === "once") layer.playback = { mode: "once" };
+      manifest.awardCelebration.celebrationTiers[2].layers.push(layer);
+      const resource = await createPopupPackageResource({
+        manifest,
+        files,
+        loadTexture: async () =>
+          ({ width: 1, height: 1, destroy() {} }) as never,
+      });
+      expect(resource.manifest.version).toBe(9);
+      if (resource.manifest.type !== "award-celebration")
+        throw new Error("Expected award.");
+      expect(
+        resource.manifest.awardCelebration.finalAmountHoldDurationSeconds,
+      ).toBeCloseTo(mode === "once" ? 3 * 0.33 : 0.5);
+      expect(
+        resource.manifest.awardCelebration.onceMegaCountDurationSeconds,
+      ).toBe(mode === "once" ? 3 * 0.66 : undefined);
+      expect(manifest.awardCelebration).not.toHaveProperty(
+        "finalAmountHoldDurationSeconds",
+      );
+      await resource.destroy();
+    },
+  );
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(URL, "createObjectURL").mockImplementation(

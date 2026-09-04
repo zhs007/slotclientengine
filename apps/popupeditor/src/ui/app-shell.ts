@@ -35,6 +35,9 @@ import {
   reuseAwardLayerInTier,
   PopupEditorStore,
   projectToManifest,
+  resolvePopupEditorAwardTiming,
+  awardTimingValues,
+  setAwardVniPlaybackMode,
   projectToPopupObjectManifest,
   popupEditorVisibilityStates,
   resourceReferenceCount,
@@ -807,6 +810,22 @@ export class PopupEditorApp {
         }),
       );
     this.#root
+      .querySelectorAll<HTMLSelectElement>("[data-award-vni-mode]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.safe(() =>
+            this.#store.transact((draft) =>
+              setAwardVniPlaybackMode(
+                draft,
+                this.#tier,
+                select.dataset.awardVniMode!,
+                select.value,
+              ),
+            ),
+          ),
+        ),
+      );
+    this.#root
       .querySelectorAll<HTMLSelectElement>("[data-layer-fill-kind]")
       .forEach((select) =>
         select.addEventListener("change", () =>
@@ -1031,7 +1050,18 @@ export class PopupEditorApp {
           this.transactField((draft) => {
             const field = input.dataset.projectField!;
             if (field === "project-name") draft.name = input.value;
-            else if (field.startsWith("focus-"))
+            else if (
+              field === "onceMegaCountDurationSeconds" ||
+              field === "finalAmountHoldDurationSeconds"
+            ) {
+              if (!input.value.trim())
+                throw new Error("时长不能为空，请输入秒数或恢复默认。");
+              draft.awardTiming = {
+                ...draft.awardTiming,
+                [field]: Number(input.value),
+              };
+              resolvePopupEditorAwardTiming(draft);
+            } else if (field.startsWith("focus-"))
               (draft.adaptation.focus as any)[field.slice("focus-".length)] =
                 Number(input.value);
             else if (field === "backdrop-enabled")
@@ -1058,6 +1088,18 @@ export class PopupEditorApp {
                     ? Number(input.value)
                     : input.value;
             }
+          }),
+        ),
+      );
+    this.#root
+      .querySelector<HTMLButtonElement>("#reset-award-timing")
+      ?.addEventListener("click", () =>
+        this.safe(() =>
+          this.#store.transact((draft) => {
+            draft.awardTiming = {};
+            draft.awardTiming = awardTimingValues(
+              resolvePopupEditorAwardTiming(draft),
+            );
           }),
         ),
       );
@@ -1799,11 +1841,12 @@ function vniPlaybackMarkup(
   layer: Extract<PopupLayer, { kind: "vni" }>,
   project: PopupEditorProject,
 ) {
+  const mode = `<label>播放模式<select data-award-vni-mode="${layer.id}"><option value="segmented" ${layer.playback.mode === "segmented" ? "selected" : ""}>分段循环</option><option value="once" ${layer.playback.mode === "once" ? "selected" : ""}>完整单次</option></select></label>`;
   if (layer.playback.mode === "once")
-    return `<p class="amount-layer-note">Award VNI 不支持完整单次播放；请重新导入带有显式 loopStartTime/loopEndTime 的 segmented 资源。</p>`;
+    return `${mode}${vniTimingSummary(project, layer)}`;
   const input = (field: string, value: number) =>
     `<label>${field}<input data-layer-id="${layer.id}" data-layer-field="${field}" type="number" step="0.1" value="${value}"/></label>`;
-  return `<p class="segment-summary"><strong>播放模式：分段循环</strong></p>${vniTimingSummary(project, layer)}${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-layer-id="${layer.id}" data-layer-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`;
+  return `${mode}${vniTimingSummary(project, layer)}${input("loopStartTime", layer.playback.loopStartTime)}${input("loopEndTime", layer.playback.loopEndTime)}<label>keepParticlesAlive<input data-layer-id="${layer.id}" data-layer-field="keepParticlesAlive" type="checkbox" ${layer.playback.keepParticlesAlive ? "checked" : ""}/></label>`;
 }
 
 function attachmentMarkup(
@@ -1976,7 +2019,23 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
       : "";
   const tapInfo =
     project.type === "spine" ? tapInfoObjectParentMarkup(project) : "";
-  return `${commonWithColorEditor}${amount}${tapInfo}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
+  return `${commonWithColorEditor}${amount}${project.type === "award-celebration" ? awardTimingMarkup(project) : ""}${tapInfo}<h3>配置 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
+}
+
+function awardTimingMarkup(project: PopupEditorProject): string {
+  try {
+    const timing = resolvePopupEditorAwardTiming(project);
+    const field = (
+      name: string,
+      label: string,
+      value: number,
+      minimum: string,
+    ) =>
+      `<label>${label}<input data-project-field="${name}" type="number" step="any" min="${minimum}" value="${value}"/><small>秒</small></label>`;
+    return `<h3>最终金额展示</h3>${timing.megaOnce ? field("onceMegaCountDurationSeconds", "Mega 单次有效计数时长", timing.onceMegaCountDurationSeconds!, "0") : ""}${field("finalAmountHoldDurationSeconds", "最终金额最短停留时长", timing.finalAmountHoldDurationSeconds, "0")}<button id="reset-award-timing">恢复动画默认时长</button><p>${timing.megaOnce ? "默认计数时长为 Mega 动画的 0.66，停留为 0.33；计数不会为了凑时长而降低已达到的速度。" : "分段模式默认停留为 Mega 的 end 时长。"}停留从最终金额到达时开始，动画尚未结束则等到动画完成。</p>`;
+  } catch {
+    return "<h3>最终金额展示</h3><p>请先完成 Mega VNI 资源配置；时长错误见配置 diagnostics。</p>";
+  }
 }
 
 function tapInfoObjectParentMarkup(project: PopupEditorProject): string {

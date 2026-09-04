@@ -9,6 +9,75 @@ import { createAwardCountStages } from "../../src/popup/index.js";
 import { popupFixture } from "./fixtures.js";
 
 describe("award amount motion", () => {
+  it.each([1, 1000, 100000])(
+    "fits only Mega once distance %s without decreasing the incoming speed",
+    (distance) => {
+      const manifest = popupFixture();
+      const input = { betAmountRaw: 100, winAmountRaw: 5000 + distance };
+      const stages = createAwardCountStages(manifest, input);
+      const before = createAwardAmountMotionPlan(manifest, input, stages)!;
+      const fitted = createAwardAmountMotionPlan(
+        manifest,
+        input,
+        stages,
+        1,
+        6.6,
+      )!;
+      expect(fitted.onceMega).toBe(true);
+      expect(fitted.stages.slice(0, -1)).toEqual(before.stages.slice(0, -1));
+      const mega = fitted.stages.at(-1)!;
+      expect(mega.startRateRawPerSecond).toBe(
+        fitted.stages.at(-2)!.endRateRawPerSecond,
+      );
+      expect(mega.accelerationRawPerSecondSquared).toBeGreaterThanOrEqual(0);
+      const duration = awardAmountMotionElapsedForAmount(
+        mega,
+        input.winAmountRaw,
+      );
+      expect(duration).toBeCloseTo(
+        Math.min(6.6, distance / mega.startRateRawPerSecond),
+      );
+      expect(awardAmountMotionAmountAtElapsed(mega, duration + 1e-9)).toBe(
+        input.winAmountRaw,
+      );
+      expect(mega.endRateRawPerSecond).toBeGreaterThanOrEqual(
+        mega.startRateRawPerSecond,
+      );
+    },
+  );
+
+  it("preserves partial/exact threshold finals and scales once counting only", () => {
+    const manifest = popupFixture();
+    for (const winAmountRaw of [50, 100, 2000, 4000, 5000]) {
+      const input = { betAmountRaw: 100, winAmountRaw };
+      const stages = createAwardCountStages(manifest, input);
+      expect(
+        createAwardAmountMotionPlan(manifest, input, stages, 1, 6.6),
+      ).toEqual(createAwardAmountMotionPlan(manifest, input, stages));
+    }
+    const input = { betAmountRaw: 100, winAmountRaw: 100000 };
+    const stages = createAwardCountStages(manifest, input);
+    const normal = createAwardAmountMotionPlan(
+      manifest,
+      input,
+      stages,
+      1,
+      6.6,
+    )!.stages.at(-1)!;
+    const scaled = createAwardAmountMotionPlan(
+      manifest,
+      input,
+      stages,
+      0.5,
+      6.6,
+    )!.stages.at(-1)!;
+    expect(scaled.effectiveCanonicalDurationSeconds).toBeCloseTo(
+      normal.effectiveCanonicalDurationSeconds * 0.5,
+    );
+    expect(scaled.startRateRawPerSecond).toBeCloseTo(
+      normal.startRateRawPerSecond * 2,
+    );
+  });
   it("uses the complete standard span to time a partial win", () => {
     const manifest = popupFixture();
     const input = { betAmountRaw: 100, winAmountRaw: 200 };

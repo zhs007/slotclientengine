@@ -660,6 +660,7 @@ function rewritePopupManifestWithMapping(
             ...audio,
             resources,
             awardCelebration: {
+              ...manifest.awardCelebration,
               base: rewriteLayers(manifest.awardCelebration.base),
               standard: rewriteLayers(manifest.awardCelebration.standard),
               celebrationTiers:

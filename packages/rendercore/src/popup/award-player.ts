@@ -20,6 +20,10 @@ import {
   type AwardAmountMotionStage,
 } from "./award-amount-motion.js";
 import { formatPopupAmount } from "./amount-format.js";
+import {
+  resolveAwardTiming,
+  type ResolvedAwardTiming,
+} from "./award-timing.js";
 import { createPopupStringNodeRegistry } from "./string-node-registry.js";
 import {
   createPopupStyledText,
@@ -182,6 +186,8 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
   #motionMode: "stage" | "braking" | null = null;
   #stageIndex = -1;
   #elapsed = 0;
+  #holdRemaining = 0;
+  readonly #timing: ResolvedAwardTiming;
   #displayed = 0;
   #final = 0;
   #lastAutomaticAmount: number | null = null;
@@ -209,6 +215,15 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
         { readonly type: "award-celebration" }
       >;
     };
+    this.#timing = resolveAwardTiming(
+      this.#resource.manifest.awardCelebration,
+      (id) => {
+        const resource = this.#resource.resources[id];
+        if (resource?.kind !== "vni")
+          throw new Error(`award timing VNI resource unavailable: ${id}.`);
+        return resource.project.stage.duration;
+      },
+    );
     this.#presentation = createPopupPresentation(this.#resource.manifest, {
       backdropController: options.backdropController,
     });
@@ -300,6 +315,9 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
         input,
         this.#stages,
         amountDurationScale,
+        this.#timing.megaOnce
+          ? this.#timing.onceMegaCountDurationSeconds
+          : undefined,
       );
       if (!this.#motionPlan) {
         this.startStage(0, this.#final);
@@ -321,6 +339,16 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.assertReady();
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0)
       throw new Error("deltaSeconds must be finite and non-negative.");
+    try {
+      if (this.#phase === "dismissing") this.updateDismissing(deltaSeconds);
+      else if (this.#phase === "counting" && this.#active)
+        this.updateAmountMotion(deltaSeconds);
+    } catch (error) {
+      this.complete();
+      throw error;
+    }
+  }
+  private updateLayers(deltaSeconds: number): void {
     this.#tiersToUpdate.length = 0;
     for (const tier of this.#showing) this.#tiersToUpdate.push(tier);
     for (const tier of this.#ending)
@@ -332,17 +360,12 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       else this.updateTier(tier, deltaSeconds);
     }
     this.drainEnding();
-    if (this.#phase === "dismissing") {
-      if (!this.#showing.size && !this.#ending.length) this.complete();
-      return;
-    }
-    if (this.#phase !== "counting" || !this.#active) return;
-    try {
-      this.updateAmountMotion(deltaSeconds);
-    } catch (error) {
-      this.complete();
-      throw error;
-    }
+  }
+  private updateDismissing(deltaSeconds: number): void {
+    if (this.#phase !== "dismissing") return;
+    this.#holdRemaining = Math.max(0, this.#holdRemaining - deltaSeconds);
+    this.updateLayers(deltaSeconds);
+    if (!this.#ending.length && this.#holdRemaining === 0) this.complete();
   }
   requestAdvance(): void {
     this.assertReady();
@@ -360,6 +383,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
         nextCelebration,
         this.#stages[nextCelebration]!.fromAmountRaw,
       );
+    else if (this.#motionPlan?.onceMega) this.finishAtFinalAmount();
     else this.beginTerminalBraking();
   }
   requestDismiss(): void {
@@ -371,6 +395,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.beginDismissing();
   }
   private beginDismissing() {
+    this.#holdRemaining = this.#timing.finalAmountHoldDurationSeconds;
     this.setPhase("dismissing");
     for (const tier of this.#showing) {
       requestTierEnd(tier, this.amountText(), (previous, current) =>
@@ -379,7 +404,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       this.addEndingTier(tier, tier.layers);
     }
     this.#showing.clear();
-    if (!this.#ending.length) this.complete();
+    if (!this.#ending.length && this.#holdRemaining === 0) this.complete();
   }
   dismissImmediately(): void {
     this.assertReady();
@@ -695,19 +720,23 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
         const consumed = Math.min(remaining, available);
         this.#elapsed += consumed;
         remaining -= consumed;
+        this.updateLayers(consumed);
         this.#displayed = Math.floor(
           awardAmountTerminalBrakeAmountAtElapsed(brake, this.#elapsed),
         );
         this.updateAmount();
         if (this.#elapsed < brake.durationSeconds) return;
         this.finishAtFinalAmount();
+        this.updateDismissing(remaining);
         return;
       }
 
       const stage = this.currentMotionStage();
-      const brake = this.#motionPlan.terminalBrake;
+      const brake = this.#motionPlan.onceMega
+        ? undefined
+        : this.#motionPlan.terminalBrake;
       const targetAmountRaw =
-        stage.tierId === brake.tierId
+        stage.tierId === brake?.tierId
           ? brake.startAmountRaw
           : stage.toAmountRaw;
       const targetElapsed = awardAmountMotionElapsedForAmount(
@@ -718,6 +747,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       const consumed = Math.min(remaining, available);
       this.#elapsed += consumed;
       remaining -= consumed;
+      this.updateLayers(consumed);
       this.#displayed = Math.floor(
         awardAmountMotionAmountAtElapsed(stage, this.#elapsed, targetAmountRaw),
       );
@@ -725,10 +755,15 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
       if (this.#elapsed < targetElapsed) return;
       this.#displayed = targetAmountRaw;
       this.updateAmount();
-      if (stage.tierId === brake.tierId) {
+      if (stage.tierId === brake?.tierId) {
         this.#motionMode = "braking";
         this.#elapsed = 0;
       } else {
+        if (this.#stageIndex === this.#stages.length - 1) {
+          this.finishAtFinalAmount();
+          this.updateDismissing(remaining);
+          return;
+        }
         this.transitionToNext();
       }
     }
@@ -779,7 +814,11 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     let write = 0;
     for (const tier of this.#ending) {
       if (tierLayersEnded(tier, this.#endingLayers.get(tier) ?? [])) {
-        if (!this.#showing.has(tier)) tier.container.visible = false;
+        if (
+          !this.#showing.has(tier) &&
+          !(this.#phase === "dismissing" && this.#active === tier)
+        )
+          tier.container.visible = false;
         this.#endingLayers.delete(tier);
       } else {
         this.#ending[write] = tier;
@@ -819,6 +858,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     }
   }
   private complete() {
+    this.#holdRemaining = 0;
     if (this.#active) this.#active.container.visible = false;
     for (const tier of this.#showing) tier.container.visible = false;
     for (const tier of this.#ending) tier.container.visible = false;
@@ -833,6 +873,7 @@ class DefaultAwardCelebrationRuntime implements AwardCelebrationRuntime {
     this.#activeFormatAmount = this.#defaultFormatAmount;
   }
   private clearPlayback() {
+    this.#holdRemaining = 0;
     for (const tier of this.#tiers.values()) tier.container.visible = false;
     if (this.#amount) this.#amount.container.visible = false;
     this.setActiveTier(null);
