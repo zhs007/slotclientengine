@@ -91,11 +91,17 @@ export interface SceneLayoutVniResourceSpec {
   readonly loop: boolean;
 }
 
+export interface SceneLayoutPopupObjectResourceSpec {
+  readonly kind: "popup-object";
+  readonly manifest: string;
+}
+
 export type SceneLayoutNodeResourceSpec =
   | SceneLayoutImageResourceSpec
   | SceneLayoutSpineResourceSpec
   | SceneLayoutImageStringResourceSpec
-  | SceneLayoutVniResourceSpec;
+  | SceneLayoutVniResourceSpec
+  | SceneLayoutPopupObjectResourceSpec;
 
 export interface SceneLayoutRuntimeSpineResourceSpec {
   readonly kind: "spine";
@@ -623,6 +629,10 @@ export interface SceneLayoutResource {
     >
   >;
   readonly imageStringResources: Readonly<Record<string, ImageStringResource>>;
+  /** Borrowed project Tap info object used only by explicit popup-object scene nodes. */
+  readonly popupObjectResource?:
+    | import("../popup/core/types.js").PopupPreparedObject
+    | null;
   readonly vniResources: Readonly<
     Record<
       string,
@@ -827,12 +837,17 @@ export interface SceneLayoutImageStringRenderObject extends SceneLayoutRenderObj
   getText(): string;
 }
 
+export interface SceneLayoutPopupObjectRenderObject extends SceneLayoutRenderObjectBase {
+  readonly kind: "popup-object";
+}
+
 export type SceneLayoutRenderObject =
   | SceneLayoutImageRenderObject
   | SceneLayoutSpineLoopRenderObject
   | SceneLayoutSpineStateRenderObject
   | SceneLayoutVniRenderObject
-  | SceneLayoutImageStringRenderObject;
+  | SceneLayoutImageStringRenderObject
+  | SceneLayoutPopupObjectRenderObject;
 
 export type SceneLayoutRadioState = "off" | "on";
 export type SceneLayoutUiControlStateSource = "pointer" | "programmatic";

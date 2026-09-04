@@ -19,6 +19,10 @@ import {
   createRenderImageString,
   type RenderImageString,
 } from "../image-string/core/index.js";
+import {
+  createPopupObjectInstanceRuntime,
+  type PopupObjectInstanceRuntime,
+} from "../popup/object-runtime.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import { parseSceneLayoutManifestDocument } from "./manifest.js";
@@ -167,6 +171,7 @@ interface RuntimeNode {
   readonly after: Container;
   player: RendercoreSpinePlayer | null;
   vniPlayer: SceneLayoutVniPlayer | null;
+  popupObject: PopupObjectInstanceRuntime | null;
   stateController: SpineStateController | null;
   imageString: RenderImageString | null;
   imageSprite: Sprite | null;
@@ -373,6 +378,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         after,
         player: null,
         vniPlayer: null,
+        popupObject: null,
         stateController: null,
         imageString: null,
         imageSprite: null,
@@ -613,6 +619,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       }
       if (node.vniPlayer && node.slot.renderable)
         node.vniPlayer.update(deltaSeconds);
+      if (node.popupObject && node.slot.renderable)
+        node.popupObject.update(deltaSeconds);
     }
   }
 
@@ -750,6 +758,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
             player.play();
           },
         });
+        break;
+      case "popup-object":
+        object = Object.freeze({ kind: "popup-object", ...common });
         break;
       case "spine":
         if ("stateMachine" in node.spec.resource) {
@@ -1158,6 +1169,21 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       player.play();
       return;
     }
+    if (node.spec.resource.kind === "popup-object") {
+      const resource = this.#resource.popupObjectResource;
+      if (!resource)
+        throw new SceneLayoutError(
+          `Scene layout Popup Object resource is missing for node "${node.spec.id}".`,
+        );
+      const runtime = createPopupObjectInstanceRuntime({ resource });
+      node.popupObject = runtime;
+      await runtime.init();
+      this.assertAlive();
+      runtime.container.label = `scene-layout-popup-object:${node.spec.id}`;
+      runtime.setActive(true);
+      node.named.addChild(runtime.container);
+      return;
+    }
     const resource = this.#resource.spineResources[node.spec.id];
     if (!resource) {
       throw new SceneLayoutError(
@@ -1431,6 +1457,8 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     node.player = null;
     node.vniPlayer?.destroy();
     node.vniPlayer = null;
+    node.popupObject?.destroy();
+    node.popupObject = null;
     node.imageString?.destroy();
     node.imageString = null;
     const sliderView =
@@ -2278,6 +2306,18 @@ function resolveNodePlacementPivot(
     return validNodePivot(node.spec.id, {
       x: (center.x - geometry.anchor.x) * bounds.width,
       y: (center.y - geometry.anchor.y) * bounds.height,
+    });
+  }
+  if (resource.kind === "popup-object") {
+    if (center.x === 0.5 && center.y === 0.5) return { x: 0, y: 0 };
+    const view = node.popupObject?.container;
+    if (!view)
+      throw new SceneLayoutError(
+        `Scene layout Popup Object node "${node.spec.id}" is not prepared.`,
+      );
+    return validNodePivot(node.spec.id, {
+      x: (center.x - 0.5) * view.width,
+      y: (center.y - 0.5) * view.height,
     });
   }
   if (center.x === 0.5 && center.y === 0.5) return { x: 0, y: 0 };

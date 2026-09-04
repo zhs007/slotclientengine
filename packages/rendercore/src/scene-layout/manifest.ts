@@ -262,6 +262,7 @@ export function collectSceneLayoutAssetPaths(
     if (resource.kind === "image") paths.add(resource.path);
     else if (resource.kind === "image-string") paths.add(resource.manifest);
     else if (resource.kind === "vni") paths.add(resource.project);
+    else if (resource.kind === "popup-object") paths.add(resource.manifest);
     else {
       paths.add(resource.skeleton);
       paths.add(resource.atlas);
@@ -589,7 +590,16 @@ function parseResource(
       loop: record.loop,
     });
   }
-  fail(`${label}.kind must be image, spine, image-string, or vni.`);
+  if (record.kind === "popup-object") {
+    known(record, ["kind", "manifest"], label);
+    return deepFreeze({
+      kind: "popup-object" as const,
+      manifest: popupObjectDependencyPath(record.manifest, `${label}.manifest`),
+    });
+  }
+  fail(
+    `${label}.kind must be image, spine, image-string, vni, or popup-object.`,
+  );
 }
 
 function parseRuntimeResources(
@@ -988,11 +998,13 @@ function validatePathClosure(
           ? [resource.manifest]
           : resource.kind === "vni"
             ? [resource.project]
-            : [
-                resource.skeleton,
-                resource.atlas,
-                ...Object.values(resource.textures),
-              ]),
+            : resource.kind === "popup-object"
+              ? [resource.manifest]
+              : [
+                  resource.skeleton,
+                  resource.atlas,
+                  ...Object.values(resource.textures),
+                ]),
     );
   }
   for (const resource of Object.values(runtimeResources ?? {})) {
@@ -1226,7 +1238,8 @@ function parseGameModes(
           );
         if (
           node.resource.kind === "image-string" ||
-          node.resource.kind === "vni"
+          node.resource.kind === "vni" ||
+          node.resource.kind === "popup-object"
         )
           fail(
             `${label}.backgroundNodes.${variant} cannot reference ${node.resource.kind} node "${nodeId}".`,
@@ -1648,6 +1661,21 @@ function imageStringDependencyPath(value: unknown, label: string): string {
   if (!match)
     fail(
       `${label} must be dependencies/image-strings/<id>/image-string.manifest.json.`,
+    );
+  return path;
+}
+
+function popupObjectDependencyPath(value: unknown, label: string): string {
+  if (typeof value === "string" && !value.includes("/"))
+    return assertEditorAssetKey(value);
+  const path = canonicalLowercasePath(value, label);
+  if (
+    !/^dependencies\/popup-objects\/([a-z0-9]+(?:-[a-z0-9]+)*)\/popup-object\.manifest\.json$/u.test(
+      path,
+    )
+  )
+    fail(
+      `${label} must be dependencies/popup-objects/<name>/popup-object.manifest.json.`,
     );
   return path;
 }

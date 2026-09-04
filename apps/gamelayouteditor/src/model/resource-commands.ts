@@ -71,7 +71,10 @@ import {
   RESERVED_RENDER_LAYER_NODE_IDS,
 } from "./node-id.js";
 import { canonicalizeUploadFileName } from "../io/filename-policy.js";
-import { nextAvailableNodeOrder } from "./layer-order.js";
+import {
+  nextAvailableNodeOrder,
+  nextAvailablePopupOrder,
+} from "./layer-order.js";
 
 interface PreparedResource {
   readonly resource: EditorLayoutResource;
@@ -603,7 +606,9 @@ export function bindRuntimeResource(
   resourceId: string,
   key: string,
 ): void {
-  requireResource(project, resourceId);
+  const resource = requireResource(project, resourceId);
+  if (resource.kind === "popup-object")
+    throw new Error("Popup Object 只能作为 Scene 图层，不能绑定程序资源键。");
   const normalizedKey = normalizeRuntimeResourceKey(key);
   if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalizedKey))
     throw new Error(
@@ -646,6 +651,8 @@ export function deleteLayoutResource(
   resourceId: string,
 ): void {
   const resource = requireResource(project, resourceId);
+  if (resource.kind === "popup-object")
+    throw new Error("Popup Object 资源必须从项目对象库删除。");
   const references = getLayoutResourceReferences(project, resourceId);
   if (references.length > 0) {
     throw new Error(
@@ -676,8 +683,13 @@ export function addLayerFromResource(options: {
   readonly loop?: boolean;
 }): EditorGraphicNodeDraft {
   const resource = requireResource(options.project, options.resourceId);
-  if (resource.kind === "video" || resource.kind === "audio")
+  if (
+    resource.kind === "video" ||
+    resource.kind === "audio" ||
+    resource.kind === "json"
+  )
     throw new Error(`${resource.kind} 资源不能创建普通图层。`);
+  assertSelectedPopupObject(options.project, resource);
   assertNodeIdAvailable(options.project, options.nodeId);
   assertLayerVariantsAllowed(options.variants);
   const defaultAnimation = validateAnimation(
@@ -686,7 +698,10 @@ export function addLayerFromResource(options: {
   );
   const node: EditorGraphicNodeDraft = {
     id: options.nodeId,
-    order: nextOrder(options.project),
+    order:
+      resource.kind === "popup-object"
+        ? nextAvailablePopupOrder(options.project)
+        : nextOrder(options.project),
     layerType: "graphic",
     resourceId: resource.id,
     ...(resource.kind === "spine"
@@ -926,8 +941,13 @@ export function rebindLayerResource(options: {
   const previousPlayback = node.playback;
   const previousImageString = node.imageString;
   const resource = requireResource(options.project, options.resourceId);
-  if (resource.kind === "video" || resource.kind === "audio")
+  if (
+    resource.kind === "video" ||
+    resource.kind === "audio" ||
+    resource.kind === "json"
+  )
     throw new Error(`${resource.kind} 资源不能重绑普通图层。`);
+  assertSelectedPopupObject(options.project, resource);
   const defaultAnimation =
     resource.kind === "spine"
       ? validateAnimation(
@@ -946,6 +966,16 @@ export function rebindLayerResource(options: {
     previousImageString
   )
     validateImageStringText(previousImageString.text, resource.manifest);
+  if (
+    previousResource.kind !== "popup-object" &&
+    resource.kind === "popup-object"
+  )
+    node.order = nextAvailablePopupOrder(options.project);
+  else if (
+    previousResource.kind === "popup-object" &&
+    resource.kind !== "popup-object"
+  )
+    node.order = nextAvailableNodeOrder(options.project);
   node.resourceId = resource.id;
   delete node.playback;
   delete node.imageString;
@@ -992,6 +1022,19 @@ export function moveLayer(
   const index = layers.findIndex((node) => node.id === nodeId);
   const target = index + direction;
   if (target < 0 || target >= layers.length) return;
+  const currentResource =
+    layers[index].layerType === "ui-control"
+      ? null
+      : project.resources.get(layers[index].resourceId);
+  const targetResource =
+    layers[target].layerType === "ui-control"
+      ? null
+      : project.resources.get(layers[target].resourceId);
+  if (
+    (currentResource?.kind === "popup-object") !==
+    (targetResource?.kind === "popup-object")
+  )
+    throw new Error("Popup Object 图层必须保持在普通图层与 main reel 之上。");
   [layers[index].order, layers[target].order] = [
     layers[target].order,
     layers[index].order,
@@ -2092,7 +2135,21 @@ export function describeResource(resource: EditorLayoutResource): string {
     return `${resource.path} · ${resource.rootKind} · program-only`;
   if (resource.kind === "vni")
     return `${resource.projectPath} · ${resource.project.stage.width}×${resource.project.stage.height} · ${resource.project.stage.duration}s · ${resource.assetPaths.length} assets`;
+  if (resource.kind === "popup-object")
+    return `${resource.manifestPath} · Popup Object ${resource.manifest.name} · ${resource.assetPaths.length} assets`;
   return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}` : " · 无 export bounds"}`;
+}
+
+function assertSelectedPopupObject(
+  project: EditorProject,
+  resource: EditorLayoutResource,
+): void {
+  if (resource.kind !== "popup-object") return;
+  const selected = project.tapInfoObjectName
+    ? project.popupObjectDependencies.get(project.tapInfoObjectName)
+    : null;
+  if (!selected || selected.rootKey !== resource.manifestPath)
+    throw new Error("请先把该 Popup Object 设为项目 Tap info，再创建图层。");
 }
 
 function requireImageStringNode(project: EditorProject, nodeId: string) {

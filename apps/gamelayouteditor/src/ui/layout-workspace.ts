@@ -169,12 +169,14 @@ function layerInspector(
       ? uiControlResourceMarkup(project, node, index)
       : `<p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button></div>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "vni" ? vniPlaybackEditor(node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}`;
   const inspectorLabel =
-    node.layerType !== "ui-control"
-      ? "图形图层"
-      : node.uiControl.kind === "radio"
-        ? "UI 控件 / 单选框"
-        : "UI 控件 / 多档选择框";
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>${inspectorLabel} Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}${numberField("order", `nodes.${index}.order`, node.order)}${resourceMarkup}<div class="button-row"><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div><p class="hint">可直接填写高于 main reel 的 order；order 必须唯一，且所有 Popup order 必须更高。</p></section><section class="inspector-section"><h3>状态、方向与 Placement</h3><fieldset class="layer-state-scope"><legend>${escapeHtml(scopeLabel)}</legend><label class="visibility"><input type="checkbox" data-layer-global="${escapeHtml(node.id)}" ${node.scope === undefined ? "checked" : ""}/> 所有状态有效</label>${scopeMatrix}<p class="hint">取消全局时先绑定当前编辑状态 ${escapeHtml(modeId)} 的现有 placements；之后可按 mode × orientation 精确调整。</p><div class="layer-state-variants">${ordinaryLayerVariantIds
+    resource?.kind === "popup-object"
+      ? "Popup Object 图层"
+      : node.layerType !== "ui-control"
+        ? "图形图层"
+        : node.uiControl.kind === "radio"
+          ? "UI 控件 / 单选框"
+          : "UI 控件 / 多档选择框";
+  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>${inspectorLabel} Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}${numberField("order", `nodes.${index}.order`, node.order)}${resourceMarkup}<div class="button-row"><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div><p class="hint">${resource?.kind === "popup-object" ? "Popup Object 默认从 Popup order 2000 起分配，必须高于普通图层与 main reel；order 必须唯一。" : "可直接填写高于 main reel 的 order；order 必须唯一，且所有 Popup/Popup Object order 必须更高。"}</p></section><section class="inspector-section"><h3>状态、方向与 Placement</h3><fieldset class="layer-state-scope"><legend>${escapeHtml(scopeLabel)}</legend><label class="visibility"><input type="checkbox" data-layer-global="${escapeHtml(node.id)}" ${node.scope === undefined ? "checked" : ""}/> 所有状态有效</label>${scopeMatrix}<p class="hint">取消全局时先绑定当前编辑状态 ${escapeHtml(modeId)} 的现有 placements；之后可按 mode × orientation 精确调整。</p><div class="layer-state-variants">${ordinaryLayerVariantIds
     .map((variant) => placementMarkup(node, index, variant))
     .join(
       "",

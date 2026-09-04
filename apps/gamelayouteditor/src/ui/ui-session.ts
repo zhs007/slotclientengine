@@ -28,7 +28,7 @@ export type LayoutResourceBindingContext =
 export interface ResourcePickerState {
   context: LayoutResourceBindingContext;
   query: string;
-  type: "all" | "image" | "spine" | "vni" | "image-string";
+  type: "all" | "image" | "spine" | "vni" | "image-string" | "popup-object";
   selectedResourceId: string;
   secondaryResourceId: string;
   nodeId: string;
@@ -48,6 +48,7 @@ export interface EditorUiSession {
     | "spine"
     | "vni"
     | "image-string"
+    | "popup-object"
     | "json"
     | "video"
     | "audio";

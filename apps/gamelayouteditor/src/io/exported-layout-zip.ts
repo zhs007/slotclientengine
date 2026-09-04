@@ -770,6 +770,11 @@ function rewriteLayoutManifestFilenameKeys(
         ...node,
         resource: { ...resource, project: key(resource.project) },
       };
+    if (resource.kind === "popup-object")
+      return {
+        ...node,
+        resource: { ...resource, manifest: key(resource.manifest) },
+      };
     return {
       ...node,
       resource: {

@@ -8,6 +8,7 @@ import {
 import { validateImageStringText } from "../image-string/data/index.js";
 import type { ImageStringResource } from "../image-string/core/index.js";
 import { loadImageStringResourceFromUrl } from "../image-string/package-runtime.js";
+import type { PopupPreparedObject } from "../popup/core/types.js";
 import { SceneLayoutError } from "./errors.js";
 import {
   parseSceneLayoutJsonData,
@@ -37,6 +38,7 @@ export interface CreateSceneLayoutResourceOptions {
   readonly jsonDataModules?: Readonly<Record<string, SceneLayoutJsonData>>;
   readonly ownedObjectUrls?: readonly string[];
   readonly imageStringResources?: Readonly<Record<string, ImageStringResource>>;
+  readonly popupObjectResource?: PopupPreparedObject | null;
   readonly vniResources?: Readonly<
     Record<
       string,
@@ -156,6 +158,17 @@ export function createSceneLayoutResource(
           `Scene layout VNI node "${node.id}" is invalid: ${formatError(error)}`,
         );
       }
+      continue;
+    }
+    if (node.resource.kind === "popup-object") {
+      if (!options.popupObjectResource)
+        throw new SceneLayoutError(
+          `Scene layout Popup Object resource is missing for node "${node.id}".`,
+        );
+      if (manifest.tapInfoObject?.manifest !== node.resource.manifest)
+        throw new SceneLayoutError(
+          `Scene layout Popup Object node "${node.id}" does not reference tapInfoObject.manifest.`,
+        );
       continue;
     }
     skeletonPaths.add(node.resource.skeleton);
@@ -425,6 +438,7 @@ export function createSceneLayoutResource(
     imageUrls: Object.freeze(imageUrls),
     spineResources: Object.freeze(spineResources),
     imageStringResources: Object.freeze({ ...imageStringResources }),
+    popupObjectResource: options.popupObjectResource ?? null,
     vniResources: Object.freeze({ ...vniResources }),
     videoUrls: Object.freeze(videoUrls),
     runtimeResources: Object.freeze(runtimeResources),
@@ -544,6 +558,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       }
       if (resource.kind === "image-string") continue;
       if (resource.kind === "vni") continue;
+      if (resource.kind === "popup-object") continue;
       resourceByPath.set(resource.skeleton, "skeleton");
       resourceByPath.set(resource.atlas, "atlas");
       for (const path of Object.values(resource.textures)) {
@@ -679,7 +694,11 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       (path) =>
         !imageStringResources[path] &&
         !vniResources[path] &&
-        path !== manifest.symbolPackage?.manifest,
+        path !== manifest.symbolPackage?.manifest &&
+        path !==
+          (manifest.version === 7 || manifest.version === 8
+            ? manifest.tapInfoObject?.manifest
+            : undefined),
     )) {
       const assetUrl = resolveContainedAssetUrl(path, manifestUrl);
       const response = await fetchRequired(fetchImpl, assetUrl);

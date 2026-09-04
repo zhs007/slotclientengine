@@ -43,6 +43,7 @@ import {
   type EditorImageStringLayoutResource,
   type EditorJsonLayoutResource,
   type EditorLayoutResource,
+  type EditorPopupObjectLayoutResource,
   type EditorSpineLayoutResource,
   type EditorVniLayoutResource,
   type EditorVideoLayoutResource,
@@ -55,6 +56,7 @@ type EditorLayoutResourceDraft =
   | Omit<EditorAudioLayoutResource, "id">
   | Omit<EditorSpineLayoutResource, "id">
   | Omit<EditorImageStringLayoutResource, "id">
+  | Omit<EditorPopupObjectLayoutResource, "id">
   | Omit<EditorVniLayoutResource, "id">
   | Omit<EditorJsonLayoutResource, "id">
   | Omit<EditorVideoLayoutResource, "id">;
@@ -356,7 +358,10 @@ export function applySymbolPackageCellSize(
 }
 
 export function resolveEditorNodeResource(
-  project: Pick<EditorProject, "resources" | "assets">,
+  project: Pick<
+    EditorProject,
+    "resources" | "assets" | "popupObjectDependencies" | "tapInfoObjectName"
+  >,
   node: EditorGraphicNodeDraft,
 ): SceneLayoutGraphicNode["resource"] {
   const resource = project.resources.get(node.resourceId);
@@ -399,6 +404,20 @@ export function resolveEditorNodeResource(
       project: resource.projectPath,
       loop: node.playback.loop,
     };
+  }
+  if (resource.kind === "popup-object") {
+    if (node.playback !== undefined || node.imageString !== undefined)
+      throw new Error(
+        `Popup Object 节点 ${node.id} 不得声明 playback/imageString。`,
+      );
+    const selected = project.tapInfoObjectName
+      ? project.popupObjectDependencies.get(project.tapInfoObjectName)
+      : null;
+    if (!selected || selected.rootKey !== resource.manifestPath)
+      throw new Error(
+        `Popup Object 节点 ${node.id} 必须引用当前项目绑定的 Tap info 对象。`,
+      );
+    return { kind: "popup-object", manifest: resource.manifestPath };
   }
   if (
     resource.kind === "video" ||
@@ -1498,6 +1517,30 @@ function manifestResourceToEditorResource(
       ),
     };
   }
+  if (resource.kind === "popup-object") {
+    const bytes = requiredAsset(
+      assets.get(resource.manifest),
+      resource.manifest,
+    );
+    const manifest = parsePopupObjectManifest(
+      parseJsonBytes(bytes, resource.manifest),
+    );
+    const mapped = !resource.manifest.includes("/");
+    const prefix = mapped
+      ? ""
+      : resource.manifest.slice(0, resource.manifest.lastIndexOf("/") + 1);
+    return {
+      kind: "popup-object",
+      manifestPath: resource.manifest,
+      manifest,
+      assetPaths: collectMappedPopupObjectKeys(
+        manifest,
+        assets,
+        mapped,
+        prefix,
+      ).map((path) => (mapped ? path : `${prefix}${path}`)),
+    };
+  }
   const skeletonBytes = assets.get(resource.skeleton);
   if (!skeletonBytes)
     throw new Error(`导入缺少 skeleton：${resource.skeleton}`);
@@ -1516,6 +1559,8 @@ function manifestResourceToEditorResource(
 function editorResourceToRuntimeSpec(
   resource: EditorLayoutResource,
 ): SceneLayoutRuntimeResourceSpec {
+  if (resource.kind === "popup-object")
+    throw new Error("Popup Object 只能作为 Scene 图层，不能绑定程序资源键。");
   if (resource.kind === "image")
     return { kind: "image", path: resource.path, size: resource.size };
   if (resource.kind === "json") return { kind: "json", path: resource.path };

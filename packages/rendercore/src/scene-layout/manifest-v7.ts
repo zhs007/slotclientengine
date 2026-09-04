@@ -142,6 +142,18 @@ export function parseSceneLayoutManifestV7(
     const id = String(record(raw, "scene layout node").id);
     return uiControlNodes.get(id) ?? graphicNodes.get(id)!;
   });
+  for (const node of nodes) {
+    if (!("resource" in node) || node.resource.kind !== "popup-object")
+      continue;
+    if (!tapInfoObject)
+      fail(
+        `scene layout popup-object node "${node.id}" requires tapInfoObject.`,
+      );
+    if (node.resource.manifest !== tapInfoObject.manifest)
+      fail(
+        `scene layout popup-object node "${node.id}" must reference tapInfoObject.manifest.`,
+      );
+  }
   validateV7PresentationOrders(nodes, main, parsed.popups);
   const draft = {
     version: 7 as const,
@@ -223,18 +235,29 @@ function validateV7PresentationOrders(
   main: SceneLayoutManifestV7["main"],
   popups: SceneLayoutManifestV7["popups"],
 ): void {
+  const popupObjectNodes = nodes.filter(
+    (node) => "resource" in node && node.resource.kind === "popup-object",
+  );
   const artOrders = [
-    ...nodes.map((node) => node.order),
+    ...nodes
+      .filter((node) => !popupObjectNodes.includes(node))
+      .map((node) => node.order),
     ...(main.order === undefined ? [] : [main.order]),
   ];
   const popupEntries = Object.entries(popups ?? {});
-  const allOrders = [
-    ...artOrders,
+  const popupOrders = [
+    ...popupObjectNodes.map((node) => node.order),
     ...popupEntries.map(([, popup]) => popup.order),
   ];
+  const allOrders = [...artOrders, ...popupOrders];
   if (new Set(allOrders).size !== allOrders.length)
     fail("scene layout node/reel/popup order must be unique.");
   const maximumArtOrder = Math.max(...artOrders, Number.MIN_SAFE_INTEGER);
+  for (const node of popupObjectNodes)
+    if (node.order <= maximumArtOrder)
+      fail(
+        `scene layout popup-object node "${node.id}" order must be greater than every art node/reel order.`,
+      );
   for (const [id, popup] of popupEntries)
     if (popup.order <= maximumArtOrder)
       fail(

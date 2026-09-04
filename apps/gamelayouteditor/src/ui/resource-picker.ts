@@ -17,7 +17,7 @@ import type {
 
 export interface LayoutResourcePickerCandidate {
   readonly resourceId: string;
-  readonly kind: "image" | "spine" | "vni" | "image-string";
+  readonly kind: "image" | "spine" | "vni" | "image-string" | "popup-object";
   readonly primaryPath: string;
   readonly status: "ready" | "incomplete" | "error";
   readonly referenceCount: number;
@@ -142,7 +142,12 @@ function candidateFromResource(
         ? `${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}` : " · 无 export bounds"}`
         : resource.kind === "vni"
           ? `${resource.project.stage.width}×${resource.project.stage.height} · ${resource.project.stage.duration}s · ${resource.assetPaths.length} assets`
-          : `${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
+          : resource.kind === "image-string"
+            ? `${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`
+            : `Popup Object ${resource.manifest.name} · ${resource.assetPaths.length} assets`;
+  const selectedPopupObject = project.tapInfoObjectName
+    ? project.popupObjectDependencies.get(project.tapInfoObjectName)
+    : null;
   return Object.freeze({
     resourceId: resource.id,
     kind: resource.kind,
@@ -150,5 +155,9 @@ function candidateFromResource(
     status: "ready",
     referenceCount,
     summary,
+    ...(resource.kind === "popup-object" &&
+    selectedPopupObject?.rootKey !== resource.manifestPath
+      ? { disabledReason: "请先在项目页设为 Tap info。" }
+      : {}),
   });
 }

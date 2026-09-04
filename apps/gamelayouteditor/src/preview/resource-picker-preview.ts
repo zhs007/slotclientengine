@@ -168,6 +168,13 @@ async function preparePreview(
       })),
       `${resource.id} atlas pages`,
     );
+  if (resource.kind === "popup-object")
+    return {
+      element: emptyPreview(
+        "Popup Object 将在 Scene 预览中按普通图层坐标与 scope 渲染。",
+      ),
+      destroy() {},
+    };
   return {
     element: emptyPreview("video 资源不属于普通图层候选。"),
     destroy() {},

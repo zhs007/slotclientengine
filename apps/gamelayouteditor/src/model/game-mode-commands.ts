@@ -11,7 +11,10 @@ import {
   type EditorGameModeDraft,
   type EditorProject,
 } from "./editor-project.js";
-import { editorResourcePaths } from "./editor-resource.js";
+import {
+  editorResourcePaths,
+  type EditorPopupObjectLayoutResource,
+} from "./editor-resource.js";
 import {
   nextAvailablePopupOrder,
   setPopupOrder as setEditorPopupOrder,
@@ -616,12 +619,18 @@ export function importPopupObjectDependency(
   const name = imported.manifest.name;
   if (project.popupObjectDependencies.has(name))
     throw new Error(`Popup Object dependency ${name} 已存在，可使用替换。`);
+  if (project.resources.has(imported.rootKey))
+    throw new Error(`Popup Object resource id 已存在：${imported.rootKey}`);
   mergeDependencyAssets(project, imported.files);
   project.popupObjectDependencies.set(name, {
     name,
     rootKey: imported.rootKey,
     keys: Object.freeze([...imported.files.keys()].sort()),
   });
+  project.resources.set(
+    imported.rootKey,
+    createPopupObjectLayoutResource(imported),
+  );
 }
 
 export function replacePopupObjectDependency(
@@ -635,6 +644,10 @@ export function replacePopupObjectDependency(
     throw new Error(
       `替换 Popup Object name 必须保持 ${name}，实际为 ${imported.manifest.name}。`,
     );
+  if (imported.rootKey !== current.rootKey)
+    throw new Error(
+      `替换 Popup Object 必须保持 manifest key：${current.rootKey}`,
+    );
   const previousKeys = current.keys;
   mergeDependencyAssets(
     project,
@@ -646,6 +659,10 @@ export function replacePopupObjectDependency(
     rootKey: imported.rootKey,
     keys: Object.freeze([...imported.files.keys()].sort()),
   });
+  project.resources.set(
+    imported.rootKey,
+    createPopupObjectLayoutResource(imported),
+  );
   garbageCollectDependencyAssets(project, previousKeys);
 }
 
@@ -666,6 +683,18 @@ export function deletePopupObjectDependency(
   if (!dependency) throw new Error(`未知 Popup Object dependency：${name}`);
   if (project.tapInfoObjectName === name)
     throw new Error(`Popup Object ${name} 仍被 Tap info 项目配置引用。`);
+  const references = project.nodes
+    .filter(
+      (node) =>
+        node.layerType !== "ui-control" &&
+        node.resourceId === dependency.rootKey,
+    )
+    .map((node) => node.id);
+  if (references.length)
+    throw new Error(
+      `Popup Object ${name} 仍被图层引用：${references.join(", ")}`,
+    );
+  project.resources.delete(dependency.rootKey);
   project.popupObjectDependencies.delete(name);
   garbageCollectDependencyAssets(project, dependency.keys);
 }
@@ -744,7 +773,14 @@ function exclusiveDependencyKeys(
   candidates: readonly string[],
 ): ReadonlySet<string> {
   const ownedElsewhere = new Set([
-    ...[...project.resources.values()].flatMap(editorResourcePaths),
+    ...[...project.resources.values()]
+      .filter(
+        (resource) =>
+          kind !== "popup-object" ||
+          resource.kind !== "popup-object" ||
+          resource.manifest.name !== id,
+      )
+      .flatMap(editorResourcePaths),
     ...[...project.symbolDependencies]
       .filter(([candidateId]) => kind !== "symbols" || candidateId !== id)
       .flatMap(([, dependency]) => dependency.keys),
@@ -756,6 +792,22 @@ function exclusiveDependencyKeys(
       .flatMap(([, dependency]) => dependency.keys),
   ]);
   return new Set(candidates.filter((key) => !ownedElsewhere.has(key)));
+}
+
+function createPopupObjectLayoutResource(
+  imported: ImportedPopupObjectPackage,
+): EditorPopupObjectLayoutResource {
+  return {
+    id: imported.rootKey,
+    kind: "popup-object",
+    manifestPath: imported.rootKey,
+    manifest: imported.manifest,
+    assetPaths: Object.freeze(
+      [...imported.files.keys()]
+        .filter((path) => path !== imported.rootKey)
+        .sort((left, right) => left.localeCompare(right, "en")),
+    ),
+  };
 }
 
 function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {

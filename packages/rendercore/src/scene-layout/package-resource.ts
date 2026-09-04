@@ -725,6 +725,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
         }
         continue;
       }
+      if (resource.kind === "popup-object") continue;
       if (resource.kind === "image") {
         imageModules[resource.path] ??=
           options.resolveAssetUrl?.(resource.path) ??
@@ -886,6 +887,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       jsonDataModules,
       imageStringResources: imageStrings,
       vniResources,
+      popupObjectResource: tapInfoObject,
       ownedObjectUrls: objectUrls,
     });
     const runtimeResources: Record<string, SceneLayoutRuntimeResource> = {

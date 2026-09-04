@@ -5,10 +5,12 @@ import { exportLayoutZip } from "../src/io/exported-layout-zip.js";
 import { importLayoutZip } from "../src/io/imported-layout-zip.js";
 import { importPopupObjectPackageZip } from "../src/io/imported-popup-object-package.js";
 import {
+  createEditorGameModeDraft,
   createNewEditorProject,
   editorProjectToManifest,
   manifestToEditorProject,
 } from "../src/model/editor-project.js";
+import { addLayerFromResource } from "../src/model/resource-commands.js";
 import {
   deletePopupObjectDependency,
   importPopupObjectDependency,
@@ -49,6 +51,10 @@ describe("gamelayout tap info Popup Object dependency", () => {
     const imported = await importPopupObjectPackageZip(await objectZip());
     const project = createNewEditorProject();
     importPopupObjectDependency(project, imported);
+    expect(project.resources.get(imported.rootKey)).toMatchObject({
+      kind: "popup-object",
+      manifestPath: imported.rootKey,
+    });
 
     expect(project.tapInfoObjectName).toBeNull();
     expect(editorProjectToManifest(project)).not.toHaveProperty(
@@ -56,8 +62,37 @@ describe("gamelayout tap info Popup Object dependency", () => {
     );
 
     setTapInfoObjectDependency(project, imported.manifest.name);
+    const node = addLayerFromResource({
+      project,
+      resourceId: imported.rootKey,
+      nodeId: "tap-info",
+      variants: ["landscape", "portrait"],
+    });
+    project.gameModes.modes.push(createEditorGameModeDraft("Splash", false));
+    project.gameModes.splashMode = "Splash";
+    project.gameModes.transitions.push({
+      fromModeId: "Splash",
+      toModeId: "BaseGame",
+      kind: "none",
+      preludePopupId: null,
+    });
+    node.scope = { Splash: ["landscape", "portrait"] };
+    node.placements.landscape = {
+      x: 123,
+      y: 456,
+      scale: 1,
+      rotation: 0,
+      center: { x: 0.5, y: 0.5 },
+    };
     const manifest = editorProjectToManifest(project);
     expect(manifest.tapInfoObject).toEqual({ manifest: imported.rootKey });
+    expect(manifest.nodes[0]).toMatchObject({
+      id: "tap-info",
+      order: 2000,
+      resource: { kind: "popup-object", manifest: imported.rootKey },
+      placements: { landscape: { x: 123, y: 456 } },
+      scope: { Splash: ["landscape", "portrait"] },
+    });
     const markup = projectWorkspaceMarkup(project, []);
     expect(markup).toContain("data-tap-info-object");
     expect(markup).toContain(
@@ -68,6 +103,7 @@ describe("gamelayout tap info Popup Object dependency", () => {
     expect(
       reopened.popupObjectDependencies.get(imported.manifest.name),
     ).toEqual(project.popupObjectDependencies.get(imported.manifest.name));
+    expect(reopened.resources.get(imported.rootKey)?.kind).toBe("popup-object");
 
     const exported = await exportLayoutZip({
       manifest,
@@ -92,6 +128,7 @@ describe("gamelayout tap info Popup Object dependency", () => {
     expect(() =>
       deletePopupObjectDependency(project, imported.manifest.name),
     ).toThrow(/仍被 Tap info/);
+    project.nodes.splice(0);
     setTapInfoObjectDependency(project, null);
     deletePopupObjectDependency(project, imported.manifest.name);
     expect(project.popupObjectDependencies.size).toBe(0);

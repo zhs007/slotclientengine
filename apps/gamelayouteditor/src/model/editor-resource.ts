@@ -3,6 +3,7 @@ import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-s
 import type { EditorResourceProvenance } from "@slotclientengine/browserartifactio";
 import type { VNIProjectConfig } from "@slotclientengine/vnicore/data";
 import type { AudioMediaType } from "@slotclientengine/audiocore/data";
+import type { PopupObjectManifestV1 } from "@slotclientengine/rendercore/popup/editor";
 
 export interface EditorImageLayoutResource {
   readonly id: string;
@@ -76,11 +77,21 @@ export interface EditorVniLayoutResource {
   readonly provenance?: EditorResourceProvenance;
 }
 
+export interface EditorPopupObjectLayoutResource {
+  readonly id: string;
+  readonly kind: "popup-object";
+  readonly manifestPath: string;
+  readonly manifest: PopupObjectManifestV1;
+  readonly assetPaths: readonly string[];
+  readonly provenance?: EditorResourceProvenance;
+}
+
 export type EditorLayoutResource =
   | EditorImageLayoutResource
   | EditorSpineLayoutResource
   | EditorImageStringLayoutResource
   | EditorVniLayoutResource
+  | EditorPopupObjectLayoutResource
   | EditorAudioLayoutResource
   | EditorJsonLayoutResource
   | EditorVideoLayoutResource;
@@ -139,6 +150,14 @@ export function editorResourceSignature(
     });
   }
   if (resource.kind === "image-string") {
+    return JSON.stringify({
+      kind: resource.kind,
+      manifestPath: resource.manifestPath,
+      manifest: resource.manifest,
+      assetPaths: resource.assetPaths,
+    });
+  }
+  if (resource.kind === "popup-object") {
     return JSON.stringify({
       kind: resource.kind,
       manifestPath: resource.manifestPath,

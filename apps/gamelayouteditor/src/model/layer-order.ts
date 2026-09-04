@@ -10,6 +10,15 @@ export function setNodeOrder(
   if (!node) throw new Error(`未知图层：${nodeId}`);
   assertSafeOrder(order, `图层 ${nodeId}`);
   assertUnusedOrder(project, order, { kind: "node", id: nodeId });
+  if (isPopupObjectNode(project, nodeId)) {
+    const maximumArtOrder = maximumArtOrderOf(project);
+    if (order <= maximumArtOrder)
+      throw new Error(
+        `Popup Object 图层 ${nodeId} order 必须大于全部普通图层和 main reel order（当前最大 ${maximumArtOrder}）。`,
+      );
+    node.order = order;
+    return;
+  }
   assertPopupsAboveArt(project, { nodeId, order });
   node.order = order;
 }
@@ -75,6 +84,11 @@ function assertPopupsAboveArt(
       throw new Error(
         `Popup ${popup.id} order ${popup.order} 必须大于全部图层和 main reel order（修改后最大 ${maximumArtOrder}）。`,
       );
+  for (const node of project.nodes)
+    if (isPopupObjectNode(project, node.id) && node.order <= maximumArtOrder)
+      throw new Error(
+        `Popup Object 图层 ${node.id} order ${node.order} 必须大于全部普通图层和 main reel order（修改后最大 ${maximumArtOrder}）。`,
+      );
 }
 
 function maximumArtOrderOf(
@@ -86,14 +100,22 @@ function maximumArtOrderOf(
   } = {},
 ): number {
   return Math.max(
-    ...project.nodes.map((node) =>
-      node.id === replacement.nodeId && replacement.order !== undefined
-        ? replacement.order
-        : node.order,
-    ),
+    ...project.nodes
+      .filter((node) => !isPopupObjectNode(project, node.id))
+      .map((node) =>
+        node.id === replacement.nodeId && replacement.order !== undefined
+          ? replacement.order
+          : node.order,
+      ),
     replacement.reelOrder ?? project.reel.order ?? Number.MIN_SAFE_INTEGER,
     Number.MIN_SAFE_INTEGER,
   );
+}
+
+function isPopupObjectNode(project: EditorProject, nodeId: string): boolean {
+  const node = project.nodes.find((candidate) => candidate.id === nodeId);
+  if (!node || node.layerType === "ui-control") return false;
+  return project.resources.get(node.resourceId)?.kind === "popup-object";
 }
 
 function assertUnusedOrder(

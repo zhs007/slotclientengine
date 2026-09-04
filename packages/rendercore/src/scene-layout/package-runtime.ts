@@ -36,10 +36,6 @@ import {
   type SingleStatePopupRuntime,
   type SpinePopupRuntime,
 } from "../popup/core/index.js";
-import {
-  createPopupObjectInstanceRuntime,
-  type PopupObjectInstanceRuntime,
-} from "../popup/object-runtime.js";
 import type {
   AwardCelebrationSnapshot,
   PopupPackageResource,
@@ -87,7 +83,6 @@ import {
   type SceneLayoutCameraEffectController,
 } from "./camera-effect.js";
 import {
-  DEFAULT_SCENE_LAYOUT_POPUP_ORDER,
   assertSceneLayoutGeometryCompatible,
   parseSceneLayoutManifest,
   parseSceneLayoutManifestDocument,
@@ -499,9 +494,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #videoBlackout = new Graphics();
   readonly #defaultSplashRoot = new Container();
   readonly #defaultSplash = new Graphics();
-  readonly #splashTapInfoRoot = new Container();
-  readonly #splashTapInfo: PopupObjectInstanceRuntime | null;
-  #splashTapInfoActive = false;
   #defaultSplashPending: boolean;
   #startupSplashAction: Promise<void> | null = null;
   #reel: ReelPresentation | null = null;
@@ -619,9 +611,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#resource = resource;
     this.#presentationOnly = presentationOnly;
     this.#document = resource.runtimeManifest;
-    this.#splashTapInfo = resource.tapInfoObject
-      ? createPopupObjectInstanceRuntime({ resource: resource.tapInfoObject })
-      : null;
     this.#defaultSplashPending =
       this.#document.version === 8 &&
       this.#document.gameModes.splashMode === undefined;
@@ -770,14 +759,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       "scene-layout-shared-popup-backdrop",
     );
     this.#popupBackdrop.view.zIndex = Number.MIN_SAFE_INTEGER;
-    this.#splashTapInfoRoot.label = "scene-layout-splash-tap-info";
-    this.#splashTapInfoRoot.eventMode = "none";
-    this.#splashTapInfoRoot.zIndex = DEFAULT_SCENE_LAYOUT_POPUP_ORDER;
-    if (this.#splashTapInfo)
-      this.#splashTapInfoRoot.addChild(this.#splashTapInfo.container);
     this.#popupRoot.addChild(
       this.#popupBackdrop.view,
-      this.#splashTapInfoRoot,
       this.#popupRenderLayerRoot,
     );
     this.#transitionRoot.addChild(this.#transitionRenderLayerRoot);
@@ -900,13 +883,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         ? this.resolveOwnedPopupIds(startupModeId)
         : Object.keys(this.popupPackageManifests());
       const popupPromises = popupIds.map((id) => this.preparePopup(id));
-      const splashTapInfoPromise = this.#splashTapInfo?.init();
-
       await settleAllInOrder([
         layoutPromise,
         ...reelPromises,
         ...popupPromises,
-        ...(splashTapInfoPromise ? [splashTapInfoPromise] : []),
       ]);
       this.assertAlive();
       if (activeBinding && !this.#presentationOnly) {
@@ -946,7 +926,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.requireGameModes().modes.map((mode) => mode.id),
       );
       this.#initialized = true;
-      this.syncSplashTapInfoVisibility();
       this.emitInitialModeEvents(startupModeId);
     } catch (error) {
       this.destroy();
@@ -979,10 +958,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       0,
       viewportSize.width,
       viewportSize.height,
-    );
-    this.#splashTapInfoRoot.position.set(
-      viewportSize.width / 2,
-      viewportSize.height / 2,
     );
     if (
       this.#reel &&
@@ -1121,7 +1096,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.updatePresentationDelayWaiters(deltaSeconds);
     this.#layout.update(deltaSeconds);
     this.#renderObjectMotionRuntime.update(deltaSeconds);
-    if (this.#splashTapInfoActive) this.#splashTapInfo?.update(deltaSeconds);
     if (this.#reel && !this.#hostUpdatesMainReel) {
       const geometry = this.#manifest.main;
       if (this.#reel instanceof RenderGridCellReelSet) {
@@ -2584,7 +2558,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const previous = this.#displayedMode;
     if (previous === modeId) return;
     this.#displayedMode = modeId;
-    this.syncSplashTapInfoVisibility();
     if (previous)
       this.#addressController.emit(
         formatGameLayoutRuntimeAddress(
@@ -2890,10 +2863,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           .finally(() => {
             if (this.#startupSplashAction === action)
               this.#startupSplashAction = null;
-            this.syncSplashTapInfoVisibility();
           });
         this.#startupSplashAction = action;
-        this.syncSplashTapInfoVisibility();
         return action;
       }
       const mode = this.requireMode(this.#stableMode!);
@@ -2915,10 +2886,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           .finally(() => {
             if (this.#startupSplashAction === action)
               this.#startupSplashAction = null;
-            this.syncSplashTapInfoVisibility();
           });
         this.#startupSplashAction = action;
-        this.syncSplashTapInfoVisibility();
         return action;
       }
       const action = "primaryAction" in mode ? mode.primaryAction : undefined;
@@ -3337,9 +3306,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#videoBlackout.destroy();
     this.#defaultSplashRoot.removeChildren();
     this.#defaultSplash.destroy();
-    this.#splashTapInfoActive = false;
-    this.#splashTapInfoRoot.removeChildren();
-    this.#splashTapInfo?.destroy();
     this.#disposeAudioMusicObserver();
     for (const dispose of this.#disposeEventAudioBindings.splice(0)) dispose();
     this.#eventAudioLoopIntents.clear();
@@ -4572,18 +4538,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#defaultSplash
       .rect(0, 0, viewportSize.width, viewportSize.height)
       .fill({ color: 0x000000, alpha: 1 });
-  }
-
-  private syncSplashTapInfoVisibility(): void {
-    if (!this.#splashTapInfo || !this.#initialized) return;
-    const splashMode = this.#document.gameModes.splashMode;
-    const active =
-      this.#startupSplashAction === null &&
-      (this.#defaultSplashPending ||
-        (splashMode !== undefined && this.#displayedMode === splashMode));
-    if (active === this.#splashTapInfoActive) return;
-    this.#splashTapInfoActive = active;
-    this.#splashTapInfo.setActive(active);
   }
 
   private commitActiveTransition(active: ActiveModeTransition): void {

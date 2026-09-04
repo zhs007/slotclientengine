@@ -93,6 +93,131 @@ describe("scene layout manifest v7", () => {
     ).toThrow(/unknown/);
   });
 
+  it("accepts Popup Object only as an explicit node bound to tapInfoObject", () => {
+    const source = emptyLayout();
+    const objectManifest =
+      "dependencies/popup-objects/tap-to-continue/popup-object.manifest.json";
+    const node = {
+      id: "tap-info",
+      order: 2000,
+      resource: { kind: "popup-object" as const, manifest: objectManifest },
+      placements: {
+        landscape: { x: 120, y: 240, scale: 1 },
+        portrait: { x: -40, y: 360, scale: 1 },
+      },
+      scope: { BaseGame: ["landscape" as const] },
+    };
+    const draft = {
+      ...source,
+      nodes: [node],
+      tapInfoObject: { manifest: objectManifest },
+      runtimeAllocation: undefined,
+    };
+    const parsed = parseSceneLayoutManifestV7({
+      ...draft,
+      runtimeAllocation: createSceneLayoutRuntimeAllocation(draft as never),
+    });
+    expect(parsed.nodes[0]).toMatchObject(node);
+
+    const { tapInfoObject: _tapInfoObject, ...withoutTapInfoObject } = draft;
+    expect(() =>
+      parseSceneLayoutManifestV7({
+        ...withoutTapInfoObject,
+        runtimeAllocation: createSceneLayoutRuntimeAllocation(draft as never),
+      }),
+    ).toThrow(/requires tapInfoObject/u);
+    expect(() =>
+      parseSceneLayoutManifestV7({
+        ...draft,
+        tapInfoObject: {
+          manifest:
+            "dependencies/popup-objects/other/popup-object.manifest.json",
+        },
+        runtimeAllocation: createSceneLayoutRuntimeAllocation(draft as never),
+      }),
+    ).toThrow(/must reference tapInfoObject\.manifest/u);
+  });
+
+  it("places an explicit Popup Object node with ordinary center coordinates", async () => {
+    const source = emptyLayout();
+    const objectManifest =
+      "dependencies/popup-objects/tap-to-continue/popup-object.manifest.json";
+    const draft = {
+      ...source,
+      nodes: [
+        {
+          id: "tap-info",
+          order: 2000,
+          resource: {
+            kind: "popup-object" as const,
+            manifest: objectManifest,
+          },
+          placements: {
+            landscape: { x: 120, y: 240, scale: 1 },
+            portrait: { x: -40, y: 360, scale: 1 },
+          },
+        },
+      ],
+      tapInfoObject: { manifest: objectManifest },
+      runtimeAllocation: undefined,
+    };
+    const manifest = parseSceneLayoutManifestV7({
+      ...draft,
+      runtimeAllocation: createSceneLayoutRuntimeAllocation(draft as never),
+    });
+    const popupObjectResource = {
+      kind: "popup-object" as const,
+      manifest: {
+        version: 1 as const,
+        kind: "popup-object" as const,
+        name: "tap-to-continue",
+        resources: {},
+        layers: [],
+      },
+      resource: {
+        manifest: {
+          version: 9 as const,
+          kind: "popup" as const,
+          id: "tap-to-continue",
+          name: "tap-to-continue",
+          type: "single-state" as const,
+          adaptation: {
+            mode: "maximized-focus" as const,
+            focus: { left: 1, right: 1, top: 1, bottom: 1 },
+          },
+          backdrop: {
+            enabled: false,
+            color: "#000000",
+            alpha: 0,
+            visibleStates: ["active" as const],
+          },
+          resources: {},
+          audio: { version: 1 as const, effects: [], cues: [] },
+          singleState: { layers: [] },
+        },
+        resources: {},
+        destroy() {},
+      },
+    };
+    const runtime = createSceneLayoutRuntime({
+      resource: createSceneLayoutResource({
+        manifest,
+        popupObjectResource: popupObjectResource as never,
+      }),
+    });
+    await runtime.init();
+    runtime.applyViewport({ width: 1920, height: 1080 });
+    expect(
+      runtime.container.getChildByLabel("scene-layout-slot:tap-info", true)
+        ?.position,
+    ).toMatchObject({ x: 120, y: 240 });
+    expect(runtime.getRenderObject("tap-info")).toMatchObject({
+      kind: "popup-object",
+    });
+    runtime.update(1 / 60);
+    runtime.destroy();
+  });
+
   it("accepts an empty ordinary-node list and resolves main from center coordinates", () => {
     const manifest = emptyLayout();
     const snapshot = resolveSceneLayoutViewportV7({
