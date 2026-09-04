@@ -15,11 +15,13 @@ import {
   parseSymbolPackageManifest,
 } from "@slotclientengine/rendercore/symbol/data";
 import {
+  collectMappedPopupObjectAssetKeys,
   collectPopupObjectPackagePaths,
   collectPopupPackagePaths,
   parsePopupObjectManifest,
   parsePopupManifest,
   rewritePopupManifestFilenameKeys,
+  rewritePopupObjectManifestFilenameKeys,
 } from "@slotclientengine/rendercore/popup/editor";
 import {
   createDeterministicZip,
@@ -342,7 +344,7 @@ export async function normalizeMappedLayoutFilenameKeys(
   const opaqueJsonDataPaths = collectJsonDataPaths(manifestValue);
   const mapping = createCanonicalFilenameMapping(
     logicalAssets,
-    collectExactSymbolDependencyKeys(manifestValue, logicalAssets),
+    collectExactDependencyKeys(manifestValue, logicalAssets),
   );
   const rewrite = (reference: string): string =>
     rewriteMappedReference(reference, mapping);
@@ -360,14 +362,7 @@ export async function normalizeMappedLayoutFilenameKeys(
       if (isPathBearingJson(raw) || looksLikeVniProject(raw))
         bytes = new TextEncoder().encode(
           `${JSON.stringify(
-            sortValue(
-              isPopupPackageJson(raw)
-                ? rewritePopupManifestFilenameKeys({
-                    manifest: raw,
-                    rewrite,
-                  })
-                : rewriteExactJsonReferences(raw, rewrite),
-            ),
+            sortValue(rewriteLayoutDependencyJson(raw, rewrite)),
             null,
             2,
           )}\n`,
@@ -389,7 +384,7 @@ async function flattenLayoutClosure(
   const opaqueJsonDataPaths = collectJsonDataPaths(manifest);
   const mapping = createCanonicalFilenameMapping(
     closure,
-    collectExactSymbolDependencyKeys(manifest, closure),
+    collectExactDependencyKeys(manifest, closure),
   );
   const virtual = new Map<string, Uint8Array>();
   for (const [path, bytes] of closure) {
@@ -460,9 +455,7 @@ async function flattenLayoutClosure(
     };
     const rewritten = isSymbolPackageJson(raw)
       ? rewriteSymbolPackageManifestFilenameKeys(raw, mapping)
-      : isPopupPackageJson(raw)
-        ? rewritePopupManifestFilenameKeys({ manifest: raw, rewrite })
-        : rewriteExactJsonReferences(raw, rewrite);
+      : rewriteLayoutDependencyJson(raw, rewrite);
     virtual.set(
       mapping.get(sourcePath)!,
       new TextEncoder().encode(
@@ -533,7 +526,7 @@ function createCanonicalFilenameMapping(
   return mapping;
 }
 
-function collectExactSymbolDependencyKeys(
+function collectExactDependencyKeys(
   manifestValue: unknown,
   files: ReadonlyMap<string, Uint8Array>,
 ): ReadonlySet<string> {
@@ -545,6 +538,29 @@ function collectExactSymbolDependencyKeys(
   )
     return result;
   const manifest = manifestValue as Record<string, unknown>;
+  if (
+    isPlainRecord(manifest.tapInfoObject) &&
+    typeof manifest.tapInfoObject.manifest === "string"
+  ) {
+    const rootPath = manifest.tapInfoObject.manifest;
+    // Popup Object is a read-only dependency, just like Symbols. Preserve
+    // its mapped logical keys; content-addressed physical paths are separate.
+    if (!rootPath.includes("/")) {
+      const objectManifest = parsePopupObjectManifest(
+        parseJson(files.get(rootPath), rootPath),
+      );
+      for (const key of [
+        rootPath,
+        ...collectMappedPopupObjectAssetKeys({
+          manifest: objectManifest,
+          files,
+        }),
+      ]) {
+        if (!key.includes("/") && !key.includes("\\"))
+          result.add(assertEditorAssetKey(key));
+      }
+    }
+  }
   const rootPaths: string[] = [];
   if (
     manifest.symbolPackage &&
@@ -597,9 +613,14 @@ function canonicalizeImportedFilenameKey(filename: string): string {
   const dot = normalized.lastIndexOf(".");
   if (dot <= 0 || dot === normalized.length - 1)
     throw new Error(`ZIP filename key 必须包含扩展名：${filename}`);
+  if (
+    /^[A-Za-z0-9._-]+$/u.test(normalized) &&
+    /^[A-Za-z0-9]+$/u.test(normalized.slice(dot + 1))
+  )
+    return assertEditorAssetKey(normalized);
   const stem = canonicalizeImportedFilenamePart(normalized.slice(0, dot));
   const extension = canonicalizeImportedFilenamePart(normalized.slice(dot + 1));
-  if (!/^[a-z0-9]+$/u.test(extension))
+  if (!/^[A-Za-z0-9]+$/u.test(extension))
     throw new Error(`ZIP filename extension 无法规范化：${filename}`);
   return `${stem || "asset"}.${extension}`;
 }
@@ -608,7 +629,7 @@ function canonicalizeImportedFilenamePart(value: string): string {
   let result = "";
   for (const character of value) {
     if (/^[A-Za-z0-9._-]$/u.test(character)) {
-      result += character.toLocaleLowerCase("en-US");
+      result += character;
       continue;
     }
     const codePoint = unicodeScalarValue(character);
@@ -665,13 +686,20 @@ function isSymbolPackageJson(value: unknown): boolean {
   );
 }
 
-function isPopupPackageJson(value: unknown): boolean {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    (value as { readonly kind?: unknown }).kind === "popup",
-  );
+function rewriteLayoutDependencyJson(
+  value: unknown,
+  rewrite: (filenameKey: string) => string,
+): unknown {
+  if (isPlainRecord(value)) {
+    if (value.kind === "popup")
+      return rewritePopupManifestFilenameKeys({ manifest: value, rewrite });
+    if (value.kind === "popup-object")
+      return rewritePopupObjectManifestFilenameKeys({
+        manifest: value,
+        rewrite,
+      });
+  }
+  return rewriteExactJsonReferences(value, rewrite);
 }
 
 function rewriteSymbolPackageManifestFilenameKeys(

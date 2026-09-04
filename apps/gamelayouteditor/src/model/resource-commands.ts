@@ -2051,6 +2051,7 @@ function canonicalRasterFilename(
   detectedExtension: string,
 ): string {
   const basename = canonicalizeUploadFileName(sourceName);
+  if (basename.toLowerCase().endsWith(`.${detectedExtension}`)) return basename;
   return `${basename.replace(/\.[^.]*$/u, "")}.${detectedExtension}`;
 }
 

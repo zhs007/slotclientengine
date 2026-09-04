@@ -302,6 +302,25 @@ export function rewritePopupManifestFilenameKeys(options: {
   return rewritePopupManifestWithMapping(manifest, mapping);
 }
 
+export function rewritePopupObjectManifestFilenameKeys(options: {
+  readonly manifest: unknown;
+  readonly rewrite: (filenameKey: string) => string;
+}): PopupObjectManifestV1 {
+  const manifest = parsePopupObjectManifest(options.manifest);
+  const mapping = new Map(
+    [...new Set(collectPopupObjectDirectPaths(manifest))].map(
+      (path) => [path, options.rewrite(path)] as const,
+    ),
+  );
+  assertNoEditorAssetKeyAliases([...mapping.values()]);
+  return rewritePopupObjectManifestWithMapping({
+    manifest,
+    mapping,
+    sourcePath: POPUP_OBJECT_MANIFEST_PATH,
+    mapped: true,
+  });
+}
+
 export function flattenPopupPackageFiles(options: {
   readonly manifest: unknown;
   readonly files: ReadonlyMap<string, Uint8Array>;

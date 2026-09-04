@@ -5,6 +5,61 @@ import { addGameMode } from "../src/model/game-mode-commands.js";
 import { setLayerScopeGlobal } from "../src/model/resource-commands.js";
 
 describe("EditorStore", () => {
+  it("reuses payloads for configuration edits without copying or scanning bytes", () => {
+    const project = createNewEditorProject();
+    const bytes = new Uint8Array(1024 * 1024);
+    project.assets.set("unused.bin", bytes);
+    const store = new EditorStore(project);
+    const before = store.getSnapshot();
+    const slice = vi.spyOn(bytes, "slice");
+    const every = vi.spyOn(bytes, "every");
+    store.transactConfiguration((draft) => {
+      draft.gameModes.modes[0]!.mainVariants.landscape.x = 42;
+    });
+    expect(store.getSnapshot().project.assets).toBe(before.project.assets);
+    expect(store.getSnapshot().changeKind).toBe("geometry");
+    expect(before.project.gameModes.modes[0]!.mainVariants.landscape.x).toBe(0);
+    expect(slice).not.toHaveBeenCalled();
+    expect(every).not.toHaveBeenCalled();
+  });
+
+  it("rejects payload access in configuration commands and rolls back", () => {
+    const store = new EditorStore(createNewEditorProject());
+    const before = store.getSnapshot();
+    expect(() =>
+      store.transactConfiguration((draft) => {
+        draft.id = "changed";
+        draft.assets.clear();
+      }),
+    ).toThrow("配置事务不能访问资源 bytes");
+    expect(() =>
+      store.transactConfiguration((draft) => {
+        draft.assets = new Map();
+      }),
+    ).toThrow("配置事务不能修改资源 bytes");
+    expect(store.getSnapshot()).toEqual(before);
+  });
+
+  it("keeps byte mutation and failure isolated in full resource transactions", () => {
+    const project = createNewEditorProject();
+    project.assets.set("unused.bin", new Uint8Array([1]));
+    const store = new EditorStore(project);
+    const before = store.getSnapshot();
+    expect(() =>
+      store.transact((draft) => {
+        draft.assets.get("unused.bin")![0] = 2;
+        throw new Error("cancel");
+      }),
+    ).toThrow("cancel");
+    expect(before.project.assets.get("unused.bin")![0]).toBe(1);
+    store.transact((draft) => {
+      draft.assets.get("unused.bin")![0] = 3;
+    });
+    expect(store.getSnapshot().changeKind).toBe("structural");
+    expect(store.getSnapshot().project.assets.get("unused.bin")![0]).toBe(3);
+    expect(before.project.assets.get("unused.bin")![0]).toBe(1);
+  });
+
   it("selects an authoring mode without copying assets or changing the preview revision", () => {
     const project = createNewEditorProject();
     addGameMode(project, "FreeGame");

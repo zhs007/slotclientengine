@@ -25,4 +25,5 @@ export {
   resolvePopupPackageFiles,
   resolvePopupObjectPackageFiles,
   rewritePopupManifestFilenameKeys,
+  rewritePopupObjectManifestFilenameKeys,
 } from "../package-resource.js";

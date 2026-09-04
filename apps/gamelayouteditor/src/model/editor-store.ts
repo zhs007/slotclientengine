@@ -16,6 +16,7 @@ export interface EditorStoreSnapshot {
   readonly externalError: string | null;
   readonly revision: number;
   readonly changeKind: "initial" | "geometry" | "structural";
+  readonly changeSource: "initial" | "transaction" | "replace";
 }
 
 export class EditorStore {
@@ -24,6 +25,7 @@ export class EditorStore {
   #externalError: string | null = null;
   #revision = 0;
   #changeKind: EditorStoreSnapshot["changeKind"] = "initial";
+  #changeSource: EditorStoreSnapshot["changeSource"] = "initial";
   readonly #listeners = new Set<(snapshot: EditorStoreSnapshot) => void>();
 
   constructor(project: EditorProject) {
@@ -39,16 +41,44 @@ export class EditorStore {
       externalError: this.#externalError,
       revision: this.#revision,
       changeKind: this.#changeKind,
+      changeSource: this.#changeSource,
     });
   }
 
   transact(update: (draft: EditorProject) => void): void {
-    const previous = this.#project;
     const draft = cloneEditorProject(this.#project);
     update(draft);
+    this.commitTransaction(draft);
+  }
+
+  /** Configuration commands cannot access payloads; resource edits use transact/replace. */
+  transactConfiguration(update: (draft: EditorProject) => void): void {
+    const draft = cloneEditorProject({ ...this.#project, assets: new Map() });
+    Object.defineProperty(draft, "assets", {
+      configurable: true,
+      get() {
+        throw new Error("配置事务不能访问资源 bytes；请使用资源事务。");
+      },
+      set() {
+        throw new Error("配置事务不能修改资源 bytes；请使用资源事务。");
+      },
+    });
+    update(draft);
+    Object.defineProperty(draft, "assets", {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: this.#project.assets,
+    });
+    this.commitTransaction(draft);
+  }
+
+  private commitTransaction(draft: EditorProject): void {
+    const previous = this.#project;
     synchronizeGameModeNodeStates(draft);
     normalizeGameModeNodeOrders(draft);
     this.#changeKind = classifyProjectChange(previous, draft);
+    this.#changeSource = "transaction";
     this.#project = draft;
     this.#externalError = null;
     this.#revision += 1;
@@ -72,6 +102,7 @@ export class EditorStore {
     this.#project = cloneEditorProject(project);
     normalizeGameModeNodeOrders(this.#project);
     this.#changeKind = "structural";
+    this.#changeSource = "replace";
     this.#externalError = null;
     this.#revision += 1;
     this.validate();
@@ -132,9 +163,11 @@ function sameAssetBytes(
   left: ReadonlyMap<string, Uint8Array>,
   right: ReadonlyMap<string, Uint8Array>,
 ): boolean {
+  if (left === right) return true;
   if (left.size !== right.size) return false;
   for (const [path, bytes] of left) {
     const candidate = right.get(path);
+    if (candidate === bytes) continue;
     if (
       !candidate ||
       candidate.byteLength !== bytes.byteLength ||

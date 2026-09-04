@@ -37,6 +37,85 @@ vi.mock("../../src/image-string/package-runtime.js", async (original) => {
 });
 
 describe("popup package resource", () => {
+  it("rewrites Popup Object resource identities without changing authored text or atlas page names", async () => {
+    const { rewritePopupObjectManifestFilenameKeys } =
+      await import("../../src/popup/editor/index.js");
+    const manifest = {
+      version: 1,
+      kind: "popup-object",
+      name: "tap-info",
+      resources: {
+        "Font.ttf": { kind: "font", path: "Font.ttf" },
+        "BG.json": {
+          kind: "spine",
+          skeleton: "BG.json",
+          atlas: "BG.atlas",
+          textures: { "BG.png": "BG.png" },
+        },
+      },
+      layers: [
+        {
+          id: "label",
+          kind: "text",
+          order: 0,
+          alpha: 1,
+          resource: "Font.ttf",
+          defaultText: "Font.ttf",
+          anchor: { x: 0.5, y: 0.5 },
+          transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+          attachment: { kind: "popup-root" },
+          style: {
+            fontSize: 34,
+            letterSpacing: 0,
+            arcDegrees: 0,
+            fill: { kind: "solid", color: "#ffffff" },
+            widthRange: { minWidth: 0, maxWidth: 0 },
+          },
+        },
+        {
+          id: "background",
+          kind: "spine",
+          order: 1,
+          alpha: 1,
+          resource: "BG.json",
+          transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+          attachment: { kind: "popup-root" },
+        },
+      ],
+    };
+    const before = structuredClone(manifest);
+    const rewritten = rewritePopupObjectManifestFilenameKeys({
+      manifest,
+      rewrite: (key) => key.toLowerCase(),
+    });
+    expect(rewritten.resources).toEqual({
+      "font.ttf": { kind: "font", path: "font.ttf" },
+      "bg.json": {
+        kind: "spine",
+        skeleton: "bg.json",
+        atlas: "bg.atlas",
+        textures: { "BG.png": "bg.png" },
+      },
+    });
+    expect(rewritten.layers[0]).toMatchObject({
+      resource: "font.ttf",
+      defaultText: "Font.ttf",
+    });
+    expect(manifest).toEqual(before);
+    expect(() =>
+      rewritePopupObjectManifestFilenameKeys({
+        manifest,
+        rewrite: () => "collision.ttf",
+      }),
+    ).toThrow();
+    expect(() =>
+      rewritePopupObjectManifestFilenameKeys({
+        manifest: { ...manifest, version: 99 },
+        rewrite: (key) => key,
+      }),
+    ).toThrow();
+  });
+
   it.each(["once", "segmented"] as const)(
     "fills project timing from loaded %s Mega metadata without mutating the source",
     async (mode) => {

@@ -8,7 +8,7 @@ export function canonicalizeUploadFileName(fileName: string): string {
       `文件名 "${fileName}" 非法；只允许 ASCII 字母、数字、点、下划线和连字符。`,
     );
   }
-  return fileName.toLowerCase();
+  return fileName;
 }
 
 export function assertCanonicalUploadFileNames(
@@ -18,12 +18,11 @@ export function assertCanonicalUploadFileNames(
   const sourceByCanonical = new Map<string, string>();
   for (const file of files) {
     const canonical = canonicalizeUploadFileName(file.name);
-    const previous = sourceByCanonical.get(canonical);
+    const collisionKey = canonical.toLocaleLowerCase("en-US");
+    const previous = sourceByCanonical.get(collisionKey);
     if (previous !== undefined)
-      throw new Error(
-        `文件名小写化后冲突："${previous}" / "${file.name}" -> "${canonical}"。`,
-      );
-    sourceByCanonical.set(canonical, file.name);
+      throw new Error(`文件名大小写别名冲突："${previous}" / "${file.name}"。`);
+    sourceByCanonical.set(collisionKey, file.name);
     canonicalBySource.set(file.name, canonical);
   }
   return canonicalBySource;
@@ -34,7 +33,7 @@ export function createAssetPath(fileName: string): string {
 }
 
 export function deriveNodeId(fileName: string): string {
-  const canonical = canonicalizeUploadFileName(fileName);
+  const canonical = canonicalizeUploadFileName(fileName).toLowerCase();
   const dot = canonical.lastIndexOf(".");
   const id = dot <= 0 ? canonical : canonical.slice(0, dot);
   if (!NODE_ID.test(id)) {
@@ -49,31 +48,4 @@ export function assertCanonicalPackagePath(path: string): void {
   if (segments.some((segment) => !SEGMENT.test(segment))) {
     throw new Error(`zip 路径包含非法 segment：${path}`);
   }
-}
-
-export function rewriteAtlasPageNamesToLowercase(atlasText: string): {
-  readonly atlasText: string;
-  readonly pages: readonly string[];
-} {
-  const lines = atlasText.replace(/\r\n?/g, "\n").split("\n");
-  const pages: string[] = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (!line || /^\s/.test(line) || line.includes(":")) continue;
-    const next = lines
-      .slice(index + 1)
-      .find((candidate) => candidate.length > 0);
-    if (!next?.startsWith("size:")) continue;
-    const canonical = canonicalizeUploadFileName(line);
-    lines[index] = canonical;
-    pages.push(canonical);
-  }
-  if (pages.length === 0) throw new Error("Spine atlas 没有可识别的 page。");
-  if (new Set(pages).size !== pages.length) {
-    throw new Error("Spine atlas page 小写化后发生冲突。");
-  }
-  return Object.freeze({
-    atlasText: `${lines.join("\n").replace(/\n+$/u, "")}\n`,
-    pages: Object.freeze(pages),
-  });
 }

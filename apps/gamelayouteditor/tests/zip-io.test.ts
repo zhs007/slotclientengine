@@ -209,7 +209,7 @@ describe("layout zip IO", () => {
     reimported.destroy();
   });
 
-  it("normalizes Popup resource keys together with uppercase root references", async () => {
+  it("preserves Popup resource keys together with uppercase root references", async () => {
     const popupManifest = {
       version: 1,
       kind: "popup",
@@ -262,20 +262,20 @@ describe("layout zip IO", () => {
         ),
       ),
     );
-    expect(rewritten.resources["pkg-2-fg-fg.json"]).toMatchObject({
+    expect(rewritten.resources["pkg-2-fg-FG.json"]).toMatchObject({
       kind: "spine",
-      skeleton: "pkg-2-fg-fg.json",
-      atlas: "pkg-2-fg-bg.atlas",
-      textures: { "BG.png": "pkg-2-fg-bg.png" },
+      skeleton: "pkg-2-fg-FG.json",
+      atlas: "pkg-2-fg-BG.atlas",
+      textures: { "BG.png": "pkg-2-fg-BG.png" },
     });
     if (rewritten.type !== "spine")
       throw new Error("Expected normalized Spine popup.");
-    expect(rewritten.spine.resource).toBe("pkg-2-fg-fg.json");
+    expect(rewritten.spine.resource).toBe("pkg-2-fg-FG.json");
   });
 
-  it("maps uppercase owned filename keys to lowercase hashed package paths", async () => {
+  it("preserves uppercase owned filename keys with lowercase hashed package paths", async () => {
     const key = "BG_2.webp";
-    const canonicalKey = "bg_2.webp";
+    const canonicalKey = key;
     const manifest = {
       ...imageManifest,
       adaptation: {
@@ -419,141 +419,153 @@ describe("layout zip IO", () => {
     const legacyZip = zipSync(Object.fromEntries(entries));
     const imported = await importLayoutZip(legacyZip, { decodeImage });
     expect([...imported.assets.keys()].sort()).toEqual([
-      "u5927-u5956-bg-2.png",
-      "u5927-u5956-bg.png",
+      "u5927-u5956-BG-2.PNG",
+      "u5927-u5956-BG.PNG",
     ]);
     expect(imported.manifest.nodes.map(graphicResource)).toEqual([
-      expect.objectContaining({ path: "u5927-u5956-bg.png" }),
-      expect.objectContaining({ path: "u5927-u5956-bg-2.png" }),
+      expect.objectContaining({ path: "u5927-u5956-BG.PNG" }),
+      expect.objectContaining({ path: "u5927-u5956-BG-2.PNG" }),
     ]);
     imported.destroy();
   });
 
-  it("deterministically round-trips an owned MP4 video transition without re-encoding", async () => {
-    const sourcePath = `assets/${"c".repeat(64)}.mp4`;
-    const mp4 = new Uint8Array([
-      0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109, 1, 2, 3, 4,
-    ]);
-    const manifest = {
-      ...imageManifest,
-      gameModes: {
-        initialMode: "BaseGame",
-        modes: [
-          {
-            id: "BaseGame",
-            backgroundNodes: { default: "bg" },
-            nodeStates: {},
-          },
-          {
-            id: "FreeGame",
-            backgroundNodes: { default: "bg" },
-            nodeStates: {},
-          },
-        ],
-        transitions: [
-          {
-            from: "BaseGame",
-            to: "FreeGame",
-            overlay: {
-              resource: {
-                kind: "video" as const,
-                path: sourcePath,
-                mimeType: "video/mp4" as const,
-              },
-              fit: "contain" as const,
-              fadeOutSeconds: 0.5,
+  it.each([`assets/${"c".repeat(64)}.mp4`, "Intro.MP4"])(
+    "deterministically round-trips owned MP4 %s without re-encoding",
+    async (sourcePath) => {
+      const backgroundPath = sourcePath.includes("/")
+        ? "assets/bg.png"
+        : "bg.png";
+      const mp4 = new Uint8Array([
+        0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109, 1, 2, 3, 4,
+      ]);
+      const manifest = {
+        ...imageManifest,
+        nodes: imageManifest.nodes.map((node) => ({
+          ...node,
+          resource: { ...node.resource, path: backgroundPath },
+        })),
+        gameModes: {
+          initialMode: "BaseGame",
+          modes: [
+            {
+              id: "BaseGame",
+              backgroundNodes: { default: "bg" },
+              nodeStates: {},
             },
-          },
-        ],
-      },
-    };
-    const assets = new Map(assetBytes);
-    assets.set(sourcePath, mp4);
-    const decodeVideo = async () => ({
-      width: 1280,
-      height: 720,
-      durationSeconds: 3.625,
-      hasAudio: true as const,
-    });
-    const first = await exportLayoutZip({
-      manifest,
-      assets,
-      decodeImage,
-      decodeVideo,
-    });
-    const imported = await importLayoutZip(first.bytes, {
-      decodeImage,
-      decodeVideo,
-    });
-    const project = manifestToEditorProject(
-      imported.manifest,
-      imported.assets,
-      imported.videoMetadata,
-    );
-    expect(project.gameModes.transitions).toEqual([
-      expect.objectContaining({
-        kind: "video",
-        fromModeId: "BaseGame",
-        toModeId: "FreeGame",
-        fit: "contain",
-        fadeOutSeconds: 0.5,
-      }),
-    ]);
-    const video = [...project.resources.values()].find(
-      (resource) => resource.kind === "video",
-    );
-    expect(video).toMatchObject({
-      size: { width: 1280, height: 720 },
-      durationSeconds: 3.625,
-      hasAudio: true,
-    });
-    const second = await exportLayoutZip({
-      manifest: editorProjectToManifest(project),
-      assets: project.assets,
-      decodeImage,
-      decodeVideo,
-    });
-    const third = await exportLayoutZip({
-      manifest: editorProjectToManifest(project),
-      assets: project.assets,
-      decodeImage,
-      decodeVideo,
-    });
-    expect(third.bytes).toEqual(second.bytes);
-    const firstEntries = extractBoundedZip(first.bytes);
-    const secondEntries = extractBoundedZip(second.bytes);
-    expect([...secondEntries.keys()]).toEqual([...firstEntries.keys()]);
-    const canonicalManifest = JSON.parse(
-      new TextDecoder().decode(secondEntries.get("layout.manifest.json")),
-    );
-    expect(canonicalManifest.version).toBe(8);
-    expect(canonicalManifest).not.toHaveProperty("coordinateOrigin");
-    expect(canonicalManifest.gameModes.modes[0]).not.toHaveProperty(
-      "reelPlacements",
-    );
-    const importedOverlay =
-      imported.manifest.gameModes!.transitions![0]!.overlay;
-    if (
-      !("resource" in importedOverlay) ||
-      importedOverlay.resource.kind !== "video"
-    )
-      throw new Error("expected video transition");
-    const videoPath = importedOverlay.resource.path;
-    expect(mappedEntry(firstEntries, videoPath)).toEqual(mp4);
-    expect(mappedEntry(secondEntries, videoPath)).toEqual(mp4);
-    imported.destroy();
-
-    const malformed = new Map(assetBytes);
-    malformed.set(sourcePath, new Uint8Array([1, 2, 3]));
-    await expect(
-      exportLayoutZip({
+            {
+              id: "FreeGame",
+              backgroundNodes: { default: "bg" },
+              nodeStates: {},
+            },
+          ],
+          transitions: [
+            {
+              from: "BaseGame",
+              to: "FreeGame",
+              overlay: {
+                resource: {
+                  kind: "video" as const,
+                  path: sourcePath,
+                  mimeType: "video/mp4" as const,
+                },
+                fit: "contain" as const,
+                fadeOutSeconds: 0.5,
+              },
+            },
+          ],
+        },
+      };
+      const assets = new Map([
+        [backgroundPath, assetBytes.get("assets/bg.png")!],
+      ]);
+      assets.set(sourcePath, mp4);
+      const decodeVideo = async () => ({
+        width: 1280,
+        height: 720,
+        durationSeconds: 3.625,
+        hasAudio: true as const,
+      });
+      const first = await exportLayoutZip({
         manifest,
-        assets: malformed,
+        assets,
         decodeImage,
         decodeVideo,
-      }),
-    ).rejects.toThrow(/ISO MP4/);
-  });
+      });
+      const imported = await importLayoutZip(first.bytes, {
+        decodeImage,
+        decodeVideo,
+      });
+      const project = manifestToEditorProject(
+        imported.manifest,
+        imported.assets,
+        imported.videoMetadata,
+      );
+      expect(project.gameModes.transitions).toEqual([
+        expect.objectContaining({
+          kind: "video",
+          fromModeId: "BaseGame",
+          toModeId: "FreeGame",
+          fit: "contain",
+          fadeOutSeconds: 0.5,
+        }),
+      ]);
+      const video = [...project.resources.values()].find(
+        (resource) => resource.kind === "video",
+      );
+      expect(video).toMatchObject({
+        size: { width: 1280, height: 720 },
+        durationSeconds: 3.625,
+        hasAudio: true,
+      });
+      const second = await exportLayoutZip({
+        manifest: editorProjectToManifest(project),
+        assets: project.assets,
+        decodeImage,
+        decodeVideo,
+      });
+      const third = await exportLayoutZip({
+        manifest: editorProjectToManifest(project),
+        assets: project.assets,
+        decodeImage,
+        decodeVideo,
+      });
+      expect(third.bytes).toEqual(second.bytes);
+      const firstEntries = extractBoundedZip(first.bytes);
+      const secondEntries = extractBoundedZip(second.bytes);
+      expect([...secondEntries.keys()]).toEqual([...firstEntries.keys()]);
+      const canonicalManifest = JSON.parse(
+        new TextDecoder().decode(secondEntries.get("layout.manifest.json")),
+      );
+      expect(canonicalManifest.version).toBe(8);
+      expect(canonicalManifest).not.toHaveProperty("coordinateOrigin");
+      expect(canonicalManifest.gameModes.modes[0]).not.toHaveProperty(
+        "reelPlacements",
+      );
+      const importedOverlay =
+        imported.manifest.gameModes!.transitions![0]!.overlay;
+      if (
+        !("resource" in importedOverlay) ||
+        importedOverlay.resource.kind !== "video"
+      )
+        throw new Error("expected video transition");
+      const videoPath = importedOverlay.resource.path;
+      expect(videoPath).toBe(sourcePath.split("/").at(-1));
+      expect(mappedEntry(firstEntries, videoPath)).toEqual(mp4);
+      expect(mappedEntry(secondEntries, videoPath)).toEqual(mp4);
+      imported.destroy();
+
+      const malformed = new Map(assets);
+      malformed.set(sourcePath, new Uint8Array([1, 2, 3]));
+      await expect(
+        exportLayoutZip({
+          manifest,
+          assets: malformed,
+          decodeImage,
+          decodeVideo,
+        }),
+      ).rejects.toThrow(/ISO MP4/);
+    },
+  );
 
   it("deterministically round-trips transition-only Spine resources and directed edges", async () => {
     const skeleton = {
@@ -1474,66 +1486,69 @@ describe("layout zip IO", () => {
     ).rejects.toThrow(/缺少 bytes/);
   });
 
-  it("round-trips a VNI project through the mapped production ZIP", async () => {
-    const project = {
-      schemaVersion: "VNI_0.020",
-      editor: { name: "VNI", version: "VNI_0.020" },
-      engineTarget: { name: "cocos_creator", version: "3.8.6" },
-      name: "layout-vni",
-      exportProfile: {
-        id: "runtime",
-        purpose: "runtime",
-        assetScale: 1,
-      },
-      stage: {
-        width: 100,
-        height: 200,
-        coordinate: "center",
-        duration: 1,
-        backgroundColor: "#000000",
-      },
-      assets: [],
-      layerGroups: [],
-      layers: [],
-      particles: [],
-    };
-    const manifest = {
-      ...imageManifest,
-      nodes: [
-        imageManifest.nodes[0],
-        {
-          id: "vni-fx",
-          order: 1,
-          resource: {
-            kind: "vni" as const,
-            project: "assets/vni/runtime.json",
-            loop: false,
-          },
-          placements: { default: { x: 50, y: 60, scale: 0.75 } },
+  it.each(["assets/vni/runtime.json", "assets/vni/Effect.JSON"])(
+    "round-trips VNI %s through the mapped production ZIP",
+    async (sourcePath) => {
+      const project = {
+        schemaVersion: "VNI_0.020",
+        editor: { name: "VNI", version: "VNI_0.020" },
+        engineTarget: { name: "cocos_creator", version: "3.8.6" },
+        name: "layout-vni",
+        exportProfile: {
+          id: "runtime",
+          purpose: "runtime",
+          assetScale: 1,
         },
-      ],
-    };
-    const exported = await exportLayoutZip({
-      manifest,
-      assets: new Map([
-        ...assetBytes,
-        ["assets/vni/runtime.json", encode(project)],
-      ]),
-      decodeImage,
-    });
-    const imported = await importLayoutZip(exported.bytes, { decodeImage });
-    const importedVniNode = imported.manifest.nodes.find(
-      ({ id }) => id === "vni-fx",
-    );
-    const importedVni = importedVniNode
-      ? graphicResource(importedVniNode)
-      : undefined;
-    expect(importedVni).toMatchObject({ kind: "vni", loop: false });
-    if (importedVni?.kind !== "vni")
-      throw new Error("round-trip VNI node missing");
-    expect(imported.resource.vniResources).toHaveProperty(importedVni.project);
-    imported.destroy();
-  });
+        stage: {
+          width: 100,
+          height: 200,
+          coordinate: "center",
+          duration: 1,
+          backgroundColor: "#000000",
+        },
+        assets: [],
+        layerGroups: [],
+        layers: [],
+        particles: [],
+      };
+      const manifest = {
+        ...imageManifest,
+        nodes: [
+          imageManifest.nodes[0],
+          {
+            id: "vni-fx",
+            order: 1,
+            resource: {
+              kind: "vni" as const,
+              project: sourcePath,
+              loop: false,
+            },
+            placements: { default: { x: 50, y: 60, scale: 0.75 } },
+          },
+        ],
+      };
+      const exported = await exportLayoutZip({
+        manifest,
+        assets: new Map([...assetBytes, [sourcePath, encode(project)]]),
+        decodeImage,
+      });
+      const imported = await importLayoutZip(exported.bytes, { decodeImage });
+      const importedVniNode = imported.manifest.nodes.find(
+        ({ id }) => id === "vni-fx",
+      );
+      const importedVni = importedVniNode
+        ? graphicResource(importedVniNode)
+        : undefined;
+      expect(importedVni).toMatchObject({ kind: "vni", loop: false });
+      if (importedVni?.kind !== "vni")
+        throw new Error("round-trip VNI node missing");
+      expect(importedVni.project).toBe(sourcePath.split("/").at(-1));
+      expect(imported.resource.vniResources).toHaveProperty(
+        importedVni.project,
+      );
+      imported.destroy();
+    },
+  );
 
   it("ignores unconsumed entries and rejects unsafe or noncanonical paths", async () => {
     const manifest = strToU8(`${JSON.stringify(imageManifest)}\n`);

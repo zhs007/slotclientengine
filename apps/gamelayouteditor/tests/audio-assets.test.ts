@@ -240,75 +240,84 @@ describe("audio assets", () => {
     expect(project.assets.has("unused.ogg")).toBe(false);
   });
 
-  it("exports and restores a program-only audio asset", async () => {
-    const project = createProject();
-    const [jingle] = await uploadAudioResources({
-      project,
-      files: [new File([oggBytes], "jingle.ogg", { type: "audio/ogg" })],
-    });
-    bindRuntimeResource(project, jingle!.id, "feature-jingle");
+  it.each(["jingle.ogg", "Jingle.OGG"])(
+    "exports and restores program-only audio %s",
+    async (filename) => {
+      const project = createProject();
+      const [jingle] = await uploadAudioResources({
+        project,
+        files: [new File([oggBytes], filename, { type: "audio/ogg" })],
+      });
+      bindRuntimeResource(project, jingle!.id, "feature-jingle");
 
-    const manifest = editorProjectToManifest(project);
-    expect(manifest.runtimeResources?.["feature-jingle"]).toEqual({
-      kind: "audio",
-      path: "jingle.ogg",
-      mediaType: "audio/ogg",
-    });
-    expect(manifest.audio).toEqual({
-      version: 1,
-      effects: [],
-      music: [],
-      programmaticEffects: [],
-    });
-    expect(manifest.eventAudio.ignoreLegacyAudio).toBe(true);
-    expect(
-      editorProjectToPreviewManifest(project, "default")?.runtimeResources,
-    ).toBeUndefined();
-
-    const session = createEditorUiSession();
-    session.expandedResourceIds.add(jingle!.id);
-    const markup = resourcesWorkspaceMarkup({
-      project,
-      session,
-      thumbnailUrls: new Map(),
-    });
-    expect(markup).toContain('data-runtime-resource-key="jingle.ogg"');
-    expect(markup).toContain("runtime.playEffect(key)");
-    expect(markup).toContain("gamelayout:/audio/effect/feature-jingle");
-    expect(markup).not.toContain("gamelayout:/resource/audio/");
-
-    const exported = await exportLayoutZip({
-      manifest,
-      assets: project.assets,
-      decodeImage: async () => ({ width: 1, height: 1 }),
-    });
-    const entries = extractBoundedZip(exported.bytes);
-    const assetsMap = decodeEditorAssetsMap(entries.get("assets.map.json")!);
-    expect(entries.get(assetsMap.files["jingle.ogg"]!.path)).toEqual(oggBytes);
-
-    const imported = await importLayoutZip(exported.bytes, {
-      decodeImage: async () => ({ width: 1, height: 1 }),
-    });
-    try {
-      await expect(
-        imported.packageResource.loadRuntimeResource("feature-jingle", "audio"),
-      ).resolves.toMatchObject({ kind: "audio", mediaType: "audio/ogg" });
-      const restored = manifestToEditorProject(
-        imported.manifest,
-        imported.assets,
-        imported.videoMetadata,
-      );
-      expect(restored.resources.get("jingle.ogg")).toMatchObject({
+      const manifest = editorProjectToManifest(project);
+      expect(manifest.runtimeResources?.["feature-jingle"]).toEqual({
         kind: "audio",
+        path: filename,
         mediaType: "audio/ogg",
       });
-      expect(getRuntimeResourceKey(restored, "jingle.ogg")).toBe(
-        "feature-jingle",
+      expect(manifest.audio).toEqual({
+        version: 1,
+        effects: [],
+        music: [],
+        programmaticEffects: [],
+      });
+      expect(manifest.eventAudio.ignoreLegacyAudio).toBe(true);
+      expect(
+        editorProjectToPreviewManifest(project, "default")?.runtimeResources,
+      ).toBeUndefined();
+
+      const session = createEditorUiSession();
+      session.expandedResourceIds.add(jingle!.id);
+      const markup = resourcesWorkspaceMarkup({
+        project,
+        session,
+        thumbnailUrls: new Map(),
+      });
+      expect(markup).toContain(`data-runtime-resource-key="${filename}"`);
+      expect(markup).toContain("runtime.playEffect(key)");
+      expect(markup).toContain("gamelayout:/audio/effect/feature-jingle");
+      expect(markup).not.toContain("gamelayout:/resource/audio/");
+
+      const exported = await exportLayoutZip({
+        manifest,
+        assets: project.assets,
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      const entries = extractBoundedZip(exported.bytes);
+      const assetsMap = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+      expect(assetsMap.files[filename]!.path).toMatch(
+        /^assets\/[a-f0-9]{64}\.ogg$/u,
       );
-    } finally {
-      imported.destroy();
-    }
-  });
+      expect(entries.get(assetsMap.files[filename]!.path)).toEqual(oggBytes);
+
+      const imported = await importLayoutZip(exported.bytes, {
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      try {
+        await expect(
+          imported.packageResource.loadRuntimeResource(
+            "feature-jingle",
+            "audio",
+          ),
+        ).resolves.toMatchObject({ kind: "audio", mediaType: "audio/ogg" });
+        const restored = manifestToEditorProject(
+          imported.manifest,
+          imported.assets,
+          imported.videoMetadata,
+        );
+        expect(restored.resources.get(filename)).toMatchObject({
+          kind: "audio",
+          mediaType: "audio/ogg",
+        });
+        expect(getRuntimeResourceKey(restored, filename)).toBe(
+          "feature-jingle",
+        );
+      } finally {
+        imported.destroy();
+      }
+    },
+  );
 
   it("allows the same audio root to be used by Event and program bindings", async () => {
     const project = createProject();

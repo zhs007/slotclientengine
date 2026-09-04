@@ -248,7 +248,12 @@ export class GameLayoutEditorApp {
   readonly #thumbnailUrls = new ObjectUrlRegistry();
   readonly #thumbnailEntries = new Map<
     string,
-    { readonly fingerprint: string; readonly url: string }
+    {
+      readonly fingerprint: string;
+      readonly bytes: Uint8Array;
+      readonly path: string;
+      readonly url: string;
+    }
   >();
   readonly #scrollPositions = new Map<string, number>();
   readonly #resourcePickerPreview = new ResourcePickerPreview();
@@ -266,6 +271,7 @@ export class GameLayoutEditorApp {
   #pendingPreviewSize: { width: number; height: number } | null = null;
   #disposePreviewResizeDrag: (() => void) | null = null;
   #previewModeBusy = false;
+  #previewRefreshing = false;
   #primaryActionPending = false;
   #destroyed = false;
   #symbolPackageMetadata: SymbolPackagePreviewSnapshot | null = null;
@@ -289,6 +295,10 @@ export class GameLayoutEditorApp {
 
   async init(): Promise<void> {
     this.#root.innerHTML = shellMarkup();
+    this.requireElement(".preview-toolbar").insertAdjacentHTML(
+      "afterbegin",
+      '<button type="button" data-refresh-preview>刷新预览</button><output data-preview-refresh-status aria-live="polite"></output>',
+    );
     this.requireElement("[data-new-project-dialog] p").textContent =
       "默认只创建 BaseGame；编辑预览直接显示所选状态。游戏运行时在未配置 Splash 时显示默认黑 Splash。";
     const previewHost = this.requireElement("[data-preview-host]");
@@ -303,17 +313,27 @@ export class GameLayoutEditorApp {
     this.bindStaticActions();
     this.#unsubscribe = this.#store.subscribe((snapshot) => {
       this.renderWorkspace(snapshot);
-      this.syncSymbolPreviewGrid(snapshot.project);
       if (snapshot.revision !== this.#lastPreviewProjectRevision) {
         const previousRevision = this.#lastPreviewProjectRevision;
         this.#lastPreviewProjectRevision = snapshot.revision;
         if (
           snapshot.changeKind === "geometry" &&
+          !this.#previewRefreshing &&
           this.#previewReadyProjectRevision === previousRevision
         )
           void this.refreshPreviewGeometry(snapshot);
-        else void this.refreshPreview(snapshot);
+        else if (snapshot.changeSource !== "transaction")
+          void this.refreshPreview(snapshot);
+        else {
+          this.#session.previewTransition = {
+            phase: "idle",
+            message: "配置已修改，请点击刷新预览。",
+          };
+          void this.ensurePreviewTransitionPrepared();
+          this.renderPopupControls(snapshot);
+        }
       }
+      this.renderPreviewRefreshStatus();
     });
   }
 
@@ -340,6 +360,13 @@ export class GameLayoutEditorApp {
   }
 
   private bindStaticActions(): void {
+    this.requireElement("[data-refresh-preview]").addEventListener(
+      "click",
+      () => {
+        if (!this.#previewRefreshing)
+          void this.refreshPreview(this.#store.getSnapshot());
+      },
+    );
     const newDialog = this.requireElement(
       "[data-new-project-dialog]",
     ) as HTMLDialogElement;
@@ -562,8 +589,10 @@ export class GameLayoutEditorApp {
       if (!this.#selectedPopupId) return;
       const removedPopupId = this.#selectedPopupId;
       if (
-        !this.runTransaction((project) =>
-          deletePopupDependency(project, removedPopupId),
+        !this.runTransaction(
+          (project) => deletePopupDependency(project, removedPopupId),
+          undefined,
+          true,
         )
       )
         return;
@@ -688,7 +717,7 @@ export class GameLayoutEditorApp {
           if (!name) throw new Error("请选择 reel set。");
           this.#symbolPackageMetadata =
             this.#preview?.setSelectedReelSet(name) ?? null;
-          this.#store.transact((draft) => {
+          this.#store.transactConfiguration((draft) => {
             const mode = draft.gameModes.modes.find(
               (candidate) => candidate.id === this.#selectedGameMode,
             );
@@ -1002,7 +1031,9 @@ export class GameLayoutEditorApp {
         storeSnapshot.errors[0] ??
         "当前配置尚未形成可切换的 package preview；请先修复项目错误。";
     } else if (this.#previewReadyProjectRevision !== storeSnapshot.revision) {
-      idleMessage = "正在重建当前项目预览。";
+      idleMessage = this.#previewRefreshing
+        ? "正在重建当前项目预览。"
+        : "配置已修改，请点击刷新预览。";
     } else if (target === runtimeSnapshot.stableMode) {
       idleMessage = `当前已是 ${target}`;
     }
@@ -1681,8 +1712,11 @@ export class GameLayoutEditorApp {
     );
     const activePopupAddress = this.#preview?.getActivePopupAddress?.() ?? null;
     const popupActive = activePopupAddress !== null;
+    const previewCurrent =
+      this.#previewReadyProjectRevision === this.#store.getSnapshot().revision;
     const transitionReady = Boolean(
       modeSnapshot &&
+      previewCurrent &&
       this.#session.previewTransition.phase === "ready" &&
       this.#session.previewTransition.from === modeSnapshot.stableMode &&
       this.#session.previewTransition.to === this.#selectedPreviewMode,
@@ -1702,6 +1736,7 @@ export class GameLayoutEditorApp {
     );
     (this.requireElement("[data-play-popup]") as HTMLButtonElement).disabled =
       Boolean(
+        !previewCurrent ||
         transitioning ||
         (!stableMode?.awardCelebrationPopupId &&
           !selectedProgrammaticPopupReady),
@@ -2069,6 +2104,7 @@ export class GameLayoutEditorApp {
           this.runTransaction(
             (draft) => deleteLayoutResource(draft, id),
             `已删除资源 ${id}。`,
+            true,
           );
         }),
       );
@@ -2125,7 +2161,9 @@ export class GameLayoutEditorApp {
             this.#session.selection?.kind === "layer" &&
             this.#session.selection.nodeId === previous;
           try {
-            this.#store.transact((draft) => renameNode(draft, previous, next));
+            this.#store.transactConfiguration((draft) =>
+              renameNode(draft, previous, next),
+            );
             if (wasSelectedLayer) {
               this.#session.selection = { kind: "layer", nodeId: next };
             }
@@ -2441,8 +2479,10 @@ export class GameLayoutEditorApp {
           "[data-popup-object-library]",
         )?.value;
         if (!name) return;
-        this.runTransaction((draft) =>
-          deletePopupObjectDependency(draft, name),
+        this.runTransaction(
+          (draft) => deletePopupObjectDependency(draft, name),
+          undefined,
+          true,
         );
       });
   }
@@ -2492,7 +2532,7 @@ export class GameLayoutEditorApp {
     const index = layers.findIndex((node) => node.id === nodeId);
     const next = layers[index + 1] ?? layers[index - 1];
     try {
-      this.#store.transact((draft) => removeLayer(draft, nodeId));
+      this.#store.transactConfiguration((draft) => removeLayer(draft, nodeId));
       this.#session.selection = next
         ? { kind: "layer", nodeId: next.id }
         : { kind: "reel", reelId: "main" };
@@ -2789,7 +2829,7 @@ export class GameLayoutEditorApp {
     try {
       if (state.context.kind === "add-layer") {
         let nodeId = state.nodeId;
-        this.#store.transact((draft) => {
+        this.#store.transactConfiguration((draft) => {
           const node = addLayerFromResource({
             project: draft,
             resourceId: resource.id,
@@ -2819,7 +2859,7 @@ export class GameLayoutEditorApp {
         const on = project.resources.get(state.secondaryResourceId);
         if (!on) throw new Error("请选择单选框 on 图片。");
         let nodeId = state.nodeId;
-        this.#store.transact((draft) => {
+        this.#store.transactConfiguration((draft) => {
           const node = addRadioControlLayer({
             project: draft,
             offResourceId: resource.id,
@@ -2840,7 +2880,7 @@ export class GameLayoutEditorApp {
         const thumb = project.resources.get(state.secondaryResourceId);
         if (!thumb) throw new Error("请选择多档选择框 thumb 图片。");
         let nodeId = state.nodeId;
-        this.#store.transact((draft) => {
+        this.#store.transactConfiguration((draft) => {
           const node = addStepSliderControlLayer({
             project: draft,
             trackResourceId: resource.id,
@@ -2861,7 +2901,7 @@ export class GameLayoutEditorApp {
       }
       if (state.context.kind === "rebind-layer") {
         const context = state.context;
-        this.#store.transact((draft) =>
+        this.#store.transactConfiguration((draft) =>
           rebindLayerResource({
             project: draft,
             nodeId: context.nodeId,
@@ -2883,7 +2923,7 @@ export class GameLayoutEditorApp {
       }
       if (state.context.kind === "rebind-radio") {
         const context = state.context;
-        this.#store.transact((draft) =>
+        this.#store.transactConfiguration((draft) =>
           rebindRadioControlResource({
             project: draft,
             nodeId: context.nodeId,
@@ -2900,7 +2940,7 @@ export class GameLayoutEditorApp {
       }
       if (state.context.kind === "rebind-step-slider") {
         const context = state.context;
-        this.#store.transact((draft) =>
+        this.#store.transactConfiguration((draft) =>
           rebindStepSliderControlResource({
             project: draft,
             nodeId: context.nodeId,
@@ -3350,6 +3390,9 @@ export class GameLayoutEditorApp {
   }
 
   private async refreshPreview(snapshot: EditorStoreSnapshot): Promise<void> {
+    this.#previewRefreshing = true;
+    this.renderPreviewRefreshStatus();
+    this.syncSymbolPreviewGrid(snapshot.project);
     this.#previewModeRequest += 1;
     this.#previewPrepareRequest += 1;
     this.#previewPrepareIdentity = null;
@@ -3382,6 +3425,8 @@ export class GameLayoutEditorApp {
           "当前配置尚未形成可切换的 package preview；请先修复项目错误。",
       };
       this.renderWorkspace(this.#store.getSnapshot());
+      this.#previewRefreshing = false;
+      this.renderPreviewRefreshStatus();
       return;
     }
     try {
@@ -3395,8 +3440,9 @@ export class GameLayoutEditorApp {
       );
       if (revision !== this.#previewRevision) return;
       await this.#preview?.setLayout(manifest, assets);
-      if (revision === this.#previewRevision) {
+      if (revision === this.#previewRevision && !this.#destroyed) {
         this.#previewReadyProjectRevision = snapshot.revision;
+        if (snapshot.revision !== this.#store.getSnapshot().revision) return;
         if (this.#followEditMode) {
           await this.selectAuthoringPreviewMode(this.#selectedGameMode, false);
           return;
@@ -3406,7 +3452,8 @@ export class GameLayoutEditorApp {
         await this.ensurePreviewTransitionPrepared();
       }
     } catch (error) {
-      if (revision === this.#previewRevision) {
+      if (revision === this.#previewRevision && !this.#destroyed) {
+        this.#previewReadyProjectRevision = -1;
         this.#session.previewTransition = {
           phase: "error",
           message: formatUiError(error),
@@ -3414,7 +3461,30 @@ export class GameLayoutEditorApp {
         this.#preview?.clear();
         this.#store.setExternalError(error);
       }
+    } finally {
+      if (revision === this.#previewRevision && !this.#destroyed) {
+        this.#previewRefreshing = false;
+        this.renderPreviewRefreshStatus();
+        if (snapshot.revision !== this.#store.getSnapshot().revision)
+          void this.ensurePreviewTransitionPrepared();
+      }
     }
+  }
+
+  private renderPreviewRefreshStatus(): void {
+    const snapshot = this.#store.getSnapshot();
+    const stale = snapshot.revision !== this.#previewReadyProjectRevision;
+    const button = this.requireElement(
+      "[data-refresh-preview]",
+    ) as HTMLButtonElement;
+    button.disabled = this.#previewRefreshing;
+    button.textContent = this.#previewRefreshing ? "刷新中…" : "刷新预览";
+    this.requireElement("[data-preview-refresh-status]").textContent = this
+      .#previewRefreshing
+      ? "正在刷新预览"
+      : stale
+        ? "预览未同步 · 点击刷新预览应用修改"
+        : "预览已同步";
   }
 
   private async refreshPreviewGeometry(
@@ -3437,6 +3507,7 @@ export class GameLayoutEditorApp {
     try {
       this.#preview?.applyGeometryManifest(manifest);
       this.#previewReadyProjectRevision = snapshot.revision;
+      this.syncSymbolPreviewGrid(snapshot.project);
       this.renderPopupControls(this.#store.getSnapshot());
       await this.ensurePreviewTransitionPrepared();
     } catch (error) {
@@ -4034,9 +4105,11 @@ export class GameLayoutEditorApp {
   private runTransaction(
     update: (draft: EditorProject) => void,
     successMessage?: string,
+    resourceEdit = false,
   ): boolean {
     try {
-      this.#store.transact(update);
+      if (resourceEdit) this.#store.transact(update);
+      else this.#store.transactConfiguration(update);
       if (successMessage) this.showFeedback(successMessage);
       return true;
     } catch (error) {
@@ -4078,14 +4151,23 @@ export class GameLayoutEditorApp {
       desired.add(resource.id);
       const bytes = project.assets.get(resource.path);
       if (!bytes) continue;
-      const fingerprint = `${resource.path}:${ephemeralContentFingerprint(bytes)}`;
       const current = this.#thumbnailEntries.get(resource.id);
-      if (current?.fingerprint === fingerprint) continue;
+      if (current?.bytes === bytes && current.path === resource.path) continue;
+      const fingerprint = `${resource.path}:${ephemeralContentFingerprint(bytes)}`;
+      if (current?.fingerprint === fingerprint) {
+        this.#thumbnailEntries.set(resource.id, { ...current, bytes });
+        continue;
+      }
       if (current) this.#thumbnailUrls.revoke(current.url);
       const url = this.#thumbnailUrls.create(
         new Blob([bytes as BlobPart], { type: mimeType(resource.path) }),
       );
-      this.#thumbnailEntries.set(resource.id, { fingerprint, url });
+      this.#thumbnailEntries.set(resource.id, {
+        fingerprint,
+        bytes,
+        path: resource.path,
+        url,
+      });
     }
     for (const [id, entry] of this.#thumbnailEntries) {
       if (desired.has(id)) continue;

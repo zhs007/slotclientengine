@@ -24,7 +24,7 @@
 
 ## Import boundary
 
-- Game Layout Editor 的 loose-file 上传必须在解析前整批校验 ASCII filename 并统一小写；中文、空格、非法字符或小写化 collision 使整批原子失败。完整 mapped Editor ZIP 按 map 路由提取 typed manifest 实际引用闭包后迁移 Layout-owned logical filename key：NFKC、ASCII 合法字符小写、ASCII 非法字符转连字符、非 ASCII 转稳定 Unicode code-point token，collision 按稳定顺序加扩展名前 suffix；只结构化改写已知 manifest path 引用，不修改业务 identity 或 atlas page logical name。SymbolsEditor 已验证合法的 owner-owned filename key 在 Game Layout Editor 导入、替换、导出和重导时保持 exact case；与全局其它 owner 形成大小写 alias 时显式失败。
+- Game Layout Editor 的 loose-file 上传必须在解析前整批校验 ASCII filename 并保留原始大小写（包括扩展名）；中文、空格、非法字符或大小写 alias 使整批原子失败。完整 mapped Editor ZIP 按 map 路由提取 typed manifest 实际引用闭包；合法 Layout-owned logical filename key 同样保持 exact case。旧非法 filename key 的迁移仍使用 NFKC、ASCII 非法字符转连字符、非 ASCII 转稳定 Unicode code-point token，保留 ASCII 字母大小写，collision 按稳定顺序加扩展名前 suffix；只结构化改写已知 manifest path 引用，不修改业务 identity 或 atlas page logical name。Symbols/Popup/Popup Object 等依赖中的合法 filename key 在 Game Layout Editor 导入、替换、导出和重导时保持 exact case；与全局其它 owner 形成大小写 alias 时显式失败。physical hash path 的小写规则不影响 logical filename key。
 - legacy path 只允许在导入边界迁移，不进入新 draft 或重新导出。
 - 导入时移除 Finder `__MACOSX/**`、`._*`、`.DS_Store` 和恰好一层包裹真实 root manifest 的外目录。
 - owner Editor 重开自身项目与 export/build checker 仍严格验证真实 package path、map、hash、缺失文件和 orphan payload；consumer Editor vendoring 已导出的 Symbols、Popup、Image String 或 Scene Layout 时只按 typed manifest 与 assets map 路由物化实际引用闭包，不比较 hash/byteLength/content-addressed filename，也不因未消费的 map entry 或 ZIP entry 阻断导入。实际引用缺失、路径不安全、schema/parser/decoder 不兼容仍在消费点显式失败；元数据和包裹目录不得进入 workspace。

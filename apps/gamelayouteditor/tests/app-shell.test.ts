@@ -188,6 +188,94 @@ describe("GameLayoutEditorApp current workspace", () => {
     app.destroy();
   });
 
+  it("keeps edits made during a refresh pending and coalesces repeated refresh clicks", async () => {
+    const { app, root } = await createApp();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLButtonElement>("[data-refresh-preview]")!
+          .disabled,
+      ).toBe(false),
+    );
+    root
+      .querySelector<HTMLButtonElement>('[data-workspace-tab="layout"]')!
+      .click();
+    const editColumns = (value: string) => {
+      const input = root.querySelector<HTMLInputElement>(
+        '[data-number="reel.columns"]',
+      )!;
+      input.value = value;
+      input.dispatchEvent(new Event("change"));
+    };
+    previewSpies.setLayout.mockClear();
+    editColumns("6");
+    expect(previewSpies.setLayout).not.toHaveBeenCalled();
+    let complete!: () => void;
+    previewSpies.setLayout.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const refresh = root.querySelector<HTMLButtonElement>(
+      "[data-refresh-preview]",
+    )!;
+    refresh.click();
+    refresh.click();
+    expect(previewSpies.setLayout).toHaveBeenCalledTimes(1);
+    expect(refresh.disabled).toBe(true);
+    editColumns("7");
+    complete();
+    await vi.waitFor(() => expect(refresh.disabled).toBe(false));
+    expect(
+      root.querySelector("[data-preview-refresh-status]")!.textContent,
+    ).toContain("预览未同步");
+    refresh.click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector("[data-preview-refresh-status]")!.textContent,
+      ).toBe("预览已同步"),
+    );
+    expect(previewSpies.setLayout).toHaveBeenCalledTimes(2);
+    expect(previewSpies.setLayout).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        main: expect.objectContaining({ columns: 7 }),
+      }),
+      expect.any(Map),
+    );
+    app.destroy();
+  });
+
+  it("allows retrying failed refreshes and ignores completion after destroy", async () => {
+    const { app, root } = await createApp();
+    const refresh = root.querySelector<HTMLButtonElement>(
+      "[data-refresh-preview]",
+    )!;
+    await vi.waitFor(() => expect(refresh.disabled).toBe(false));
+    previewSpies.setLayout.mockRejectedValueOnce(new Error("refresh failed"));
+    refresh.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-errors]")!.textContent).toContain(
+        "refresh failed",
+      ),
+    );
+    expect(refresh.disabled).toBe(false);
+    expect(
+      root.querySelector("[data-preview-refresh-status]")!.textContent,
+    ).toContain("预览未同步");
+    let complete!: () => void;
+    previewSpies.setLayout.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    refresh.click();
+    app.destroy();
+    complete();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(root.childElementCount).toBe(0);
+  });
+
   it("creates only a centered, untyped BaseGame project", async () => {
     const { app, root } = await createApp();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
@@ -231,6 +319,7 @@ describe("GameLayoutEditorApp current workspace", () => {
     expect(
       root.querySelector("[data-mode-dialog-feedback]")!.textContent,
     ).toContain("未配置转场时直接进入 BaseGame");
+    root.querySelector<HTMLButtonElement>("[data-refresh-preview]")!.click();
     await vi.waitFor(() =>
       expect(previewSpies.setLayout).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -372,7 +461,13 @@ describe("GameLayoutEditorApp current workspace", () => {
       '[data-layer-node-id="base-bg"][data-layer-scope-mode="FreeGame"][data-layer-scope-variant="landscape"]',
     ) as HTMLInputElement;
     expect(freeLandscape.checked).toBe(false);
+    previewSpies.setLayout.mockClear();
     freeLandscape.click();
+    expect(previewSpies.setLayout).not.toHaveBeenCalled();
+    expect(
+      root.querySelector("[data-preview-refresh-status]")!.textContent,
+    ).toContain("预览未同步");
+    root.querySelector<HTMLButtonElement>("[data-refresh-preview]")!.click();
 
     await vi.waitFor(() => {
       const lastCall = previewSpies.setLayout.mock.lastCall as unknown as
@@ -384,6 +479,39 @@ describe("GameLayoutEditorApp current workspace", () => {
         FreeGame: ["landscape"],
       });
     });
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLButtonElement>("[data-refresh-preview]")!
+          .disabled,
+      ).toBe(false),
+    );
+    previewSpies.setLayout.mockClear();
+    previewSpies.applyGeometryManifest.mockClear();
+    root
+      .querySelector<HTMLInputElement>('[data-layer-global="base-bg"]')!
+      .click();
+    const x = root.querySelector<HTMLInputElement>(
+      '[data-number="nodes.0.placements.landscape.x"]',
+    )!;
+    x.value = "18";
+    x.dispatchEvent(new Event("change"));
+    expect(previewSpies.setLayout).not.toHaveBeenCalled();
+    expect(previewSpies.applyGeometryManifest).not.toHaveBeenCalled();
+    expect(root.querySelector("[data-errors]")!.textContent).toBe("");
+    root.querySelector<HTMLButtonElement>("[data-refresh-preview]")!.click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector<HTMLButtonElement>("[data-refresh-preview]")!
+          .disabled,
+      ).toBe(false),
+    );
+    const finalManifest = (
+      previewSpies.setLayout.mock.lastCall as unknown as [
+        ReturnType<typeof editorProjectToManifest>,
+      ]
+    )[0];
+    expect(finalManifest.nodes[0]).not.toHaveProperty("scope");
+    expect(finalManifest.nodes[0]?.placements.landscape?.x).toBe(18);
     expect(destroyImported).toHaveBeenCalledTimes(1);
     app.destroy();
     click.mockRestore();

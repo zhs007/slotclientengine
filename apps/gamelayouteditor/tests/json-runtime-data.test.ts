@@ -96,60 +96,62 @@ describe("Game Layout Editor JSON program assets", () => {
     expect(editorProjectToManifest(project).runtimeResources).toBeUndefined();
   });
 
-  it("round-trips opaque bytes through the mapped production ZIP", async () => {
-    const mappedManifest = {
-      ...imageManifest,
-      nodes: imageManifest.nodes.map((node) => ({
-        ...node,
-        resource: { ...node.resource, path: "bg.png" },
-      })),
-    };
-    const project = manifestToEditorProject(
-      mappedManifest,
-      new Map([["bg.png", assetBytes.get("assets/bg.png")!]]),
-    );
-    const source = new TextEncoder().encode(
-      '{"kind":"popup","path":"bg.png","localReels":[["A"]]}\n',
-    );
-    const [resource] = await uploadJsonDataResources({
-      project,
-      files: [new File([source as BlobPart], "spin-config.json")],
-    });
-    bindRuntimeResource(project, resource!.id, "spin-config");
-
-    const exported = await exportLayoutZip({
-      manifest: editorProjectToManifest(project),
-      assets: project.assets,
-      decodeImage,
-    });
-    const entries = extractBoundedZip(exported.bytes);
-    const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
-    const packagedPath = map.files["spin-config.json"]!.path;
-    expect(entries.get(packagedPath)).toEqual(source);
-
-    const imported = await importLayoutZip(exported.bytes, { decodeImage });
-    try {
-      expect(
-        await imported.packageResource.loadJsonData("spin-config"),
-      ).toEqual({
-        kind: "popup",
-        path: "bg.png",
-        localReels: [["A"]],
-      });
-      const restored = manifestToEditorProject(
-        imported.manifest,
-        imported.assets,
+  it.each(["spin-config.json", "Spin-Config.JSON"])(
+    "round-trips opaque %s bytes through the mapped production ZIP",
+    async (filename) => {
+      const mappedManifest = {
+        ...imageManifest,
+        nodes: imageManifest.nodes.map((node) => ({
+          ...node,
+          resource: { ...node.resource, path: "bg.png" },
+        })),
+      };
+      const project = manifestToEditorProject(
+        mappedManifest,
+        new Map([["bg.png", assetBytes.get("assets/bg.png")!]]),
       );
-      expect(restored.resources.get("spin-config.json")).toMatchObject({
-        kind: "json",
-        rootKind: "object",
-      });
-      expect(getRuntimeResourceKey(restored, "spin-config.json")).toBe(
-        "spin-config",
+      const source = new TextEncoder().encode(
+        '{"kind":"popup","path":"bg.png","localReels":[["A"]]}\n',
       );
-      expect(restored.assets.get("spin-config.json")).toEqual(source);
-    } finally {
-      imported.destroy();
-    }
-  });
+      const [resource] = await uploadJsonDataResources({
+        project,
+        files: [new File([source as BlobPart], filename)],
+      });
+      bindRuntimeResource(project, resource!.id, "spin-config");
+
+      const exported = await exportLayoutZip({
+        manifest: editorProjectToManifest(project),
+        assets: project.assets,
+        decodeImage,
+      });
+      const entries = extractBoundedZip(exported.bytes);
+      const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+      const packagedPath = map.files[filename]!.path;
+      expect(packagedPath).toMatch(/^assets\/[a-f0-9]{64}\.json$/u);
+      expect(entries.get(packagedPath)).toEqual(source);
+
+      const imported = await importLayoutZip(exported.bytes, { decodeImage });
+      try {
+        expect(
+          await imported.packageResource.loadJsonData("spin-config"),
+        ).toEqual({
+          kind: "popup",
+          path: "bg.png",
+          localReels: [["A"]],
+        });
+        const restored = manifestToEditorProject(
+          imported.manifest,
+          imported.assets,
+        );
+        expect(restored.resources.get(filename)).toMatchObject({
+          kind: "json",
+          rootKind: "object",
+        });
+        expect(getRuntimeResourceKey(restored, filename)).toBe("spin-config");
+        expect(restored.assets.get(filename)).toEqual(source);
+      } finally {
+        imported.destroy();
+      }
+    },
+  );
 });

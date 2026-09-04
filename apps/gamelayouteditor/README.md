@@ -9,6 +9,8 @@ runtime 可按图层 id 调用 `getUiControl(id)`，或解析 `gamelayout:/ui-co
 
 ## 中心坐标与 per-mode 可见性
 
+预览区上方提供“刷新预览”。修改图层“所有状态有效”、mode × orientation scope、资源绑定或转场等结构配置后，draft 立即更新，画布保留上次预览并提示“预览未同步”；点击按钮统一重建。已有待刷新修改时，后续坐标修改也一起等待刷新。预览已同步时，坐标、focus 和 Popup placement 等 geometry-only 修改仍实时应用；缩放和页面尺寸调整不重建。首次加载、新建或导入替换项目自动准备预览。导出使用当前 draft，不要求先刷新预览。
+
 Scene Layout v8 继承 v7 的固定中心坐标。root `main` 保存 grid，每个 mode 显式保存 `main.enabled` 以及
 landscape/portrait 的 main center、absolute focusRect 和可选 margin。Editor 以相对 main 四边的
 `left/top/right/bottom` 外扩量编辑 focus（正数外扩、负数内缩），导入时从 absolute focusRect 反算，
@@ -57,7 +59,7 @@ package/binding、transition kind等immutable structure变化才自动重建prev
 
 Editor draft 只保存中心 main 坐标和 focus 四边外扩量；legacy top-left/artSize 仅在 RenderCore upgrader 输入中存在，不进入 v7 preview 或导出。main reel 只提供横竖屏中心 `x/y`，不提供整体缩放；横竖屏适配通过各 mode 的 main/focus 与普通节点 placement 完成。
 
-原始文件上传在任何资源解析前先整批校验 filename：只允许 ASCII 字母、数字、点、下划线和连字符，并统一转为小写。任一文件包含中文、空格、路径分隔符或其它非法字符，或多个文件小写化后重名，整批上传原子拒绝。普通资源合法同名不同 bytes 默认覆盖，引用不变；不建立 `dependencies/**` 目录。ImgNumber ZIP 以 manifest project id 为稳定前缀物化 root 与 glyph filename keys（例如 `digits.image-string.manifest.json`、`digits-0.png`），不同项目可在同一 workspace 并存，同 id 才进入替换流程。Symbols/Popup/Popup Object ZIP 同样先按 standalone schema 校验，再以 manifest id 或 object name 为稳定前缀物化 root/leaf filename keys；相同物理 bytes 最终仍由 `assets.map.json` 的 SHA-256 payload 去重。同 id/name 替换只覆盖该 owner 的独占 keys，并在提交后回收无其它 owner 引用的旧 keys。SymbolsEditor 已验证合法的 owner-owned filename key（包括大小写）在 Layout 导入、替换、导出和重导时原样保留；若与其它 owner 形成大小写 alias 则显式失败。完整 Editor ZIP 验证 map/hash/size 后，只迁移 Layout-owned 旧 logical filename key：先做 Unicode NFKC，ASCII 合法字符转小写，空白和 ASCII 标点转 `-`，非 ASCII 字符按 `u<Unicode 十六进制>` 展开，连续分隔符合并并清理首尾；扩展名同样小写且必须能归一为字母数字。归一后不同 bytes 重名时按稳定源路径顺序添加 `-2/-3`，相同 bytes 复用同一 key；layout 及已识别的 VNI、image-string、Popup JSON 引用同步结构化改写，业务 id 和 atlas page logical name 不变。Symbols/Popup/Popup Object dependency 只保存业务 identity、root key、closure keys 及各自需要的 placement；bytes 只存在全局 asset workspace。
+原始文件上传在任何资源解析前先整批校验 filename：只允许 ASCII 字母、数字、点、下划线和连字符，保留原始大小写及扩展名大小写。任一文件包含中文、空格、路径分隔符或其它非法字符，或多个文件构成大小写别名（例如 `A.png` / `a.png`），整批上传原子拒绝。普通资源合法同名不同 bytes 默认覆盖，引用不变；不建立 `dependencies/**` 目录。ImgNumber ZIP 以 manifest project id 为稳定前缀物化 root 与 glyph filename keys（例如 `digits.image-string.manifest.json`、`digits-0.png`），不同项目可在同一 workspace 并存，同 id 才进入替换流程。Symbols/Popup/Popup Object ZIP 同样先按 standalone schema 校验，再以 manifest id 或 object name 为稳定前缀物化 root/leaf filename keys；相同物理 bytes 最终仍由 `assets.map.json` 的 SHA-256 payload 去重。同 id/name 替换只覆盖该 owner 的独占 keys，并在提交后回收无其它 owner 引用的旧 keys。Layout-owned 及依赖中合法 filename key 在导入、替换、导出和重导时保留大小写；若与其它 owner 形成大小写 alias 则显式失败。完整 Editor ZIP 验证 map/hash/size 后，只迁移 Layout-owned 旧非法 logical filename key：先做 Unicode NFKC，保留 ASCII 字母大小写，空白和非法 ASCII 标点转 `-`，非 ASCII 字符按 `u<Unicode 十六进制>` 展开，连续分隔符合并并清理首尾；扩展名必须能归一为字母数字。归一后不同 bytes 重名时按稳定源路径顺序添加 `-2/-3`，相同 bytes 复用同一 key；layout 及已识别的 VNI、image-string、Popup/Popup Object JSON 引用同步结构化改写，业务 id、文本内容和 atlas page logical name 不变。逻辑文件名保留大小写，最终物理路径仍为小写 `assets/<sha256>.<ext>`。Symbols/Popup/Popup Object dependency 只保存业务 identity、root key、closure keys 及各自需要的 placement；bytes 只存在全局 asset workspace。
 
 Popup Object ZIP 从 Assets 上传入口导入后只加入对象库，不会自动绑定。项目 Tab 的“Tap info Popup Object”可显式选择一个对象或“未配置”；删除当前已绑定对象会失败，需先清空绑定。只有被选择对象进入导出闭包，重新导入导出 ZIP 会恢复该选择。绑定本身不会在默认黑色或 authored Splash 自动显示对象；需要从资源页将 `OBJ` 手动添加为图层，再在 Layout Inspector 配置中心坐标 placement、Popup 级 order，以及只命中 authored Splash 的 mode/orientation scope。默认黑色 Splash 不是可编辑 mode，不能承载手工图层。普通 Spine Popup 还需在自身 manifest 配置 exact Tap info 父节点，才会额外显示自己的 attached instance。
 

@@ -1,7 +1,12 @@
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import { serializeEditorAssetsMap } from "@slotclientengine/editorresource";
 import { describe, expect, it } from "vitest";
-import { exportLayoutZip } from "../src/io/exported-layout-zip.js";
+import {
+  exportLayoutZip,
+  normalizeLayoutFilenameKeys,
+  normalizeMappedLayoutFilenameKeys,
+} from "../src/io/exported-layout-zip.js";
+import { parsePopupObjectManifest } from "@slotclientengine/rendercore/popup/editor";
 import { importLayoutZip } from "../src/io/imported-layout-zip.js";
 import { importPopupObjectPackageZip } from "../src/io/imported-popup-object-package.js";
 import {
@@ -47,6 +52,67 @@ async function objectZip(name = "tap-to-continue"): Promise<Uint8Array> {
 }
 
 describe("gamelayout tap info Popup Object dependency", () => {
+  it.each(["export", "reimport"])(
+    "preserves mixed-case font keys and references during %s",
+    async (operation) => {
+      const rootKey = "pkg-13-taptocontinue-popup-object.manifest.json";
+      const fontKey = "pkg-13-taptocontinue-Fredoka-Bold.ttf";
+      const object = {
+        version: 1,
+        kind: "popup-object",
+        name: "taptocontinue",
+        resources: { [fontKey]: { kind: "font", path: fontKey } },
+        layers: [
+          {
+            id: "font-0",
+            kind: "text",
+            order: 0,
+            alpha: 1,
+            resource: fontKey,
+            defaultText: fontKey,
+            anchor: { x: 0.5, y: 0.5 },
+            transform: { x: 0, y: 0, scale: 1, rotation: 0 },
+            attachment: { kind: "popup-root" },
+            style: {
+              fontSize: 34,
+              letterSpacing: 0,
+              arcDegrees: 0,
+              fill: { kind: "solid", color: "#ffffff" },
+              widthRange: { minWidth: 0, maxWidth: 0 },
+            },
+          },
+        ],
+      };
+      const manifest = {
+        ...editorProjectToManifest(createNewEditorProject()),
+        tapInfoObject: { manifest: rootKey },
+      };
+      const fontBytes = new Uint8Array([1, 2, 3]);
+      const files = new Map([
+        [rootKey, encode(object)],
+        [fontKey, fontBytes],
+      ]);
+      const normalize =
+        operation === "export"
+          ? normalizeLayoutFilenameKeys
+          : normalizeMappedLayoutFilenameKeys;
+      const normalized = await normalize(manifest, files);
+      const result = parsePopupObjectManifest(
+        JSON.parse(new TextDecoder().decode(normalized.assets.get(rootKey))),
+      );
+      expect(result.resources).toEqual({
+        [fontKey]: { kind: "font", path: fontKey },
+      });
+      expect(result.layers[0]).toMatchObject({
+        resource: fontKey,
+        defaultText: fontKey,
+      });
+      expect(normalized.assets.get(fontKey)).toEqual(fontBytes);
+      expect(files.get(rootKey)).toEqual(encode(object));
+      expect(files.has(fontKey)).toBe(true);
+    },
+  );
+
   it("imports without auto-selecting, round-trips the explicit binding, and protects selected deletion", async () => {
     const imported = await importPopupObjectPackageZip(await objectZip());
     const project = createNewEditorProject();

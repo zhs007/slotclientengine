@@ -4,12 +4,11 @@ import {
   assertCanonicalPackagePath,
   canonicalizeUploadFileName,
   deriveNodeId,
-  rewriteAtlasPageNamesToLowercase,
 } from "../src/io/filename-policy.js";
 
 describe("filename policy", () => {
   it("canonicalizes ASCII names and derives the final-extension node id", () => {
-    expect(canonicalizeUploadFileName("Mini.BK.PNG")).toBe("mini.bk.png");
+    expect(canonicalizeUploadFileName("Mini.BK.PNG")).toBe("Mini.BK.PNG");
     expect(deriveNodeId("Mini.BK.PNG")).toBe("mini.bk");
     expect(deriveNodeId("background")).toBe("background");
     expect(() => canonicalizeUploadFileName("大奖.png")).toThrow(/ASCII/);
@@ -25,7 +24,7 @@ describe("filename policy", () => {
         { name: "Nearwin1.JSON" },
         { name: "nearwin1.json" },
       ]),
-    ).toThrow(/小写化后冲突/);
+    ).toThrow(/大小写别名冲突/);
     expect(
       assertCanonicalUploadFileNames([
         { name: "Nearwin1.JSON" },
@@ -33,8 +32,8 @@ describe("filename policy", () => {
       ]),
     ).toEqual(
       new Map([
-        ["Nearwin1.JSON", "nearwin1.json"],
-        ["Symbol.PNG", "symbol.png"],
+        ["Nearwin1.JSON", "Nearwin1.JSON"],
+        ["Symbol.PNG", "Symbol.PNG"],
       ]),
     );
     expect(() => assertCanonicalPackagePath("assets/../x.png")).toThrow(
@@ -45,20 +44,17 @@ describe("filename policy", () => {
     );
   });
 
-  it("rewrites only parsed atlas page lines", () => {
-    const result = rewriteAtlasPageNamesToLowercase(
-      "PAGE.PNG\nsize: 4,4\nfilter: Linear,Linear\nregion\n  xy: 0,0\n",
-    );
-    expect(result.pages).toEqual(["page.png"]);
-    expect(result.atlasText).toContain("page.png\nsize:");
-    expect(result.atlasText).toContain("region\n  xy:");
-    expect(() =>
-      rewriteAtlasPageNamesToLowercase("region\n  xy: 0,0\n"),
-    ).toThrow(/没有可识别/);
-    expect(() =>
-      rewriteAtlasPageNamesToLowercase(
-        "PAGE.PNG\nsize: 4,4\n\npage.png\nsize: 4,4\n",
-      ),
-    ).toThrow(/发生冲突/);
+  it.each([
+    "Image.PNG",
+    "Font.TTF",
+    "Sound.MP3",
+    "Video.MP4",
+    "Data.JSON",
+    "Spine.ATLAS",
+    "Vni.JSON",
+    "Symbols.ZIP",
+    "Popup.ZIP",
+  ])("preserves %s", (name) => {
+    expect(canonicalizeUploadFileName(name)).toBe(name);
   });
 });
