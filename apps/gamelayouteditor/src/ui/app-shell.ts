@@ -266,6 +266,7 @@ export class GameLayoutEditorApp {
   #pendingPreviewSize: { width: number; height: number } | null = null;
   #disposePreviewResizeDrag: (() => void) | null = null;
   #previewModeBusy = false;
+  #primaryActionPending = false;
   #destroyed = false;
   #symbolPackageMetadata: SymbolPackagePreviewSnapshot | null = null;
   #symbolImportBusy = false;
@@ -289,27 +290,14 @@ export class GameLayoutEditorApp {
   async init(): Promise<void> {
     this.#root.innerHTML = shellMarkup();
     this.requireElement("[data-new-project-dialog] p").textContent =
-      "默认只创建 BaseGame；未配置 Splash 时运行时会显示纯黑默认 Splash，并要求点击解锁声音。";
+      "默认只创建 BaseGame；编辑预览直接显示所选状态。游戏运行时在未配置 Splash 时显示默认黑 Splash。";
     const previewHost = this.requireElement("[data-preview-host]");
     const diagnostics = this.requireElement("[data-preview-diagnostics]");
     this.#preview = new LayoutPreview(previewHost, diagnostics, {
       onPopupInputError: (error) => this.#store.setExternalError(error),
     });
     previewHost.addEventListener("click", () => {
-      if (this.#preview?.getActiveAwardCelebrationSnapshot()) return;
-      const pending = this.#preview?.requestPrimaryGameModeAction();
-      if (!pending) return;
-      void pending
-        .then(() => {
-          const mode = this.#preview?.getGameModeSnapshot()?.stableMode;
-          if (!mode) return;
-          this.#selectedPreviewMode = mode;
-          if (this.#followEditMode) {
-            this.#selectedGameMode = mode;
-            this.runTransaction((draft) => activateEditorGameMode(draft, mode));
-          }
-        })
-        .catch((error) => this.#store.setExternalError(error));
+      void this.requestPrimaryPreviewAction();
     });
     await this.#preview.init();
     this.bindStaticActions();
@@ -454,9 +442,7 @@ export class GameLayoutEditorApp {
         this.#selectedGameMode = (
           event.currentTarget as HTMLSelectElement
         ).value;
-        this.runTransaction((draft) =>
-          activateEditorGameMode(draft, this.#selectedGameMode),
-        );
+        this.#store.selectGameMode(this.#selectedGameMode);
         if (this.#followEditMode) {
           this.#selectedPreviewMode = this.#selectedGameMode;
         }
@@ -809,6 +795,39 @@ export class GameLayoutEditorApp {
     this.showFeedback("已新建中心坐标项目。先上传资源，再添加普通图层。");
   }
 
+  private async requestPrimaryPreviewAction(): Promise<void> {
+    const preview = this.#preview;
+    if (
+      !preview ||
+      this.#primaryActionPending ||
+      this.#previewModeBusy ||
+      this.#previewReadyProjectRevision !==
+        this.#store.getSnapshot().revision ||
+      preview.getActiveAwardCelebrationSnapshot()
+    )
+      return;
+    const revision = this.#previewRevision;
+    this.#primaryActionPending = true;
+    try {
+      // Keep audio unlock and the primary action in the trusted click stack.
+      await preview.requestPrimaryGameModeAction();
+      if (this.#destroyed || revision !== this.#previewRevision) return;
+      const mode = preview.getGameModeSnapshot()?.stableMode;
+      if (!mode) return;
+      this.#selectedPreviewMode = mode;
+      if (this.#followEditMode) {
+        this.#selectedGameMode = mode;
+        this.#store.selectGameMode(mode);
+      }
+      this.renderWorkspace(this.#store.getSnapshot());
+    } catch (error) {
+      if (!this.#destroyed && revision === this.#previewRevision)
+        this.#store.setExternalError(error);
+    } finally {
+      this.#primaryActionPending = false;
+    }
+  }
+
   private async selectAuthoringPreviewMode(
     modeId: string,
     syncPreviewTarget = true,
@@ -994,7 +1013,10 @@ export class GameLayoutEditorApp {
             candidate.fromModeId === runtimeSnapshot!.stableMode &&
             candidate.toModeId === target,
         );
-    if (!idleMessage && !edge)
+    const directSplashEntry =
+      runtimeSnapshot?.stableMode === project.gameModes.splashMode &&
+      target === project.gameModes.initialMode;
+    if (!idleMessage && !edge && !directSplashEntry)
       idleMessage = `缺少 ${runtimeSnapshot!.stableMode} → ${target} 直接有向转场`;
     if (idleMessage) {
       this.#previewPrepareRequest += 1;
@@ -1023,7 +1045,7 @@ export class GameLayoutEditorApp {
     }
 
     const source = runtimeSnapshot!.stableMode;
-    const kind = edge!.kind;
+    const kind = edge?.kind ?? "none";
     const identity = `${this.#previewRevision}:${storeSnapshot.revision}:${source}:${target}:${kind}`;
     if (
       this.#previewPrepareIdentity === identity &&
@@ -1518,9 +1540,7 @@ export class GameLayoutEditorApp {
       .forEach((button) =>
         button.addEventListener("click", () => {
           this.#selectedGameMode = button.dataset.selectGameMode!;
-          this.runTransaction((draft) =>
-            activateEditorGameMode(draft, this.#selectedGameMode),
-          );
+          this.#store.selectGameMode(this.#selectedGameMode);
           this.#modeDialogRenameId = this.#selectedGameMode;
           this.#modeDialogFeedback = `已选择状态 ${this.#selectedGameMode}`;
           if (this.#followEditMode)
@@ -1591,7 +1611,8 @@ export class GameLayoutEditorApp {
     dialog
       .querySelector<HTMLButtonElement>("[data-toggle-splash-mode]")!
       .addEventListener("click", () => {
-        const current = this.#store.getSnapshot().project.gameModes.splashMode;
+        const project = this.#store.getSnapshot().project;
+        const current = project.gameModes.splashMode;
         const clearing = current === this.#selectedGameMode;
         if (
           !this.runTransaction((draft) =>
@@ -1607,7 +1628,7 @@ export class GameLayoutEditorApp {
         }
         this.#modeDialogFeedback = clearing
           ? "已清除 Splash 配置"
-          : `已将 ${this.#selectedGameMode} 设为 splash`;
+          : `已将 ${this.#selectedGameMode} 设为 splash；未配置转场时直接进入 ${project.gameModes.initialMode}`;
         this.renderWorkspace(this.#store.getSnapshot());
       });
     dialog
@@ -3340,6 +3361,7 @@ export class GameLayoutEditorApp {
       phase: "idle",
       message: "正在重建当前项目预览。",
     };
+    this.renderPreviewModeProgress();
     const revision = ++this.#previewRevision;
     const preferredVariant =
       (this.#preview?.pageSize.height ?? 0) >
@@ -3433,6 +3455,7 @@ export class GameLayoutEditorApp {
     try {
       imported = await importLayoutZip(
         new Uint8Array(await files[0].arrayBuffer()),
+        { loadSymbolTextures: false },
       );
       const project = manifestToEditorProject(
         imported.manifest,
@@ -3656,7 +3679,6 @@ export class GameLayoutEditorApp {
         ? preview.setSelectedReelSet(modeBinding.reelSet)
         : prepared;
     this.renderSymbolsMetadata();
-    await this.refreshPreview(this.#store.getSnapshot());
   }
 
   private renderSymbolsMetadata(): void {

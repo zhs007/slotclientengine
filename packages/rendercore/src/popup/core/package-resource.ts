@@ -91,6 +91,7 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
   const urls: string[] = [];
   const prepared: Record<string, PopupPreparedResource> = {};
   const ownedTextures = new Set<Texture>();
+  const ownedAssetUrls = new Set<string>();
   const fonts: PopupFontHandle[] = [];
   try {
     for (const [id, spec] of Object.entries(manifest.resources)) {
@@ -141,6 +142,10 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
             : await (options.loadTexture
                 ? options.loadTexture(url, spec.path)
                 : Assets.load<Texture>({ src: url, parser: "loadTextures" }));
+        if (!resolvedUrl) {
+          if (options.loadTexture) ownedTextures.add(texture);
+          else ownedAssetUrls.add(url);
+        }
         if (
           texture.width !== spec.size.width ||
           texture.height !== spec.size.height
@@ -148,7 +153,6 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
           throw new Error(
             `popup image size mismatch ${spec.path}: expected ${spec.size.width}x${spec.size.height}, got ${texture.width}x${texture.height}.`,
           );
-        if (!resolvedUrl) ownedTextures.add(texture);
         prepared[id] = { kind: "image", texture };
       } else if (spec.kind === "font") {
         const font = await acquirePopupFont({
@@ -217,11 +221,13 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
         );
         const atlasText = decode(requireBytes(files, spec.atlas), spec.atlas);
         const textureUrls = Object.fromEntries(
-          Object.entries(spec.textures).map(([page, path]) => [
-            page,
-            options.resolveAssetUrl?.(path) ??
-              objectUrl(requireBytes(files, path), path, urls),
-          ]),
+          Object.entries(spec.textures).map(([page, path]) => {
+            const resolvedUrl = options.resolveAssetUrl?.(path);
+            const url =
+              resolvedUrl ?? objectUrl(requireBytes(files, path), path, urls);
+            if (!resolvedUrl) ownedAssetUrls.add(url);
+            return [page, url];
+          }),
         );
         const spine = { skeleton, atlasText, textureUrls };
         const requiredAnimations =
@@ -244,11 +250,17 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
       async destroy() {
         if (destroyed) return;
         destroyed = true;
-        await releasePrepared(prepared, fonts, ownedTextures, urls);
+        await releasePrepared(
+          prepared,
+          fonts,
+          ownedTextures,
+          ownedAssetUrls,
+          urls,
+        );
       },
     });
   } catch (error) {
-    await releasePrepared(prepared, fonts, ownedTextures, urls);
+    await releasePrepared(prepared, fonts, ownedTextures, ownedAssetUrls, urls);
     throw error;
   }
 }
@@ -289,14 +301,26 @@ async function releasePrepared(
   prepared: Readonly<Record<string, PopupPreparedResource>>,
   fonts: readonly PopupFontHandle[],
   textures: ReadonlySet<Texture>,
+  assetUrls: ReadonlySet<string>,
   urls: readonly string[],
 ): Promise<void> {
-  for (const value of Object.values(prepared))
-    if (value.kind === "image-string" || value.kind === "popup-object")
-      await value.resource.destroy();
-  for (const font of fonts) font.release();
-  for (const texture of textures) texture.destroy(false);
-  for (const url of urls) URL.revokeObjectURL(url);
+  try {
+    const releases = Object.values(prepared)
+      .filter(
+        (value) =>
+          value.kind === "image-string" || value.kind === "popup-object",
+      )
+      .map((value) => value.resource.destroy());
+    const loadedUrls = [...assetUrls].filter((url) => Cache.has(url));
+    if (loadedUrls.length) releases.push(Assets.unload(loadedUrls));
+    const results = await Promise.allSettled(releases);
+    for (const result of results)
+      if (result.status === "rejected") throw result.reason;
+  } finally {
+    for (const font of fonts) font.release();
+    for (const texture of textures) texture.destroy(false);
+    for (const url of urls) URL.revokeObjectURL(url);
+  }
 }
 
 function validateAnimationBindings(

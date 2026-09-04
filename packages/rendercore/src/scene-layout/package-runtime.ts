@@ -2615,6 +2615,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     lifecycle: "started" | "switched" | "ended" | "failed",
     extra: Readonly<Record<string, string | number | boolean | null>> = {},
   ): void {
+    // A Splash entry without an authored edge has mode events only.
+    if (
+      !(this.requireGameModes().transitions ?? []).some(
+        (edge) =>
+          edge.from === transition.spec.from && edge.to === transition.spec.to,
+      )
+    )
+      return;
     this.#addressController.emit(
       formatGameLayoutRuntimeAddress(
         "transition",
@@ -2644,6 +2652,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         throw new SceneLayoutError(
           "Current authoring game mode must not receive a redundant reel input.",
         );
+      this.dismissDefaultSplash();
       return;
     }
     if (options.recreateReel !== undefined)
@@ -2702,6 +2711,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       this.setDisplayedMode(target.id);
       this.setStableMode(target.id);
       this.#stableSymbolPackageId = this.#activeSymbolPackageId;
+      this.dismissDefaultSplash();
     } catch (error) {
       this.releasePreparedTarget(prepared);
       throw asSceneLayoutError(error);
@@ -2854,11 +2864,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         action = unlockPromise
           .then(() => {
             this.assertReady();
-            this.#defaultSplashPending = false;
-            this.#defaultSplashRoot.visible = false;
-            this.#defaultSplashRoot.parent?.removeChild(
-              this.#defaultSplashRoot,
-            );
+            this.dismissDefaultSplash();
           })
           .finally(() => {
             if (this.#startupSplashAction === action)
@@ -2896,6 +2902,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     } catch (error) {
       return Promise.reject(asSceneLayoutError(error));
     }
+  }
+
+  private dismissDefaultSplash(): void {
+    this.#defaultSplashPending = false;
+    this.#defaultSplashRoot.visible = false;
+    this.#defaultSplashRoot.parent?.removeChild(this.#defaultSplashRoot);
   }
 
   startPendingGameModeVideo(): Promise<void> {
@@ -3642,6 +3654,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const transition = (modes.transitions ?? []).find(
       (candidate) => candidate.from === source.id && candidate.to === mode.id,
     );
+    // The authored Splash role itself declares the startup route. Reuse the
+    // atomic target preparation/commit path without adding a manifest edge.
+    if (
+      !transition &&
+      source.id === modes.splashMode &&
+      mode.id === modes.initialMode
+    )
+      return { from: source.id, to: mode.id, overlay: { kind: "none" } };
     if (!transition)
       throw new SceneLayoutError(
         `No direct scene transition exists from "${source.id}" to "${mode.id}".`,

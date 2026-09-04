@@ -31,6 +31,10 @@ export function stateManagerDialogMarkup(
   const selected = options.project.gameModes.modes.find(
     (mode) => mode.id === selectedModeId,
   )!;
+  const splashButtonLabel =
+    selectedModeId === options.project.gameModes.splashMode
+      ? "清除 splash"
+      : "设为 splash";
   const deleteReason =
     options.project.gameModes.modes.length === 1
       ? "layout 至少必须保留一个游戏模式。"
@@ -58,8 +62,8 @@ export function stateManagerDialogMarkup(
     <p class="state-manager-selected">选中状态：<strong>${escapeHtml(selected.id)}</strong></p>
     <label><input type="checkbox" data-mode-reel-enabled ${selected.mainEnabled ? "checked" : ""}/> 启用 main</label>
     <label>重命名为<input data-rename-game-mode-input value="${escapeHtml(options.renameModeId)}" /></label>
-    <p class="hint">Splash 是可选欢迎页；设置后必须配置一条 Splash → initial 的直接转场。</p>
-    <div class="button-row"><button type="button" data-rename-game-mode>重命名</button><button type="button" data-set-initial-mode ${selectedModeId === options.project.gameModes.initialMode || selectedModeId === options.project.gameModes.splashMode ? "disabled" : ""}>设为 initial</button><button type="button" data-toggle-splash-mode ${selectedModeId === options.project.gameModes.initialMode ? "disabled" : ""}>${selectedModeId === options.project.gameModes.splashMode ? "清除 splash" : "设为 splash"}</button><button type="button" class="danger" data-delete-game-mode ${deleteReason ? "disabled" : ""}>删除</button></div>
+    <p class="hint">Splash 是可选欢迎页。点击后进入 initial（${escapeHtml(options.project.gameModes.initialMode)}）；未配置转场时直接切换，配置后播放相应效果。</p>
+    <div class="button-row"><button type="button" data-rename-game-mode>重命名</button><button type="button" data-set-initial-mode ${selectedModeId === options.project.gameModes.initialMode || selectedModeId === options.project.gameModes.splashMode ? "disabled" : ""}>设为 initial</button><button type="button" data-toggle-splash-mode ${selectedModeId === options.project.gameModes.initialMode ? "disabled" : ""}>${splashButtonLabel}</button><button type="button" class="danger" data-delete-game-mode ${deleteReason ? "disabled" : ""}>删除</button></div>
     <output class="state-manager-feedback" data-mode-dialog-feedback aria-live="polite">${escapeHtml([options.feedback, deleteReason].filter(Boolean).join(" · "))}</output>
     <div class="button-row state-manager-footer"><button type="button" data-close-mode-dialog>完成</button></div>
   </section>`;

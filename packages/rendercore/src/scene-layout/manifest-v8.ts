@@ -61,14 +61,6 @@ function parseGameModesV8(
   const splash = source.modes.find((mode) => mode.id === splashMode);
   if (!splash)
     fail("scene layout gameModes.splashMode must reference a declared mode.");
-  const edge = source.transitions?.find(
-    (transition) =>
-      transition.from === splashMode && transition.to === source.initialMode,
-  );
-  if (!edge)
-    fail(
-      "scene layout configured splashMode requires a direct transition to initialMode.",
-    );
   if (
     splash.primaryAction !== undefined &&
     splash.primaryAction.targetMode !== source.initialMode

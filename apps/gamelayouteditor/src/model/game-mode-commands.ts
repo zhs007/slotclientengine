@@ -115,9 +115,14 @@ export function setInitialGameMode(project: EditorProject, id: string): void {
 }
 
 export function setSplashGameMode(project: EditorProject, id: string): void {
-  requireMode(project, id);
+  const mode = requireMode(project, id);
   if (project.gameModes.initialMode === id)
     throw new Error("同一个 mode 不能同时配置为 initial 和 splash。");
+  const initial = project.gameModes.initialMode;
+  if (mode.primaryActionTargetMode && mode.primaryActionTargetMode !== initial)
+    throw new Error(
+      `设为 Splash 前，请先将点击目标改为 ${initial} 或清除点击目标。`,
+    );
   project.gameModes.splashMode = id;
 }
 

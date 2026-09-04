@@ -114,16 +114,22 @@ describe("scene layout manifest v8 Splash contract", () => {
     expect(resolveSceneLayoutStartupMode(manifest.gameModes)).toBe("Splash");
   });
 
-  it("requires distinct modes and a direct Splash-to-initial edge", () => {
+  it("allows Splash without a transition while requiring distinct, declared modes", () => {
     expect(() =>
       parseSceneLayoutManifestV8(splashDraft({ splashMode: "BaseGame" })),
     ).toThrow(/must differ from initialMode/u);
     expect(() =>
       parseSceneLayoutManifestV8(splashDraft({ splashMode: "Missing" })),
     ).toThrow(/must reference a declared mode/u);
-    expect(() =>
-      parseSceneLayoutManifestV8(splashDraft({ includeEdge: false })),
-    ).toThrow(/direct transition to initialMode/u);
+    const withoutEdge = parseSceneLayoutManifestV8(
+      splashDraft({ includeEdge: false }),
+    );
+    expect(withoutEdge.gameModes.splashMode).toBe("Splash");
+    expect(
+      (withoutEdge.gameModes.transitions ?? []).some(
+        (edge) => edge.from === "Splash" && edge.to === "BaseGame",
+      ),
+    ).toBe(false);
     expect(() =>
       parseSceneLayoutManifestV8(splashDraft({ primaryTarget: "Other" })),
     ).toThrow(/primaryAction must target initialMode/u);

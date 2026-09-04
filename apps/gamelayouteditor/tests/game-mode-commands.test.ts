@@ -11,7 +11,6 @@ import {
   deleteGameMode,
   renameGameMode,
   setGameModeReelEnabled,
-  setGameModeTransitionKind,
   setInitialGameMode,
   setSplashGameMode,
 } from "../src/model/game-mode-commands.js";
@@ -119,7 +118,7 @@ describe("game mode commands", () => {
     expect(manifest).not.toHaveProperty("artSize");
   });
 
-  it("configures Splash separately from initial and requires its direct edge", () => {
+  it("configures Splash without creating a transition", () => {
     const project = createNewEditorProject();
     addGameMode(project, "Splash");
     setSplashGameMode(project, "Splash");
@@ -132,16 +131,9 @@ describe("game mode commands", () => {
       /不能同时配置/u,
     );
     expect(() => deleteGameMode(project, "Splash")).toThrow(/清除 Splash/u);
-    expect(() => editorProjectToManifest(project)).toThrow(
-      /direct transition/u,
-    );
-
-    createGameModeTransition(project, "Splash", "BaseGame");
-    setGameModeTransitionKind(
-      project,
-      project.gameModes.transitions[0]!,
-      "none",
-    );
+    expect(project.gameModes.transitions).toEqual([]);
+    setSplashGameMode(project, "Splash");
+    expect(project.gameModes.transitions).toHaveLength(0);
     const manifest = editorProjectToManifest(project);
     expect(manifest.gameModes.splashMode).toBe("Splash");
     const restored = manifestToEditorProject(manifest, project.assets);
@@ -150,5 +142,34 @@ describe("game mode commands", () => {
     expect(restored.gameModes.activeModeId).toBe("Splash");
     clearSplashGameMode(project);
     expect(project.gameModes.splashMode).toBeNull();
+  });
+
+  it("preserves an existing authored Splash transition", () => {
+    const project = createNewEditorProject();
+    addGameMode(project, "Welcome");
+    createGameModeTransition(project, "Welcome", "BaseGame");
+    const transition = project.gameModes.transitions[0]!;
+    transition.preludePopupId = "welcome-popup";
+    const before = structuredClone(transition);
+    setSplashGameMode(project, "Welcome");
+    expect(project.gameModes.transitions).toEqual([before]);
+    expect(project.gameModes.transitions[0]).toBe(transition);
+  });
+
+  it("rejects a conflicting primary target before changing Splash or transitions", () => {
+    const project = createNewEditorProject();
+    addGameMode(project, "Welcome");
+    addGameMode(project, "Other");
+    project.gameModes.modes[1]!.primaryActionTargetMode = "Other";
+    const before = structuredClone(project);
+    expect(() => setSplashGameMode(project, "Welcome")).toThrow(/点击目标/u);
+    expect(project).toEqual(before);
+    expect(() => setSplashGameMode(project, "BaseGame")).toThrow(
+      /不能同时配置/u,
+    );
+    expect(() => setSplashGameMode(project, "Missing")).toThrow(
+      /未知游戏模式/u,
+    );
+    expect(project).toEqual(before);
   });
 });

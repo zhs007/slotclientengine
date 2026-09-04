@@ -1,6 +1,6 @@
 # Game Layout Editor
 
-纯前端 Scene Layout v8 编辑器，覆盖 layout、mode/orientation、可选 Splash role、全局 Event 音乐音效、图形图层、UI 控件图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v8 ZIP 会在打开事务中规范化；后续预览和导出只生成 canonical v8。新项目只创建 BaseGame initial；用户自行创建欢迎 mode、设为 Splash并配置到 initial 的 direct edge。未配置时 preview 使用 RenderCore 的纯黑默认 Splash，首次有效点击解锁声音后才显示 initial。
+纯前端 Scene Layout v8 编辑器，覆盖 layout、mode/orientation、可选 Splash role、全局 Event 音乐音效、图形图层、UI 控件图层、Symbols、award-celebration/普通 Spine/single-state Popup 与 Spine/MP4 有向转场。合法 v1–v8 ZIP 会在打开事务中规范化；后续预览和导出只生成 canonical v8。新项目只创建 BaseGame initial；用户自行创建欢迎 mode 并设为 Splash；点击后进入 initial，未配置转场时直接切换，配置后播放相应效果。设置 Splash 不会自动创建转场。编辑预览直接显示所选 GameMode，不显示默认黑 Splash；声音可通过“启用声音”开启。游戏运行时在未配置 Splash 时仍保留默认黑 Splash 点击门禁。
 
 图层先区分“图形图层”和“UI 控件”。`radio` 必须从 Assets 明确选择不同且同尺寸的 off/on image root；`step-slider` 必须明确选择不同的 track/thumb，配置至少 2 档和正吸附时长，新建默认 3 档。两者都复用普通图层的唯一 id、order、scope 和横竖屏 placement，不按文件名配对。预览交互不回写 authoring draft；Inspector 可分别重绑图片，production closure 会包含控件的全部图片。
 

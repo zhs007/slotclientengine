@@ -374,6 +374,10 @@ describe("LayoutPreview", () => {
     await preview.init();
     expect(state.canvas.style.pointerEvents).toBe("auto");
     await preview.setLayout(imageManifest, assetBytes);
+    expect(state.packageRuntime.selectAuthoringGameMode).toHaveBeenCalledWith(
+      "BaseGame",
+    );
+    expect(state.packageRuntime.unlockAudio).not.toHaveBeenCalled();
     preview.setPageSize({ width: 800, height: 600 });
     preview.setZoom(1.5);
     preview.setGuideVisibility({ showFocus: false, showReels: true });

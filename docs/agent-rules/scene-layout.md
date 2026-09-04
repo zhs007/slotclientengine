@@ -12,8 +12,8 @@
 
 ## Mode、variant 与稳定节点
 
-- Scene Layout latest 为 v8：它继承 v7 center-layout 合同，root 只保留 typed `main` grid；每个 mode 直接声明 `main.enabled` 与 `main.variants.landscape/portrait`。v8 可选声明 project-level `gameModes.splashMode`，它必须引用与 `initialMode` 不同的已有 mode并拥有到 initial 的 direct edge；RenderCore 与 Editor 读取合法 v1–v8并统一规范化为 v8，旧版本不得按 mode id 推断 Splash，Editor 只预览和导出 canonical v8。
-- `initialMode` 永远表示欢迎页后的正式游戏入口。配置 `splashMode` 时 runtime 首显 authored Splash，首个未被 UI control/Popup 消费的 primary click 必须在原生手势栈同时调用 AudioCore unlock 与 existing direct transition request；未配置时 package runtime 显示覆盖完整 viewport 的纯黑默认 Splash，拒绝直接 mode request，并在首个 primary click 成功 unlock 后才揭示已准备的 initial。默认黑 Splash 没有持久 mode id或资源，不改变 delivery bytes ownership，也不得自动叠加项目 Tap info 对象。
+- Scene Layout latest 为 v8：它继承 v7 center-layout 合同，root 只保留 typed `main` grid；每个 mode 直接声明 `main.enabled` 与 `main.variants.landscape/portrait`。v8 可选声明 project-level `gameModes.splashMode`，它必须引用与 `initialMode` 不同的已有 mode；Splash→initial 的转场可选；RenderCore 与 Editor 读取合法 v1–v8并统一规范化为 v8，旧版本不得按 mode id 推断 Splash，Editor 只预览和导出 canonical v8。
+- `initialMode` 永远表示欢迎页后的正式游戏入口。配置 `splashMode` 时 runtime 首显 authored Splash，首个未被 UI control/Popup 消费的 primary click 必须在原生手势栈同时调用 AudioCore unlock 与 initial mode request；Splash→initial 未声明转场时复用完整 target prepare/commit 直接切换，不向 manifest/allocation 写入隐式 edge，也不发布未声明的 transition lifecycle event；有转场时按显式配置执行；未配置时 package runtime 显示覆盖完整 viewport 的纯黑默认 Splash，拒绝直接 mode request，并在首个 primary click 成功 unlock 后才揭示已准备的 initial。默认黑 Splash 没有持久 mode id或资源，不改变 delivery bytes ownership，也不得自动叠加项目 Tap info 对象。
 - canonical v8 继承 project-wide optional `tapInfoObject: { manifest }` binding，指向 standalone Popup Object exact closure。普通 Spine Popup 只有同时声明自身 exact Tap info attachment 时才创建 attached instance。Scene 需要直接显示该对象时，必须另建显式 `{ kind: "popup-object", manifest }` node，且 manifest 与项目 binding 完全一致；它的 placement、rotation center、Popup 级 order、mode/orientation scope 与生命周期全部走普通 Scene node 合同，不得根据 Splash role 或唯一对象自动实例化。
 - v7–v8 `nodes` 是严格的 `resource | uiControl` 图层 union；v1–v6 只接受图形。UI 控件使用可扩展 discriminated union：`radio` 显式绑定不同且同尺寸的 off/on image root；`step-slider` 显式绑定不同 track/thumb、至少 2 档和正吸附时长，track 必须形成正水平行程。两者复用唯一 id/order/scope/placement并固定从首状态初始化；Editor 不按文件名配对，也不把控件降级为普通 image 图层。
 - RenderCore 继续 strict 读取和运行历史 per-mode loop BGM、root effects 与 Popup/Symbol cue；该 compatibility 只属于历史 artifact consumer，不是 Editor authoring 合同。Game Layout Editor 打开旧 package 时必须先完整验证 source schema/map/hash/closure，随后迁移删除 root legacy audio 与 mode BGM，但不得改写只读 Symbols/Popup dependency。
@@ -42,10 +42,10 @@
 
 ## Directed transition
 
-- transition 是独立有向边，使用 explicit none、strict Spine overlay 或 video-blackout union。每条 edge 独立保存可选 `preludePopup`，必须引用普通 Spine Popup；不同 edge 可不配置或引用不同 Popup。none 仍要求显式边和完整 target prepare，不是缺边 fallback。
-- production `requestGameMode(...,{immediate:true})`只可跳过已有direct edge的Popup/overlay表现；仍须完整target prepare和原子mode/reel/visibility commit，不允许缺边fallback、抢占active transition或与`preludePopupStrings`组合。被跳过的Popup/transition/effect event不发布，真实displayed/stable mode与BGM event继续发布。
-- editor 只自动准备当前 stable source 到所选 target 的一条直接边。
-- 缺显式边时不得瞬切、反向复用、自动寻路或回退旧 node state machine。
+- transition 是独立有向边，使用 explicit none、strict Spine overlay 或 video-blackout union。每条 edge 独立保存可选 `preludePopup`，必须引用普通 Spine Popup；不同 edge 可不配置或引用不同 Popup。显式 none 保持原有语义；Splash role 自带到 initial 的入口，未声明转场时直接完成完整 target prepare 与原子 commit，不生成持久 edge。
+- production `requestGameMode(...,{immediate:true})`只可跳过已有direct edge的Popup/overlay表现；仍须完整target prepare和原子mode/reel/visibility commit，除 Splash→initial 的 role-defined 入口外不允许缺边切换，也不得抢占active transition或与`preludePopupStrings`组合。被跳过的Popup/transition/effect event不发布，真实displayed/stable mode与BGM event继续发布。
+- editor 只自动准备当前 stable source 到所选 target 的一条直接边，或无转场的 Splash→initial 入口。
+- 除 Splash→initial 入口外，缺显式边时不得瞬切；不得反向复用、自动寻路或回退旧 node state machine。
 - Spine/MP4 使用统一 state-switch action 和中文阶段提示。
 - audible `play()` 必须在真实 trusted click 调用栈内同步触发。
 
@@ -68,6 +68,7 @@
 - transition overlay 使用固定顶层 `scene-transition-overlay`；video blackout 是 viewport-space runtime object，不是 CSS overlay。
 - runtime 在切换前准备完整 target scene；normal路径只在none direct commit、exact Spine event occurrence或video media-time`fadeStart`边界原子切换background、reel和displayed mode；显式immediate路径在target-only prepare完成后直接提交稳定mode且不创建transition player。
 - editor 的 authoring stable-mode selection 必须与 production `requestGameMode()` 隔离：它不要求 directed edge、不播放 overlay，并用同一 visibility commit 同步背景、scoped 普通节点与 displayed mode；相同 symbols binding 不重建或重新抽样，prepare 失败不得留下半切换状态。
+- Editor 首次准备后必须调用 authoring mode selection；成功选择（包括当前 mode）移除默认黑 Splash 门禁，但不解锁声音。编辑状态选择不复制资源 bytes、不增加项目内容 revision，也不触发主预览重建；production startup 仍保留点击门禁。
 - video 不使用 wall-clock fade，不自动静音，也不在 `play()` 拒绝时 fallback。
 - once/ended settle、iOS gesture-safe prepare、trusted-click synchronous play 和当前 mode popup lifecycle 属于 rendercore。带 prelude 的任意 edge 必须先完整完成 popup start→loop→end，再继续效果；source mode 在 popup complete 前保持不变。带 prelude 的 video 在 complete 后显式等待第二次 trusted gesture，不得预播、静音或与 Popup end 并行。
 - `requestGameMode()`可为exact edge绑定的普通Spine prelude提交本轮`text | image-string` exact-name最终string；这些值不进入prepare/cache identity，并在Popup complete、失败、取消或runtime destroy后恢复调用前handle状态。shared runtime不解释translation key或金额业务。

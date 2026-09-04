@@ -1445,6 +1445,7 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
   /**
    * Selects a stable mode without playing its directed transition.
+   * Successful selection dismisses the default Splash without unlocking audio.
    * @internal Game Layout Editor authoring preview only.
    */
   selectAuthoringGameMode(

@@ -1,6 +1,7 @@
 import { assertSceneLayoutGeometryCompatible } from "@slotclientengine/rendercore/scene-layout/data";
 import {
   cloneEditorProject,
+  activateEditorGameMode,
   editorProjectToManifest,
   type EditorProject,
 } from "./editor-project.js";
@@ -52,6 +53,18 @@ export class EditorStore {
     this.#externalError = null;
     this.#revision += 1;
     this.validate();
+    this.emit();
+  }
+
+  selectGameMode(modeId: string): void {
+    if (this.#project.gameModes.activeModeId === modeId) return;
+    // Selection is editor state, not a resource or geometry transaction.
+    const project = {
+      ...this.#project,
+      gameModes: { ...this.#project.gameModes },
+    };
+    activateEditorGameMode(project, modeId);
+    this.#project = project;
     this.emit();
   }
 

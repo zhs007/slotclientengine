@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const previewSpies = vi.hoisted(() => ({
   init: vi.fn(async () => undefined),
   clear: vi.fn(),
-  setLayout: vi.fn(async () => undefined),
+  setLayout: vi.fn(async (): Promise<void> => undefined),
   applyGeometryManifest: vi.fn(),
   setSelectedLayer: vi.fn(),
   setPageSize: vi.fn(),
@@ -28,6 +28,7 @@ const previewSpies = vi.hoisted(() => ({
   selectAuthoringGameMode: vi.fn(async () => undefined),
   getCurrentVariantId: vi.fn(() => "landscape"),
   requestPrimaryPopupInteraction: vi.fn(() => ({ handled: true })),
+  requestPrimaryGameModeAction: vi.fn(async (): Promise<void> => undefined),
   getGameModeSnapshot: vi.fn((): unknown => null),
   getActiveAwardCelebrationSnapshot: vi.fn((): unknown => null),
   destroy: vi.fn(),
@@ -75,6 +76,7 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     getCurrentVariantId = previewSpies.getCurrentVariantId;
     requestPrimaryPopupInteraction =
       previewSpies.requestPrimaryPopupInteraction;
+    requestPrimaryGameModeAction = previewSpies.requestPrimaryGameModeAction;
     getGameModeSnapshot = previewSpies.getGameModeSnapshot;
     getActiveAwardCelebrationSnapshot =
       previewSpies.getActiveAwardCelebrationSnapshot;
@@ -116,8 +118,58 @@ describe("GameLayoutEditorApp current workspace", () => {
     previewSpies.getCurrentVariantId.mockReturnValue("landscape");
     previewSpies.setSymbolPackage.mockResolvedValue(null);
     ioSpies.findPopupSpineAssetConflicts.mockResolvedValue([]);
+    previewSpies.requestPrimaryGameModeAction.mockResolvedValue(undefined);
     window.confirm = vi.fn(() => true);
     window.prompt = vi.fn((_message, value) => value ?? null);
+  });
+
+  it("coalesces pending primary clicks and keeps unchanged modes out of project transactions", async () => {
+    previewSpies.getGameModeSnapshot.mockReturnValue({
+      stableMode: "BaseGame",
+      displayedMode: "BaseGame",
+      phase: "stable",
+    });
+    const { app, root } = await createApp();
+    await vi.waitFor(() =>
+      expect(previewSpies.selectAuthoringGameMode).toHaveBeenCalled(),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    previewSpies.setLayout.mockClear();
+    previewSpies.applyGeometryManifest.mockClear();
+    let complete!: () => void;
+    previewSpies.requestPrimaryGameModeAction.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const host = root.querySelector<HTMLElement>("[data-preview-host]")!;
+    host.click();
+    host.click();
+    host.click();
+    expect(previewSpies.requestPrimaryGameModeAction).toHaveBeenCalledTimes(1);
+    complete();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(previewSpies.setLayout).not.toHaveBeenCalled();
+    expect(previewSpies.applyGeometryManifest).not.toHaveBeenCalled();
+    app.destroy();
+    previewSpies.getGameModeSnapshot.mockReturnValue(null);
+  });
+
+  it("ignores canvas clicks until the project preview is ready", async () => {
+    let complete!: () => void;
+    previewSpies.setLayout.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const { app, root } = await createApp();
+    root.querySelector<HTMLElement>("[data-preview-host]")!.click();
+    expect(previewSpies.requestPrimaryGameModeAction).not.toHaveBeenCalled();
+    complete();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    app.destroy();
   });
 
   it("mounts the six accessible workspaces", async () => {
@@ -159,6 +211,37 @@ describe("GameLayoutEditorApp current workspace", () => {
         gameModes: expect.any(Object),
       }),
       expect.any(Map),
+    );
+    app.destroy();
+  });
+
+  it("creates and marks a Splash mode without an intermediate missing-transition error", async () => {
+    const { app, root } = await createApp();
+    root.querySelector<HTMLButtonElement>("[data-manage-modes]")!.click();
+    const input = root.querySelector<HTMLInputElement>("[data-new-game-mode]")!;
+    input.value = "Welcome";
+    input.dispatchEvent(new Event("input"));
+    root.querySelector<HTMLButtonElement>("[data-add-game-mode]")!.click();
+    const button = root.querySelector<HTMLButtonElement>(
+      "[data-toggle-splash-mode]",
+    )!;
+    expect(button.textContent).toBe("设为 splash");
+    button.click();
+    expect(root.querySelector("[data-errors]")!.textContent).toBe("");
+    expect(
+      root.querySelector("[data-mode-dialog-feedback]")!.textContent,
+    ).toContain("未配置转场时直接进入 BaseGame");
+    await vi.waitFor(() =>
+      expect(previewSpies.setLayout).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          gameModes: expect.objectContaining({
+            splashMode: "Welcome",
+            initialMode: "BaseGame",
+            transitions: [],
+          }),
+        }),
+        expect.any(Map),
+      ),
     );
     app.destroy();
   });
@@ -293,7 +376,8 @@ describe("GameLayoutEditorApp current workspace", () => {
 
     await vi.waitFor(() => {
       const lastCall = previewSpies.setLayout.mock.lastCall as unknown as
-        [ReturnType<typeof editorProjectToManifest>] | undefined;
+        | [ReturnType<typeof editorProjectToManifest>]
+        | undefined;
       const manifest = lastCall?.[0];
       expect(manifest?.nodes[0]?.scope).toEqual({
         BaseGame: ["landscape", "portrait"],

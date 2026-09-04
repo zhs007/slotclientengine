@@ -5,6 +5,30 @@ import { addGameMode } from "../src/model/game-mode-commands.js";
 import { setLayerScopeGlobal } from "../src/model/resource-commands.js";
 
 describe("EditorStore", () => {
+  it("selects an authoring mode without copying assets or changing the preview revision", () => {
+    const project = createNewEditorProject();
+    addGameMode(project, "FreeGame");
+    const bytes = new Uint8Array([1, 2, 3]);
+    project.assets.set("unused.bin", bytes);
+    const store = new EditorStore(project);
+    const before = store.getSnapshot();
+    const slice = vi.spyOn(bytes, "slice");
+    const listener = vi.fn();
+    store.subscribe(listener);
+
+    store.selectGameMode("FreeGame");
+    const after = store.getSnapshot();
+    expect(after.project.gameModes.activeModeId).toBe("FreeGame");
+    expect(before.project.gameModes.activeModeId).toBe("BaseGame");
+    expect(after.revision).toBe(before.revision);
+    expect(after.project.assets).toBe(before.project.assets);
+    expect(slice).not.toHaveBeenCalled();
+    store.selectGameMode("FreeGame");
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(() => store.selectGameMode("missing")).toThrow("未知游戏模式");
+    expect(store.getSnapshot().project).toBe(after.project);
+  });
+
   it("starts with a valid background-free centered project", () => {
     const store = new EditorStore(createNewEditorProject());
     expect(store.getSnapshot()).toMatchObject({

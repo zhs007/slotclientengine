@@ -267,6 +267,9 @@ export class LayoutPreview {
               }
             : {},
         );
+        await (
+          nextRuntime as SceneLayoutPackageRuntime
+        ).selectAuthoringGameMode(startupMode);
       } else {
         await nextRuntime.init();
       }
@@ -471,7 +474,6 @@ export class LayoutPreview {
     } else {
       const current = this.#packageRuntime.getStableGameMode();
       const consumesStartupSplash =
-        this.#manifest.gameModes.splashMode === undefined ||
         current === this.#manifest.gameModes.splashMode;
       const target =
         current === this.#manifest.gameModes.splashMode

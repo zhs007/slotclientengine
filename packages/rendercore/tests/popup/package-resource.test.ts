@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Assets, Cache } from "pixi.js";
 import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 import {
   createTestSpineAtlas,
@@ -43,6 +44,53 @@ describe("popup package resource", () => {
     );
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   });
+
+  it.each([false, true])(
+    "unloads Assets textures on cleanup (size failure: %s)",
+    async (invalidSize) => {
+      const { createPopupPackageResource } =
+        await import("../../src/popup/package-resource.js");
+      const { manifest, files } = fixture();
+      const texture = {
+        width: invalidSize ? 2 : 1,
+        height: 1,
+        destroy: vi.fn(),
+      };
+      const loaded = new Set<string>();
+      const load = vi
+        .spyOn(Assets, "load")
+        .mockImplementation(async (input: any) => {
+          loaded.add(input.src);
+          return texture;
+        });
+      const cached = vi
+        .spyOn(Cache, "has")
+        .mockImplementation((key) => loaded.has(key));
+      const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+      try {
+        if (invalidSize) {
+          await expect(
+            createPopupPackageResource({ manifest, files }),
+          ).rejects.toThrow("size mismatch");
+        } else {
+          const resource = await createPopupPackageResource({
+            manifest,
+            files,
+          });
+          await resource.destroy();
+          await resource.destroy();
+        }
+        expect(texture.destroy).not.toHaveBeenCalled();
+        expect(unload).toHaveBeenCalledOnce();
+        expect(new Set(unload.mock.calls[0]![0] as string[])).toEqual(loaded);
+        expect(URL.revokeObjectURL).toHaveBeenCalled();
+      } finally {
+        load.mockRestore();
+        cached.mockRestore();
+        unload.mockRestore();
+      }
+    },
+  );
 
   it("validates exact transitive image-string/VNI/Spine/image closure, prepares all kinds and destroys owners", async () => {
     const { collectPopupPackagePaths, createPopupPackageResource } =

@@ -345,7 +345,10 @@ function createRuntime(
   return { runtime, players, popups };
 }
 
-function startupPackageResource(configured: boolean) {
+function startupPackageResource(
+  configured: boolean,
+  includeSplashTransition = true,
+) {
   const resource = packageResource(true, false, "none") as any;
   const base = resource.runtimeManifest;
   const splashMode = {
@@ -366,7 +369,10 @@ function startupPackageResource(configured: boolean) {
           ...base.gameModes,
           splashMode: "Splash",
           modes: [splashMode, ...base.gameModes.modes],
-          transitions: [splashTransition, ...base.gameModes.transitions],
+          transitions: [
+            ...(includeSplashTransition ? [splashTransition] : []),
+            ...base.gameModes.transitions,
+          ],
         }
       : base.gameModes,
     runtimeAllocation: configured
@@ -375,7 +381,7 @@ function startupPackageResource(configured: boolean) {
           onDemand: {
             ...base.runtimeAllocation.onDemand,
             transitions: [
-              "Splash=>BaseGame",
+              ...(includeSplashTransition ? ["Splash=>BaseGame"] : []),
               ...base.runtimeAllocation.onDemand.transitions,
             ],
           },
@@ -495,6 +501,31 @@ describe("scene layout package event-driven game-mode transition", () => {
     runtime.destroy();
   });
 
+  it.each(["BaseGame", "FreeGame"])(
+    "reveals authoring mode %s without a default Splash or audio unlock",
+    async (mode) => {
+      const backend = new StartupAudioBackend();
+      const runtime = createSceneLayoutPackageRuntime({
+        resource: startupPackageResource(false),
+        audioBackend: backend,
+      });
+      await runtime.init();
+      const splash = runtime.container.children.find(
+        (child) => child.label === "scene-layout-default-splash",
+      );
+      await expect(
+        runtime.selectAuthoringGameMode("unknown"),
+      ).rejects.toThrow();
+      expect(splash?.visible).toBe(true);
+      await runtime.selectAuthoringGameMode(mode);
+      expect(runtime.getStableGameMode()).toBe(mode);
+      expect(splash?.visible).toBe(false);
+      expect(splash?.parent).toBeNull();
+      expect(backend.calls).toEqual([]);
+      runtime.destroy();
+    },
+  );
+
   it("does not create an automatic Tap info instance for the default Splash", async () => {
     const runtime = createSceneLayoutPackageRuntime({
       resource: startupPackageResourceWithTapInfo(false) as never,
@@ -572,6 +603,58 @@ describe("scene layout package event-driven game-mode transition", () => {
     expect(request).toHaveBeenCalledTimes(1);
     releaseTransition();
     await pending;
+    runtime.destroy();
+  });
+
+  it("enters initial directly from Splash without adding a manifest transition", async () => {
+    const resource = startupPackageResource(true, false);
+    const before = structuredClone(resource.runtimeManifest);
+    const backend = new StartupAudioBackend();
+    const createTransitionPlayer = vi.fn();
+    const runtime = createSceneLayoutPackageRuntime({
+      resource,
+      audioBackend: backend,
+      createTransitionPlayer,
+    });
+    await runtime.init();
+    await runtime.prepareGameModeTransition("BaseGame");
+    expect(runtime.getStableGameMode()).toBe("Splash");
+    expect(runtime.getGameModeSnapshot().transitionKind).toBe("none");
+    await runtime.requestPrimaryGameModeAction();
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "BaseGame",
+      displayedMode: "BaseGame",
+      phase: "stable",
+    });
+    expect(backend.calls).toEqual(["unlock"]);
+    expect(createTransitionPlayer).not.toHaveBeenCalled();
+    expect(resource.runtimeManifest).toEqual(before);
+    runtime.destroy();
+  });
+
+  it("keeps Splash displayed when initial resources fail and allows retry", async () => {
+    const resource = startupPackageResource(true, false);
+    const runtime = createSceneLayoutPackageRuntime({
+      resource,
+      audioBackend: new StartupAudioBackend(),
+    });
+    await runtime.init();
+    resource.delivery = {
+      loadGameMode: vi.fn(async () => {
+        throw new Error("initial unavailable");
+      }),
+    };
+    await expect(runtime.requestPrimaryGameModeAction()).rejects.toThrow(
+      "initial unavailable",
+    );
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "Splash",
+      displayedMode: "Splash",
+      phase: "stable",
+    });
+    delete resource.delivery;
+    await runtime.requestPrimaryGameModeAction();
+    expect(runtime.getStableGameMode()).toBe("BaseGame");
     runtime.destroy();
   });
 
