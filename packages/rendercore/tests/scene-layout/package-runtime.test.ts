@@ -364,7 +364,7 @@ function canonicalMultiSymbolFixture() {
   return { manifest, files: packageFiles };
 }
 
-function popupLayoutFixture() {
+function popupLayoutFixture(finalAmountHoldDurationSeconds?: number) {
   const characters = [..."$,.0123456789"];
   const glyphs = Object.fromEntries(
     characters.map((character, index) => [
@@ -421,6 +421,9 @@ function popupLayoutFixture() {
       },
     },
     awardCelebration: {
+      ...(finalAmountHoldDurationSeconds !== undefined
+        ? { finalAmountHoldDurationSeconds }
+        : {}),
       base: { countDurationSeconds: 1, layers: [amountLayer] },
       standard: { countDurationSeconds: 1, layers: [amountLayer] },
       celebrationTiers: [
@@ -2298,7 +2301,7 @@ describe("scene layout package runtime", () => {
       .mockResolvedValue(Texture.WHITE as never);
     const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
     try {
-      const fixture = popupLayoutFixture();
+      const fixture = popupLayoutFixture(1.5);
       const resource = await createSceneLayoutPackageResource({
         ...fixture,
         decodeImage: async () => ({ width: 1, height: 1 }),
@@ -2369,6 +2372,8 @@ describe("scene layout package runtime", () => {
       });
       expect(firstFormatMoney).toHaveBeenCalled();
       expect(secondFormatMoney).not.toHaveBeenCalled();
+      const finished = vi.fn();
+      void celebrationComplete.then(finished);
       await expect(runtime.requestGameMode("FreeGame")).rejects.toThrow(
         /while an award celebration is active/,
       );
@@ -2401,6 +2406,9 @@ describe("scene layout package runtime", () => {
         displayedAmountRaw: 6000,
       });
       expect(popupPresentation.eventMode).toBe("static");
+      await Promise.resolve();
+      expect(finished).not.toHaveBeenCalled();
+      expect(secondFormatMoney).not.toHaveBeenCalled();
       runtime.update(10);
       await expect(celebrationComplete).resolves.toBeUndefined();
       expect(runtime.getActiveAwardCelebrationPhase()).toBe("counting");

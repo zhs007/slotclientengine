@@ -195,6 +195,7 @@ export function upgradePopupManifestToV5(
     },
     amountFormat: manifest.amountFormat,
     awardCelebration: {
+      ...manifest.awardCelebration,
       base: upgradeTier(manifest.awardCelebration.base),
       standard: upgradeTier(manifest.awardCelebration.standard),
       celebrationTiers: Object.freeze(
@@ -300,6 +301,7 @@ export function upgradePopupManifestToV6(
     ...legacy,
     version: 6 as const,
     awardCelebration: {
+      ...legacy.awardCelebration,
       base: upgradeTier("base", legacy.awardCelebration.base),
       standard: upgradeTier("standard", legacy.awardCelebration.standard),
       celebrationTiers: Object.freeze(

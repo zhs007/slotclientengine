@@ -42,3 +42,7 @@ export {
   createPopupObjectPackageResourceFromResolvedFiles,
   createPopupPackageResourceFromResolvedFiles,
 } from "./package-resource.js";
+export {
+  resolveAwardTiming,
+  type ResolvedAwardTiming,
+} from "../award-timing.js";

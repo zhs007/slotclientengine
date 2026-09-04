@@ -22,6 +22,7 @@ import {
 } from "../data/package-closure.js";
 import { collectPopupDirectPaths } from "../data/manifest.js";
 import { loadPopupManifest } from "../data/normalize.js";
+import { resolveAwardTiming } from "../award-timing.js";
 import {
   parsePopupObjectManifest,
   popupObjectToSingleStateManifest,
@@ -243,9 +244,32 @@ export async function createPopupPackageResourceFromResolvedFiles(options: {
       }
     }
     validateAnimationBindings(manifest, prepared);
+    const resolvedManifest =
+      manifest.type === "award-celebration"
+        ? (() => {
+            const { megaOnce: _megaOnce, ...timing } = resolveAwardTiming(
+              manifest.awardCelebration,
+              (id) => {
+                const resource = prepared[id];
+                if (resource?.kind !== "vni")
+                  throw new Error(
+                    `award timing VNI resource unavailable: ${id}.`,
+                  );
+                return resource.project.stage.duration;
+              },
+            );
+            return Object.freeze({
+              ...manifest,
+              awardCelebration: Object.freeze({
+                ...manifest.awardCelebration,
+                ...timing,
+              }),
+            });
+          })()
+        : manifest;
     let destroyed = false;
     return Object.freeze({
-      manifest,
+      manifest: resolvedManifest,
       resources: Object.freeze(prepared),
       async destroy() {
         if (destroyed) return;

@@ -249,11 +249,22 @@ Popup v9 普通 Spine manifest 可选保存外部 Tap info 子对象的父节点
 
 三类 Popup 都只有一份 Core 状态。游戏和 Scene Layout 从 `@slotclientengine/rendercore/popup/core` 使用 `createAwardCelebrationRuntime()` / `createSpinePopupRuntime()` / `createSingleStatePopupRuntime()`：`update(deltaSeconds): void` 只推进状态，阶段判断使用 `getPhase()` / `isPlaying()`，不会构造完整 snapshot。Popup Editor 从 `@slotclientengine/rendercore/popup/editor` 使用 player wrapper；wrapper 委托同一个 Runtime，并额外提供 `update() -> snapshot` 与 `getSnapshot()`。游戏 facade 不导出 editor package adapter、factory/player 或 snapshot。
 
-Award Popup 不滚动 base 金额：`winAmountRaw <= betAmountRaw` 时直接提交 final 并进入正式 end；更高获奖直接以 standard 和 exact bet 起跳。每档 `countDurationSeconds` 用来标定该档完整 canonical threshold span 的 nominal rate，partial final 只走该完整曲线的前段，不把短区间重新拉满整档时间。Core 在 `start()` 时生成常量规模的跨档连续加速轨迹，megawin 开放区间沿用最近封闭 celebration span 标定；只有实际 final 前的 terminal tail 减速，随后立即进入 `dismissing`、播放最后档 end 并在 drain 完成后自动关闭。
+Award Popup 不滚动 base 金额：`winAmountRaw <= betAmountRaw` 时直接提交 final 并进入正式 end；更高获奖直接以 standard 和 exact bet 起跳。每档 `countDurationSeconds` 用来标定该档完整 canonical threshold span 的 nominal rate，partial final 只走该完整曲线的前段，不把短区间重新拉满整档时间。Core 在 `start()` 时生成常量规模的跨档连续加速轨迹，megawin 开放区间沿用最近封闭 celebration span 标定；分段模式只有实际 final 前的 terminal tail 减速。Mega 的 VNI 全部为 once 时，仅 Mega 数字段按最终金额与 Mega 阈值之差拟合有效计数时长：继承入档速度，以非负加速度计数；若按入档速度已能提前到达，就提前结束，不为填满时长而降速。此前档位保持原曲线；once Mega 不再运行 terminal brake。
 
-`AwardCelebrationRuntime.start(input, { amountDurationScale, formatAmount })` 可为单次播放覆盖金额时间和 formatter。`amountDurationScale` 省略为 `1`，只等比缩放整条数字 motion timeline；例如 `0.8` 使计数与 terminal braking 时间变成基准的 80%，不会改变 VNI/Spine/粒子/音频速度。Scene Layout 的 `playAwardCelebrationForCurrentMode()` 要求每次显式传入 `formatMoney(amountRaw)`，并可传相同 scale；FIFO 中每项捕获自己的配置，缓存 player 不会把 formatter 或 scale 泄漏到下一项。自然或点击跨档均在 threshold 当帧隐藏 outgoing tier、显示新档，旧档只在不可见状态继续 official end/drain，动画更长也不会阻塞数字跳档。
+`awardCelebration` 在现有 manifest v9 中可选配置 `onceMegaCountDurationSeconds`（正数秒）和
+`finalAmountHoldDurationSeconds`（非负秒）。缺省值在实际 VNI 资源加载完成后补齐，已有值优先且不修改输入：
+Mega 全部为 once 时，有效计数默认是 Mega 总时长的 `0.66`，停留默认是 `0.33`；分段模式默认停留为 Mega end 时长。
+多 VNI 使用最大总时长/最大末尾默认时长，混合模式不启用 once 拟合；没有 Mega VNI 时默认最低停留为 0。
+分段 Mega 不使用已保存的 once 有效时长。项目保存的是秒数，`0.66/0.33` 只用于默认计算。
 
-`requestAdvance()` 按实际可达里程碑跳档。到 final 以前，一次点击把共享 ImgNumber 和画面同步提交到下一个 bigwin/superwin/megawin threshold；没有非最终里程碑时进入同一个 terminal braking tail，而不是直接抹掉最后数字变化。advance 即使发生在当前 celebration tier 的 `start` segment 也立即生效，不等待 loop boundary 或第二次点击。调用方仍可用 `requestDismiss()` 立即提交 final 并启动正式 end lifecycle，或用 `dismissImmediately()` 同步清理。
+到达最终金额后立即进入 `dismissing`，保持最终金额、启动最低停留计时，同时让 segmented 播放 end、once 自然播完。
+关闭等待 `max(配置停留时长, 动画剩余完成时间)`，包括提前计数完成或点击到 final；动画先结束时继续显示最终金额。
+长帧按计数边界切分，只有 final 之后的时间计入停留。Mega once 的最后一次 advance 直接提交 final；普通点击不跳过停留，
+`requestDismiss()` 遵循相同收尾合同，`dismissImmediately()`、取消和 destroy 仍可立即释放。
+
+`AwardCelebrationRuntime.start(input, { amountDurationScale, formatAmount })` 可为单次播放覆盖金额时间和 formatter。`amountDurationScale` 省略为 `1`，只等比缩放整条数字 motion timeline；例如 `0.8` 使计数与 terminal braking 时间变成基准的 80%，once Mega 的拟合目标同样按 scale 缩放；不会改变 VNI/Spine/粒子/音频速度或最终停留秒数。Scene Layout 的 `playAwardCelebrationForCurrentMode()` 要求每次显式传入 `formatMoney(amountRaw)`，并可传相同 scale；FIFO 中每项捕获自己的配置，缓存 player 不会把 formatter 或 scale 泄漏到下一项。自然或点击跨档均在 threshold 当帧隐藏 outgoing tier、显示新档，旧档只在不可见状态继续 official end/drain，动画更长也不会阻塞数字跳档。
+
+`requestAdvance()` 按实际可达里程碑跳档。到 final 以前，一次点击把共享 ImgNumber 和画面同步提交到下一个 bigwin/superwin/megawin threshold；没有非最终里程碑时，分段计数进入同一个 terminal braking tail，Mega once 则直接提交 final 并等待停留与动画结束。advance 即使发生在当前 celebration tier 的 `start` segment 也立即生效，不等待 loop boundary 或第二次点击。调用方仍可用 `requestDismiss()` 立即提交 final 并启动正式 end lifecycle，或用 `dismissImmediately()` 同步清理。
 
 Scene Layout package runtime 以 `enqueuePopup(request)` 作为三类 Popup 的普通 production 编排入口，程序 Popup、mode award 和 transition prelude 进入同一个 FIFO；runtime 任一时刻只激活一个 Popup，完整关闭后自动启动下一项，不叠加或替换。`openPopup(request)` 保留为严格立即打开入口，已有 active、pending 或 mode transition 时显式失败。请求必须携带 task 228 exact `gamelayout:/popup/<id>` 地址和与 binding 一致的 discriminated input。session 公开动态 `state`、首个稳定展示边界 `presented`、完整结束边界 `finished` 及 identity-safe `close()/cancel()`；旧 session 不会关闭后续 Popup。每个导出 binding 的 player 在 package 生命周期中缓存一个并在关闭后复用，Scene Layout 内全部 player 共用一个 host-owned backdrop Graphics，active owner 切换时只更新该层的 manifest color/alpha/visibleStates。raw `get*Popup()` 仅为 editor diagnostics 和迁移兼容保留并标记 deprecated。Game Layout Editor 需要完整 award 诊断值时，从 `@slotclientengine/rendercore/scene-layout/editor` 创建 inspector；inspector 借用现有 package runtime，不创建第二份 Popup 或 Scene 状态。
 

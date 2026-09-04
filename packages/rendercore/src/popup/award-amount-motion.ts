@@ -32,6 +32,7 @@ export interface AwardAmountTerminalBrake {
 }
 
 export interface AwardAmountMotionPlan {
+  readonly onceMega?: boolean;
   readonly stages: readonly AwardAmountMotionStage[];
   readonly terminalBrake: AwardAmountTerminalBrake;
   readonly finalTierId: AwardTierId;
@@ -42,6 +43,7 @@ export function createAwardAmountMotionPlan(
   input: AwardCelebrationInput,
   stages: readonly AwardCountStage[],
   amountDurationScale = 1,
+  onceMegaCountDurationSeconds?: number,
 ): AwardAmountMotionPlan | null {
   validateAwardAmountInput(input);
   validateAwardAmountDurationScale(amountDurationScale);
@@ -193,7 +195,53 @@ export function createAwardAmountMotionPlan(
     terminalBrake,
     finalTierId: stages.at(-1)!.tierId,
   });
-  return scaleAwardAmountMotionPlan(plan, amountDurationScale);
+  const scaled = scaleAwardAmountMotionPlan(plan, amountDurationScale);
+  if (onceMegaCountDurationSeconds === undefined) return scaled;
+  if (
+    !Number.isFinite(onceMegaCountDurationSeconds) ||
+    onceMegaCountDurationSeconds <= 0
+  )
+    throw new Error(
+      "onceMegaCountDurationSeconds must be finite and positive.",
+    );
+  const mega = scaled.stages.find((stage) => stage.tierId === "megawin");
+  if (!mega || mega.toAmountRaw === mega.fromAmountRaw) return scaled;
+  const distance = mega.toAmountRaw - mega.fromAmountRaw;
+  const startRate = mega.startRateRawPerSecond;
+  const targetDuration = onceMegaCountDurationSeconds * amountDurationScale;
+  if (!Number.isFinite(targetDuration) || targetDuration <= 0)
+    throw new Error("once Mega target duration must be finite and positive.");
+  const duration = Math.min(
+    targetDuration,
+    startRate > 0 ? distance / startRate : targetDuration,
+  );
+  // A short range runs at the incoming rate; never slow down to fill the timeline.
+  const acceleration = Math.max(
+    0,
+    (2 * (distance / duration - startRate)) / duration,
+  );
+  const endRate = startRate + acceleration * duration;
+  if (
+    !(duration > 0) ||
+    !Number.isFinite(acceleration) ||
+    !Number.isFinite(endRate)
+  )
+    throw new Error("once Mega amount motion is not finite.");
+  const fitted = freezeMotionStage({
+    ...mega,
+    canonicalSpanRaw: distance,
+    configuredDurationSeconds: targetDuration,
+    effectiveCanonicalDurationSeconds: duration,
+    accelerationRawPerSecondSquared: acceleration,
+    endRateRawPerSecond: endRate,
+  });
+  return Object.freeze({
+    ...scaled,
+    onceMega: true,
+    stages: Object.freeze(
+      scaled.stages.map((stage) => (stage === mega ? fitted : stage)),
+    ),
+  });
 }
 
 export function awardAmountMotionElapsedForAmount(
@@ -210,9 +258,8 @@ export function awardAmountMotionElapsedForAmount(
   const acceleration = stage.accelerationRawPerSecondSquared;
   if (acceleration === 0) return distance / startRate;
   return (
-    (Math.sqrt(startRate * startRate + 2 * acceleration * distance) -
-      startRate) /
-    acceleration
+    (2 * distance) /
+    (Math.sqrt(startRate * startRate + 2 * acceleration * distance) + startRate)
   );
 }
 

@@ -42,6 +42,8 @@ import {
   createPopupEditorProject,
   migratePopupEditorVisibility,
   projectToManifest,
+  resolvePopupEditorAwardTiming,
+  awardTimingValues,
   projectToPopupObjectManifest,
 } from "../model/project.js";
 import type { PopupEditorProject } from "../model/project.js";
@@ -233,6 +235,20 @@ export async function importPopupZip(
     return finishImportedPopupProject(project, manifest);
   }
   project.amountFormat = { ...manifest.amountFormat };
+  project.awardTiming = {
+    ...(manifest.awardCelebration.onceMegaCountDurationSeconds !== undefined
+      ? {
+          onceMegaCountDurationSeconds:
+            manifest.awardCelebration.onceMegaCountDurationSeconds,
+        }
+      : {}),
+    ...(manifest.awardCelebration.finalAmountHoldDurationSeconds !== undefined
+      ? {
+          finalAmountHoldDurationSeconds:
+            manifest.awardCelebration.finalAmountHoldDurationSeconds,
+        }
+      : {}),
+  };
   project.tiers.set("base", {
     countDurationSeconds: manifest.awardCelebration.base.countDurationSeconds,
     layers: structuredClone([...manifest.awardCelebration.base.layers]),
@@ -248,6 +264,9 @@ export async function importPopupZip(
       layers: structuredClone([...tier.layers]),
       thresholdMultiplier: tier.thresholdMultiplier,
     });
+  project.awardTiming = awardTimingValues(
+    resolvePopupEditorAwardTiming(project),
+  );
   normalizeImportedProject(project);
   const closure = popupManifestAssetClosure(manifest, project.assets);
   if (closure.length !== project.assets.size)

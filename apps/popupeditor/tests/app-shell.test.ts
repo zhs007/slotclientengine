@@ -118,6 +118,59 @@ vi.mock("../src/io/popup-zip.js", () => ({
 }));
 
 describe("PopupEditorApp", () => {
+  it("edits Mega once mode and project seconds, and restores animation defaults", async () => {
+    const project = validProject();
+    for (const id of ["bigwin", "superwin", "megawin"] as const)
+      addLayer(project, id, "effect.json");
+    const { importPopupZip, exportPopupZip } =
+      await import("../src/io/popup-zip.js");
+    vi.mocked(importPopupZip).mockResolvedValueOnce(project);
+    const { PopupEditorApp } = await import("../src/ui/app-shell.js");
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const app = new PopupEditorApp(root);
+    await app.init();
+    const importer = root.querySelector<HTMLInputElement>("#import-project")!;
+    Object.defineProperty(importer, "files", {
+      value: [new File([new Uint8Array([1])], "award.zip")],
+      configurable: true,
+    });
+    importer.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(importPopupZip).toHaveBeenCalled());
+    root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
+    root.querySelector<HTMLButtonElement>('[data-tier="megawin"]')!.click();
+    const mode = root.querySelector<HTMLSelectElement>(
+      "[data-award-vni-mode]",
+    )!;
+    mode.value = "once";
+    mode.dispatchEvent(new Event("change"));
+    expect(root.textContent).not.toContain("Award VNI 不支持");
+    root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
+    const count = root.querySelector<HTMLInputElement>(
+      '[data-project-field="onceMegaCountDurationSeconds"]',
+    )!;
+    expect(Number(count.value)).toBeGreaterThan(0);
+    count.value = "2.75";
+    count.dispatchEvent(new Event("change"));
+    const hold = root.querySelector<HTMLInputElement>(
+      '[data-project-field="finalAmountHoldDurationSeconds"]',
+    )!;
+    hold.value = "4";
+    hold.dispatchEvent(new Event("change"));
+    root.querySelector<HTMLButtonElement>("#export-project")!.click();
+    await vi.waitFor(() => expect(exportPopupZip).toHaveBeenCalled());
+    expect(vi.mocked(exportPopupZip).mock.calls.at(-1)![0].awardTiming).toEqual(
+      { onceMegaCountDurationSeconds: 2.75, finalAmountHoldDurationSeconds: 4 },
+    );
+    root.querySelector<HTMLButtonElement>("#reset-award-timing")!.click();
+    expect(
+      Number(
+        root.querySelector<HTMLInputElement>(
+          '[data-project-field="finalAmountHoldDurationSeconds"]',
+        )!.value,
+      ),
+    ).not.toBe(4);
+    app.destroy();
+  });
   function createProject(
     root: HTMLElement,
     type: "award-celebration" | "spine" | "single-state" = "award-celebration",
@@ -987,8 +1040,9 @@ describe("PopupEditorApp", () => {
     expect(root.querySelector("#diagnostics")!.textContent).not.toContain(
       "must be an object",
     );
-    expect(root.querySelector("[data-vni-playback-mode]")).toBeNull();
-    expect(root.textContent).toContain("播放模式：分段循环");
+    expect(
+      root.querySelector<HTMLSelectElement>("[data-award-vni-mode]")!.value,
+    ).toBe("segmented");
     expect(
       root.querySelector('[data-layer-field="loopStartTime"]'),
     ).not.toBeNull();

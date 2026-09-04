@@ -1,5 +1,7 @@
 import {
   parsePopupManifest,
+  resolveAwardTiming,
+  type AwardTimingOptions,
   parsePopupObjectManifest,
   AWARD_POPUP_STATES,
   POPUP_SEGMENTS,
@@ -70,6 +72,7 @@ export interface PopupEditorProject {
     visibleStates: PopupVisibilityState[];
   };
   amountFormat: PopupAmountFormat;
+  awardTiming: AwardTimingOptions;
   resources: Map<string, PopupEditorResource>;
   assets: Map<string, EditorAssetEntry>;
   tiers: Map<AwardTierId, PopupEditorTier>;
@@ -218,6 +221,7 @@ export function createPopupEditorProject(
       ],
     },
     amountFormat: createPopupAmountFormat("integer"),
+    awardTiming: {},
     resources: new Map(),
     assets: new Map(),
     tiers: new Map([
@@ -270,6 +274,7 @@ export function clonePopupEditorProject(
       visibleStates: [...project.backdrop.visibleStates],
     },
     amountFormat: { ...project.amountFormat },
+    awardTiming: { ...project.awardTiming },
     spine: structuredClone(project.spine),
     singleState: structuredClone(project.singleState),
     resources: new Map(
@@ -411,12 +416,8 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
     });
   }
   const used = new Set<string>();
-  for (const [tierId, tierValue] of project.tiers)
+  for (const tierValue of project.tiers.values())
     for (const layer of tierValue.layers) {
-      if (layer.kind === "vni" && layer.playback.mode !== "segmented")
-        throw new Error(
-          `Award tier ${tierId} 的 VNI layer ${layer.id} 必须使用 segmented 播放。`,
-        );
       if (layer.resource) used.add(layer.resource);
     }
   const resources = Object.fromEntries(
@@ -440,6 +441,7 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
     amountFormat: project.amountFormat,
     resources,
     awardCelebration: {
+      ...awardTimingValues(resolvePopupEditorAwardTiming(project)),
       base: tier("base"),
       standard: tier("standard"),
       celebrationTiers: (["bigwin", "superwin", "megawin"] as const).map(
@@ -451,6 +453,80 @@ export function projectToManifest(project: PopupEditorProject): PopupManifest {
       ),
     },
   });
+}
+
+export function popupEditorVniDuration(
+  project: PopupEditorProject,
+  resourceId: string,
+): number {
+  const resource = project.resources.get(resourceId);
+  if (resource?.spec.kind !== "vni")
+    throw new Error(`VNI resource 不存在：${resourceId}`);
+  const bytes = project.assets.get(resource.spec.project)?.bytes;
+  if (!bytes)
+    throw new Error(`VNI project bytes 缺失：${resource.spec.project}`);
+  return assertVNIProject(
+    JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+  ).stage.duration;
+}
+
+export function resolvePopupEditorAwardTiming(project: PopupEditorProject) {
+  const mega = project.tiers.get("megawin");
+  if (!mega) throw new Error("缺失 megawin 档位。");
+  return resolveAwardTiming(
+    {
+      ...project.awardTiming,
+      base: project.tiers.get("base")!,
+      standard: project.tiers.get("standard")!,
+      celebrationTiers: [
+        {
+          ...mega,
+          id: "megawin",
+          thresholdMultiplier: mega.thresholdMultiplier!,
+        },
+      ],
+    },
+    (id) => popupEditorVniDuration(project, id),
+  );
+}
+
+export function awardTimingValues(
+  timing: ReturnType<typeof resolveAwardTiming>,
+): AwardTimingOptions {
+  return {
+    ...(timing.onceMegaCountDurationSeconds !== undefined
+      ? { onceMegaCountDurationSeconds: timing.onceMegaCountDurationSeconds }
+      : {}),
+    finalAmountHoldDurationSeconds: timing.finalAmountHoldDurationSeconds,
+  };
+}
+
+export function setAwardVniPlaybackMode(
+  project: PopupEditorProject,
+  tierId: AwardTierId,
+  layerId: string,
+  mode: string,
+): void {
+  const tier = project.tiers.get(tierId);
+  const index = tier?.layers.findIndex((layer) => layer.id === layerId) ?? -1;
+  const layer = tier?.layers[index];
+  if (!tier || !layer || layer.kind !== "vni")
+    throw new Error(`Award VNI layer 不存在：${layerId}`);
+  if (mode !== "once" && mode !== "segmented")
+    throw new Error(`未知 VNI 播放模式：${mode}`);
+  if (mode === layer.playback.mode) return;
+  tier.layers[index] = {
+    ...layer,
+    playback:
+      mode === "once"
+        ? { mode: "once" }
+        : {
+            mode: "segmented",
+            loopStartTime: 0,
+            loopEndTime: popupEditorVniDuration(project, layer.resource),
+            keepParticlesAlive: true,
+          },
+  };
 }
 
 export function projectToPopupObjectManifest(
